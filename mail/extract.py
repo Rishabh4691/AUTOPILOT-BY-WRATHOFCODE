@@ -653,6 +653,88 @@ def find_ready(text: str) -> date | None:
         return None
 
 
+DEADLINE_CUE = re.compile(
+    r"no later than|at the latest|latest by|latest arrival|deadline|must (?:arrive|land|be (?:in|at|there|delivered))|"
+    r"needs? to (?:arrive|land|be (?:in|at|there))|has to (?:arrive|be)|arrive (?:by|before|until)|arrival (?:by|before)|"
+    r"be there by|needed (?:there |at destination )?by|need (?:it|them|the goods|the shipment|the cargo) (?:in|at) [^.,]{2,30}? by|spätestens|bis spätestens|muss .{0,40}?(?:ankommen|eintreffen|sein|vor ort)|"
+    r"au plus tard|doit (?:arriver|être livr)|avant le|a más tardar|debe (?:llegar|estar)|entro (?:il|e non oltre)|deve arrivare|"
+    r"uiterlijk|moet .{0,30}?(?:aankomen|zijn)|o mais tardar|deve chegar|até (?:o dia|dia)|najpóźniej|musi dotrzeć|"
+    r"не позднее|должен (?:прибыть|быть)|最晚|最迟|之前到达|以前到达|前到达|までに(?:到着|着|届)|까지 도착",
+    re.I,
+)
+DATE_ANY = re.compile(
+    r"(?P<y1>\d{4})-(?P<m1>\d{2})-(?P<d1>\d{2})|(?P<d2>\d{1,2})[./](?P<m2>\d{1,2})[./](?P<y2>\d{4})|"
+    r"(?<!\d)(?P<d3>\d{1,2})(?:st|nd|rd|th)?\.?\s+(?:de\s+|of\s+)?(?P<w3>[a-zäéèûóśź]{3,12})\.?(?:\s+(?:de\s+)?(?P<y3>\d{4}))?|"
+    r"(?P<w4>[a-zäéèûóśź]{3,12})\.?\s+(?P<d4>\d{1,2})(?!\d)(?:st|nd|rd|th)?(?:,?\s+(?P<y4>\d{4}))?|"
+    r"(?:(?P<y5>\d{4})年)?\s*(?P<m5>\d{1,2})月(?P<d5>\d{1,2})日",
+    re.I,
+)
+
+
+def _date_of(m, year: int) -> date | None:
+    g = m.groupdict()
+    try:
+        if g["y1"]:
+            return date(int(g["y1"]), int(g["m1"]), int(g["d1"]))
+        if g["y2"]:
+            return date(int(g["y2"]), int(g["m2"]), int(g["d2"]))
+        if g["w3"] and _month(g["w3"]):
+            return date(int(g["y3"] or year), _month(g["w3"]) or 0, int(g["d3"]))
+        if g["w4"] and _month(g["w4"]):
+            return date(int(g["y4"] or year), _month(g["w4"]) or 0, int(g["d4"]))
+        if g["m5"]:
+            return date(int(g["y5"] or year), int(g["m5"]), int(g["d5"]))
+    except ValueError:
+        return None
+    return None
+
+
+REPLY_ONLY = re.compile(
+    r"\b(reply|respond|answer|quote|quotation|offer|price|send|antwort\w*|angebot|réponse|répondre|offre|devis|"
+    r"respuesta|responder|oferta|cotizaci\w*|risposta|preventivo|offerte|antwoord|odpowied\w*)\b|回复|报价|返信|見積",
+    re.I,
+)
+ARRIVAL_WORD = re.compile(
+    r"arriv\w*|deliver\w*|land\w*|reach\w*|be there|destination|ankommen|ankunft|eintreffen|vor ort|zugestellt|"
+    r"livr\w*|llegar|llegada|entrega\w*|consegn\w*|aankom\w*|levering|chegar|chegada|dotrze\w*|прибы\w*|достав\w*|"
+    r"到达|到货|到着|届|도착",
+    re.I,
+)
+
+
+def _dates(sentence: str, start: int, end: int, year: int) -> list[date]:
+    found, pos = [], start
+    while pos < end:
+        m = DATE_ANY.search(sentence, pos, end)
+        if not m:
+            break
+        d = _date_of(m, year)
+        if d is not None:
+            found.append(d)
+            pos = m.end()
+        else:
+            pos = m.start() + 1
+    return found
+
+
+def find_deadline(text: str, year: int | None = None) -> date | None:
+    """Latest arrival the customer accepts: "must arrive no later than 2 Dec", "spätestens am 02.12.2026"."""
+    year = year or date.today().year
+    for sentence in re.split(r"(?<=[.!?。！？])\s+|\n", text or ""):
+        cue = DEADLINE_CUE.search(sentence)
+        if not cue:
+            continue
+        if REPLY_ONLY.search(sentence) and not ARRIVAL_WORD.search(sentence):
+            continue
+        after = _dates(sentence, cue.start(), len(sentence), year)
+        before = _dates(sentence, 0, cue.start(), year)
+        if after:
+            return after[0]
+        if before:
+            return before[-1]
+    return None
+
+
 NAME = re.compile(r"[A-ZÀ-ÝĄĆĘŁŃÓŚŹŻ][a-zà-ÿąćęłńóśźż'-]{1,20}")
 NOT_A_NAME = re.compile(
     r"\b(gmbh|ag|ltd|llc|inc|bv|sa|srl|spa|sas|sp\. z|co|kg|team|logistics|logistik|freight|cargo|export|"

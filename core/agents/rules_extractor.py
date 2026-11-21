@@ -138,6 +138,20 @@ def with_exclusions(rfq: RFQ, body: str, sender: str) -> RFQ:
     return rfq.model_copy(update={"notes": (*rfq.notes, *(f"exclude_carrier: {n}" for n in names))})
 
 
+def with_deadline(rfq: RFQ, text: str) -> RFQ:
+    """ "Must arrive no later than 2 Dec": the latest arrival, kept as a note for the option choice."""
+    from mail.extract import find_deadline
+
+    if any(n.startswith("deadline: ") for n in rfq.notes):
+        return rfq
+    year = (rfq.ready_date or rfq.received_at.date()).year
+    found = find_deadline(text, year)
+    if found is None:
+        return rfq
+    log.info("deadline_found", extra={"rfq": rfq.mail_id, "deadline": found.isoformat()})
+    return rfq.model_copy(update={"notes": (*rfq.notes, f"deadline: {found.isoformat()}")})
+
+
 class RulesFirstExtractor:
     def __init__(self, fallback: RfqExtractor, attachments=None) -> None:
         self.fallback = fallback
@@ -206,6 +220,7 @@ class RulesFirstExtractor:
                 if site_unknown(full, rfq):
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, SITE_UNKNOWN)})
                 rfq = with_exclusions(rfq, full, mail.sender)
+                rfq = with_deadline(rfq, full)
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})
@@ -214,5 +229,7 @@ class RulesFirstExtractor:
                 "rules_extract_failed", extra={"rfq": mail.id, "error": type(error).__name__}
             )
         if extra:
-            return await self.fallback.extract(mail.model_copy(update={"body": f"{mail.body}\n\n{extra[:6000]}"}))
-        return await self.fallback.extract(mail)
+            rfq, usage = await self.fallback.extract(mail.model_copy(update={"body": f"{mail.body}\n\n{extra[:6000]}"}))
+        else:
+            rfq, usage = await self.fallback.extract(mail)
+        return with_deadline(rfq, f"{mail.body}\n\n{extra}"), usage

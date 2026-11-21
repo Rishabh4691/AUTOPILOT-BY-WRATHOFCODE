@@ -780,6 +780,7 @@ class Orchestrator:
                 rfq.mail_id,
             )
         options = drop_excluded(rfq, options)
+        options = self.meet_deadline(rfq, options)
         if not options:
             self.hold(
                 rfq.mail_id,
@@ -941,6 +942,42 @@ class Orchestrator:
                     raise
                 log.warning("send_retry", extra={"to": outgoing.to, "error": type(error).__name__})
                 await asyncio.sleep(3)
+
+    def meet_deadline(self, rfq: RFQ, options: list[PriceOption]) -> list[PriceOption]:
+        """Keep only airlines that land by the customer's deadline, then cheapest/fastest picks among them."""
+        from datetime import date as _date
+
+        note = next((n for n in rfq.notes if n.startswith("deadline: ")), None)
+        if note is None or not options:
+            return options
+        try:
+            deadline = _date.fromisoformat(note.split(": ", 1)[1])
+        except ValueError:
+            return options
+        today = self.clock().date()
+        lands = {id(o): arrival_date(rfq.ready_date, o.transit_days, today) for o in options}
+        on_time = [o for o in options if lands[id(o)] <= deadline]
+        if on_time:
+            if len(on_time) < len(options):
+                late = sorted({o.carrier for o in options if lands[id(o)] > deadline})
+                self.emit(
+                    Agent.RFQ,
+                    "deadline",
+                    EventStatus.INFO,
+                    f"Request {rfq.mail_id} must arrive by {deadline}: left out {', '.join(late)} (too late).",
+                    rfq.mail_id,
+                )
+            return on_time
+        fastest = min(options, key=lambda o: (o.transit_days, o.total))
+        self.emit(
+            Agent.RFQ,
+            "deadline",
+            EventStatus.WARN,
+            f"Request {rfq.mail_id} must arrive by {deadline}, but the fastest airline ({fastest.carrier}) lands "
+            f"{lands[id(fastest)]}. Quoting the fastest; a person should tell the customer.",
+            rfq.mail_id,
+        )
+        return [fastest]
 
     def self_check(self, quote: Quote, outgoing: OutgoingMail) -> list[str]:
         """Last look before a quote leaves: problems go to the control room, the quote still goes out."""
