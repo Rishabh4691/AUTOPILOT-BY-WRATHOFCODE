@@ -1,0 +1,16 @@
+FIVEU_API_KEY=hk_GWLRrtEqE1qcowmaNDO0djLFNv1BBelyxDPfDLjmLlA
+FIVEU_BASE_URL=https://api.start-hack.5u.ai
+FIVEU_GATEWAY_URL=https://api.start-hack.5u.ai/v1/gateway
+FIVEU_PORTAL_UI=https://start-hack.5u.ai/portal/ui
+FIVEU_KIT_URL=https://api.start-hack.5u.ai/kit/start-kit.zip
+FIVEU_BOARD_URL=https://api.start-hack.5u.ai/board
+OUR_ADDRESS=wrathofcode@hackloop.mail
+RATE_DESK_ADDRESS=ratedesk@hackloop.mail
+TRACKING_ADDRESS=tracking@hackloop.mail
+DRY_RUN=1
+KILL_SWITCH=0
+LLM_MODEL=
+POLL_INTERVAL_SECONDS=2
+MAX_TOKENS_PER_RFQ=3000
+DB_PATH=data/app.db
+KIT_DIR=data/kit
