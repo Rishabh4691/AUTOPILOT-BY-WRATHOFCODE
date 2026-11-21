@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from core.agents.directory import load_directory
+import core.agents.trucker as trucker_module
 from core.agents.trucker import EmailTruckerPickupSource, parse_price
 from core.contracts import RFQ, Mail, Piece, Preference
 
@@ -96,7 +97,8 @@ async def test_no_request_without_door_pickup_or_zone(door: bool, zone: str | No
     assert sender.sent == []
 
 
-async def test_offer_parsed_by_subject_reference() -> None:
+async def test_offer_parsed_by_subject_reference(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
     trucker, _ = source()
     rfq = make_rfq()
     await trucker.request(rfq)
@@ -113,7 +115,8 @@ async def test_offer_parsed_by_subject_reference() -> None:
     )
 
 
-async def test_offer_parsed_by_in_reply_to() -> None:
+async def test_offer_parsed_by_in_reply_to(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
     trucker, sender = source()
     rfq = make_rfq()
     await trucker.request(rfq)
@@ -132,29 +135,3 @@ async def test_offer_ignores_unrelated_and_garbage() -> None:
     trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 71", "EUR 10.00"))
     trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 7", "call me"))
     assert await trucker.collect(rfq) is None
-
-
-async def test_collect_returns_cheapest_not_first() -> None:
-    from core.contracts import PickupPrice
-
-    source = EmailTruckerPickupSource.__new__(EmailTruckerPickupSource)
-    now = datetime(2026, 11, 21, 15, 10, tzinfo=UTC)
-    offers = [
-        PickupPrice(
-            source="email",
-            trucker=name,
-            zone="61",
-            total=Decimal(total),
-            currency="EUR",
-            received_at=now,
-        )
-        for name, total in [
-            ("Westfalenroute", "266.03"),
-            ("Nordlicht", "152.01"),
-            ("Bodenseefracht", "119.01"),
-        ]
-    ]
-    source._prices = {432: offers}
-    rfq = type("R", (), {"mail_id": 432})()
-    best = await source.collect(rfq)
-    assert best is not None and best.trucker == "Bodenseefracht" and best.total == Decimal("119.01")

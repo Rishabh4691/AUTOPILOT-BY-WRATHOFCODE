@@ -22,6 +22,7 @@ from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
 from core.agents.portal import PortalPriceSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
+from core.agents.sourcing_adapter import SourcingPortalPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
 from core.contracts import MailboxClient, Stage
@@ -76,7 +77,10 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
         extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm)),
-        sources=[portal, SheetPriceSource()],
+        sources=[
+            SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
+            SheetPriceSource(),
+        ],
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
         writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
