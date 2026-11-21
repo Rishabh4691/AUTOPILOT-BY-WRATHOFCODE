@@ -334,7 +334,9 @@ def find_pieces(text: str) -> list[Piece]:
         count = int(m.group("count") or 1)
         weight = None
         wunit = "kg"
-        if m.group("pw") and (m.group("each") or m.group("pre") or m.group("each0")):
+        # "Each piece measures 120 x 80 x 100 cm and weighs 203 kg": that weight is per piece too.
+        lead = text[max(0, m.start() - 40) : m.start()].split("\n")[-1]
+        if m.group("pw") and (m.group("each") or m.group("pre") or m.group("each0") or EACH_DIMS.search(lead)):
             weight = num(m.group("pw"))
             wunit = "lb" if m.group("pwu").lower().startswith(("lb", "pound")) else "kg"
         out.append(
@@ -794,7 +796,9 @@ NEAREST_ZONE = {
 EACH_DIMS = re.compile(
     r"\b(?:each|every|per)\s+(?:piece|pallet|carton|box|crate|case|package|unit|colli?)?\s*"
     r"(?:measures|is|has|:|=|with dimensions(?: of)?)?|\b(?:dimensions|dims|size)\s+(?:of\s+)?each\b|"
-    r"\bje\s+(?:stück|palette|karton|packstück)\b",
+    r"\bje\s+(?:stück|palette|karton|packstück)\b|"
+    r"\b(?:jede[srn]?|chaque|cada|ogni|każd[aey])\s+(?:packstück|stück|palette|kolli|karton|kiste|colis|carton|caisse|"
+    r"bulto|palet|caja|pieza|collo|bancale|cartone|pezzo|paczka|paleta|skrzynia|sztuka)\b",
     re.I,
 )
 

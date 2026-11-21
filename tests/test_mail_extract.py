@@ -136,3 +136,20 @@ def test_first_name_from_display_name_or_address():
 
 def test_number_formats():
     assert ex.num("1.250") == 1250 and ex.num("1,250") == 1250 and ex.num("12,5") == Decimal("12.5") and ex.num("99.5") == Decimal("99.5")
+
+
+@needs_kit
+@pytest.mark.parametrize(
+    "cargo, gross, pieces",
+    [
+        ("14 pallets.\nEach piece measures 120 x 100 x 150 cm and weighs 203 kg.", 2842, 14),
+        ("3 Paletten.\nJedes Packstück misst 100 x 100 x 100 cm, je 131 kg.", 393, 3),
+        ("10 palettes.\nChaque colis mesure 60 x 40 x 50 cm et pèse 127 kg.", 1270, 10),
+        ("7 bultos.\nCada bulto mide 60 x 40 x 50 cm y pesa 20 kg.", 140, 7),
+        ("5 colli.\nOgni collo misura 80 x 60 x 75 cm e pesa 96,5 kg.", 482.5, 5),
+        ("11 paczki.\nKażda paczka ma wymiary 120 x 80 x 100 cm i waży 351 kg.", 3861, 11),
+    ],
+)
+def test_each_piece_measures_and_weighs_counts_every_piece(cargo, gross, pieces):
+    x = run(f"Please quote FRA to JFK.\n{cargo}\nThanks,\nAnna")
+    assert x.gross_kg == gross and x.pieces == pieces
