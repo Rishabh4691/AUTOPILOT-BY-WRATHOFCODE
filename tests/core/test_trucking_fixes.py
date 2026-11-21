@@ -203,3 +203,19 @@ def test_estimate_scales_with_weight(tmp_path: Path) -> None:
     guess = source.estimate(rfq(kg="1144"))
     # nearest weight is 572 kg: 90.60 * sqrt(1144 / 572) = 128.13
     assert guess is not None and guess.total == Decimal("128.13")
+
+
+# T10: an offer in another currency is converted and compared, not ignored.
+def test_offer_in_chf_is_converted_when_rate_known(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sourcing import fx
+
+    monkeypatch.setitem(fx._rates, "CHF", Decimal("1.06"))
+
+    def price(total: str, currency: str) -> PickupPrice:
+        return PickupPrice(source="t", trucker=currency, zone="51", total=Decimal(total),
+                           currency=currency, received_at=NOW, pickup_hours=Decimal("12"))
+
+    pick = best_offer([price("208.88", "EUR"), price("90.00", "CHF")])
+    assert (pick.total, pick.currency) == (Decimal("95.40"), "EUR")
+    monkeypatch.delitem(fx._rates, "CHF")
+    assert best_offer([price("208.88", "EUR"), price("90.00", "CHF")]).total == Decimal("208.88")
