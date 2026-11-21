@@ -1,4 +1,4 @@
-# ✈️ AUTOPILOT by WRATHOFCODE
+# AUTOPILOT by WRATHOFCODE
 
 > **A digital air forwarder that quotes every air-freight RFQ all night: exact prices from code, one human-sounding email from a single small LLM call, and a radar where a person can take the controls at any moment.**
 
@@ -22,7 +22,7 @@ One mailbox (`wrathofcode@hackloop.mail`). A new air-export RFQ arrives every 6 
 
 ```mermaid
 flowchart LR
-    MB[(📬 Mailbox<br/>poll every 1-2 s)] --> R{Router<br/>rules first}
+    MB[(Mailbox<br/>poll every 1-2 s)] --> R{Router<br/>rules first}
     R -->|RFQ| X[Extract<br/>route · pieces · kg · cm<br/>door/port · cheap/fast]
     R -->|carrier bid| BIDS[(Bids)]
     R -->|tariff sheet| T[Tariff agent<br/>versioned by validity]
@@ -35,7 +35,7 @@ flowchart LR
     T --> SH
 
     SH & PO & BIDS --> P[Price & pick<br/>chargeable kg · weight breaks<br/>surcharges · pickup leg]
-    P --> W[✍️ Write email<br/><b>exactly 1 LLM call</b>]
+    P --> W[Write email<br/><b>exactly 1 LLM call</b>]
     W --> Q[Reply in thread<br/>one total + currency]
     Q -->|customer accepts| B[Booking agent<br/>fresh rate ID → book]
 
@@ -54,11 +54,11 @@ Every step writes one row to `events` and streams live to the UI, so we can see 
 
 | Agent | Job | LLM? |
 |---|---|---|
-| 🧭 **Router** | Classifies every incoming mail and hands it to the right agent | Rules first; LLM only if unsure |
-| 📦 **RFQ** | Extracts, sources, prices, picks one option, writes and sends the quote | **One** call per quote (the email) |
-| 🎫 **Booking** | On acceptance: refreshes the rate ID if older than 15 min, books, confirms in thread | No |
-| 📍 **Tracking** | Answers "where is my shipment?" from the CRM | No (template + data) |
-| 📑 **Tariff** | Ingests new monthly airline tariffs as structured, versioned prices | No (parsed in code) |
+| **Router** | Classifies every incoming mail and hands it to the right agent | Rules first; LLM only if unsure |
+| **RFQ** | Extracts, sources, prices, picks one option, writes and sends the quote | **One** call per quote (the email) |
+| **Booking** | On acceptance: refreshes the rate ID if older than 15 min, books, confirms in thread | No |
+| **Tracking** | Answers "where is my shipment?" from the CRM | No (template + data) |
+| **Tariff** | Ingests new monthly airline tariffs as structured, versioned prices | No (parsed in code) |
 
 ## Scoring strategy
 
@@ -133,20 +133,20 @@ Shared state: a single SQLite `app.db` (WAL mode) with tables `rfqs` and `events
 
 _Last updated: Sat 21 Nov 2026_
 
-**✅ Done**
+**Done**
 - [x] Repo, `.gitignore` (no `.env` / `app.db`), secret scanner
 - [x] README and battle plan in `docs/`
 - [x] Folder skeleton, shared `schema.sql`, LLM budget rules
 - [x] Control room API: agents, RFQs, detail, takeover, SSE stream, fake-data mode
 - [x] Control room UI: agent cards, RFQ list with countdown, detail drawer, take over, failure alarm
 
-**🛠️ In progress**
+**In progress**
 - [ ] `mvp_bot.py`: first RFQ priced from sheets and quoted end to end (Amaan)
 - [ ] Mailbox poll + router + reply in thread (Aditi)
 - [ ] Start kit parsed into structured tariffs, portal client (Aryan)
 - [ ] Wire the real bot into `app.db` events (everyone)
 
-**⏭️ Next**
+**Next**
 - [ ] Carrier bids + 50/50 price-speed pick
 - [ ] Booking by rate ID, tracking answers
 - [ ] Automatic tariff ingestion
@@ -154,7 +154,7 @@ _Last updated: Sat 21 Nov 2026_
 - [ ] Edit and send from the takeover drawer, radar view
 - [ ] Pitch, rehearsal ×3, backup video (Sun 10:00 to 12:00)
 
-## For the team 💪
+## For the team
 
 22 hours. One RFQ every 6 minutes. Every one we get right, fast and cheap is up to 100 points, and every one we miss is gone for good.
 
@@ -162,4 +162,4 @@ We're not trying to out-AI anyone. We win by being **exact where money is involv
 
 By 12:45 on Sunday we want a story: *"At 2 a.m. an RFQ landed, and AUTOPILOT answered it right, fast, cheap and in a human voice."*
 
-**Autopilot engaged.** ✈️
+**Autopilot engaged.**

@@ -14,5 +14,5 @@ pattern='(hk_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{30,}|g
 if git grep -I -n -E "$pattern" -- . ':!scripts/scan_secrets.sh' 2>/dev/null; then fail=1; fi
 if git grep --cached -I -n -E "$pattern" -- . ':!scripts/scan_secrets.sh' 2>/dev/null; then fail=1; fi
 
-if [ "$fail" -ne 0 ]; then echo "❌ Secret scan FAILED — do not push."; exit 1; fi
-echo "✅ Secret scan clean."
+if [ "$fail" -ne 0 ]; then echo "Secret scan failed, do not push."; exit 1; fi
+echo "Secret scan clean."

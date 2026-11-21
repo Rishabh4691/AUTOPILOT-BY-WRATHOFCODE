@@ -72,7 +72,9 @@ export default function App() {
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <header className="flex flex-wrap items-center justify-between gap-4 py-6">
         <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-500/15 text-lg">✈</div>
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-500/15 text-sky-300">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg>
+          </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">AUTOPILOT</h1>
             <p className="text-xs text-muted">WRATHOFCODE · digital air forwarder</p>

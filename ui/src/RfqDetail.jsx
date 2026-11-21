@@ -51,7 +51,9 @@ export default function RfqDetail({ id, tick, now, onClose }) {
             <div className="font-mono text-xs text-muted">{r.origin} → {r.destination} · wants {r.preference}</div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button onClick={onClose} className="text-muted hover:text-white" aria-label="Close">✕</button>
+            <button onClick={onClose} className="text-muted hover:text-white" aria-label="Close">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
             <div className="font-mono text-xs"><Countdown r={r} now={now} /></div>
           </div>
         </header>
