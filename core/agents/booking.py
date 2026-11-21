@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -143,14 +144,78 @@ DAYS = {
 }
 
 
+ACCEPT_INTL = re.compile(
+    r"好的|同意|确认|请(?:帮我们|为我们)?(?:预订|订舱|安排|下单)|订舱|预订吧|就这个|没问题|"
+    r"はい|お願いします|予約(?:を)?お願い|手配(?:を)?お願い|承認|了解しました|それで(?:お願い|進め)|"
+    r"네[,，.\s]|좋습니다|예약해|진행해|확정|승인|"
+    r"(?<!\w)(?:да|бронируйте|забронируйте|согласны|подтверждаем|оформляйте|давайте|"
+    r"evet|onaylıyoruz|rezervasyon yap\w*|kabul ediyoruz|tamam|"
+    r"sim|pode reservar|aceitamos|confirmamos|fechado|"
+    r"graag boeken|akkoord|boek maar|bevestigd|ga je gang|"
+    r"ja tack|boka|godkänt|ja tak|book det|"
+    r"rezervujte|souhlasíme|igen|foglalja|da,? rezervați|evet)(?!\w)|"
+    r"نعم|موافق|يرجى الحجز|احجز|نوافق|हाँ|जी हाँ|बुक कर|मंज़ूर|ใช่|ตกลง|จองเลย|vâng|đồng ý|đặt chỗ"
+)
+DECLINE_INTL = re.compile(
+    r"不需要|不用了|不要(?:订|预订)|暂不|取消|太贵|不考虑|いいえ|キャンセル|見送り|高すぎ|結構です|"
+    r"아니요|취소|비싸|필요 없|"
+    r"(?<!\w)(?:нет|не нужно|не будем|отмен\w*|дорого|hayır|iptal|pahalı|não|cancelar|caro demais|"
+    r"nee|annuleren|te duur|nej|avbryt|för dyrt|zrušit|lemondjuk)(?!\w)|"
+    r"لا نريد|إلغاء|غالي|नहीं|रद्द|ยกเลิก|hủy"
+)
+
+
 def hits(patterns: list[str], text: str) -> int:
     return sum(1 for p in patterns if re.search(p, text, re.I | re.M))
 
 
 def is_acceptance(body: str) -> bool:
     text = fresh_text(body).lower()
-    yes, no = hits(ACCEPT, text), hits(DECLINE, text)
+    yes = hits(ACCEPT, text) + len(ACCEPT_INTL.findall(text))
+    no = hits(DECLINE, text) + len(DECLINE_INTL.findall(text))
     return yes > 0 and yes > no
+
+
+def quote_from_mail(body: str, airlines: list[str]) -> tuple[str, str, str] | None:
+    """Airline, total and currency of a quote we sent, read back from its text."""
+    from core.agents.trucker import parse_price
+
+    text = fresh_text(body or "")
+    lowered = text.lower()
+    named = [(lowered.find(a.lower()), a) for a in airlines if a and a.lower() in lowered]
+    parsed = parse_price(text)
+    if not named or parsed is None:
+        return None
+    return min(named)[1], str(parsed[0]), parsed[1]
+
+
+def record_sent_quote(
+    store: Any,
+    rfq_id: int | str,
+    thread_id: int | str,
+    customer: str,
+    subject: str,
+    carrier: str,
+    total: Any,
+    currency: str = "EUR",
+    rate_id: str | None = None,
+    email_body: str = "",
+    received_at: datetime | None = None,
+) -> None:
+    """Save a quote sent outside the bot (script, second layer, by hand) so a later yes gets booked."""
+    rid = str(rfq_id)
+    if store._conn.execute("SELECT 1 FROM rfqs WHERE id=?", (rid,)).fetchone() is None:
+        store.upsert_rfq(rid, str(thread_id), customer, subject, received_at or datetime.now(UTC), Stage.QUOTED.value)
+    store.update_rfq(
+        rid,
+        status=Stage.QUOTED.value,
+        quoted_at=datetime.now(UTC),
+        email_body=email_body,
+        carrier=carrier,
+        total=total,
+        currency=currency,
+        rate_id=rate_id,
+    )
 
 
 def team_reference(rfq_id: str) -> str:
@@ -208,6 +273,8 @@ class BookingAgent:
         self.outbound = outbound
         self.agent_name = agent_name
         self.company = company
+        self.declined: set[int] = set()
+        self.retry_after_s = 30.0
 
     def _quoted(self, orch: Any, thread_id: int) -> dict | None:
         row = orch.store._conn.execute(
@@ -260,6 +327,8 @@ class BookingAgent:
         ).fetchall()
         done = 0
         for (mail_id,) in rows:
+            if int(mail_id) in self.declined:
+                continue
             try:
                 mail = await orch.mailbox.read_one(int(mail_id))
             except Exception:
@@ -291,11 +360,46 @@ class BookingAgent:
                 Agent.BOOKING, "confirmed", EventStatus.OK, f"Airline confirmed {ref.group(0)}."
             )
 
+    async def adopt(self, orch: Any, mail: Mail) -> dict | None:
+        """A yes in a thread whose quote the bot did not send itself: read our quote and store it."""
+        if mail.in_reply_to is None:
+            return None
+        try:
+            ours = await orch.mailbox.read_one(int(mail.in_reply_to))
+        except Exception:
+            return None
+        our_address = (self.settings.our_address or "").lower()
+        if our_address and ours.sender.strip().lower() != our_address:
+            return None
+        found = quote_from_mail(ours.body, [c.name for c in self.directory.airlines()])
+        if found is None:
+            orch.emit(
+                Agent.BOOKING, "book", EventStatus.HOLD,
+                f"Customer accepted in thread {mail.thread_root_id}, but our quote there names no airline and price. "
+                "A person should book it now.", mail.thread_root_id,
+            )
+            return None
+        carrier, total, currency = found
+        record_sent_quote(
+            orch.store, mail.thread_root_id, mail.thread_root_id, mail.sender, ours.subject,
+            carrier, total, currency, email_body=ours.body,
+        )
+        log.info("booking_adopted_quote", extra={"rfq": mail.thread_root_id, "carrier": carrier, "total": total})
+        return self._quoted(orch, mail.thread_root_id)
+
     async def on_reply(self, orch: Any, mail: Mail) -> None:
+        if mail.id in self.declined:
+            return
+        accepted = is_acceptance(mail.body) or is_acceptance(mail.subject)
         rfq = self._quoted(orch, mail.thread_root_id)
+        if rfq is not None and rfq.get("status") == Stage.BOOKED.value:
+            return
+        if (rfq is None or rfq.get("status") not in (Stage.QUOTED.value, Stage.ACCEPTED.value)) and accepted:
+            rfq = await self.adopt(orch, mail)
         if rfq is None or rfq.get("status") not in (Stage.QUOTED.value, Stage.ACCEPTED.value):
             return
-        if not is_acceptance(mail.body) and not is_acceptance(mail.subject):
+        if not accepted:
+            self.declined.add(mail.id)
             orch.emit(
                 Agent.RFQ,
                 "followup",
@@ -317,6 +421,10 @@ class BookingAgent:
         info = json.loads(rfq.get("breakdown_json") or "{}")
         info.update(await self._shipment_facts(orch, rfq))
         booking = await self.book(orch, rfq, info)
+        if booking is None:
+            log.warning("booking_retry", extra={"rfq": rfq_id})
+            await asyncio.sleep(self.retry_after_s)
+            booking = await self.book(orch, rfq, info)
         ms = int((time.monotonic() - t0) * 1000)
         if booking is None:
             orch.emit(

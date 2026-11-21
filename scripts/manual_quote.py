@@ -108,7 +108,16 @@ async def run(mail_id: int, send: bool, wait_pickup_s: float) -> int:
             if not send:
                 print("preview only, pass --send to send")
                 return 0
+            from core.agents.booking import record_sent_quote
+
+            if store._conn.execute("SELECT 1 FROM rfqs WHERE id=?", (str(mail_id),)).fetchone() is None:
+                store.upsert_rfq(str(mail_id), str(mail.thread_root_id), mail.sender, mail.subject, mail.received_at, "new")
             await orchestrator.send_quote(quote)
+            if store.outbox_status(quote.thread_root_id, Stage.QUOTED) == "sent":
+                record_sent_quote(
+                    store, mail_id, mail.thread_root_id, mail.sender, quote.subject, quote.option.carrier,
+                    quote.total, quote.currency, quote.option.rate_id, quote.body, mail.received_at,
+                )
             print(f"outbox status: {store.outbox_status(quote.thread_root_id, Stage.QUOTED)}")
     finally:
         store.close()

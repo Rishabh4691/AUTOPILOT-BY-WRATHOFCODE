@@ -188,6 +188,21 @@ async def warm_speech() -> None:
         log.exception("speech_warmup_failed")
 
 
+async def recheck_bookings(orchestrator, stop: asyncio.Event, every_s: float = 300.0) -> None:
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=every_s)
+            return
+        except TimeoutError:
+            pass
+        if orchestrator.booker is None:
+            continue
+        try:
+            await orchestrator.booker.recover(orchestrator)
+        except Exception:
+            log.exception("booking_recheck_failed")
+
+
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
     warmup = asyncio.create_task(warm_speech(), name="speech-warmup")
     try:
@@ -228,12 +243,14 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                 except Exception:
                     log.exception("booking_recover_failed")
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
+            rechecker = asyncio.create_task(recheck_bookings(orchestrator, stop), name="booking-recheck")
             await reprocess(orchestrator)
             try:
                 await poll_loop(orchestrator, settings.poll_interval_s, stop)
                 await asyncio.wait_for(orchestrator.outbox.join(), timeout=10)
             finally:
                 sender.cancel()
+                rechecker.cancel()
                 for task in list(orchestrator.tasks):
                     task.cancel()
     finally:
