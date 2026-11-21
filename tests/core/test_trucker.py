@@ -368,3 +368,15 @@ def test_fastest_request_takes_the_fastest_trucker_round_25() -> None:
     ]
     assert best_offer(offers, "fastest").trucker == "Spessart"
     assert best_offer(offers, "cheapest").trucker == "Spessart"  # balanced 50/50 (brief)
+
+
+def test_poll_waits_until_trucker_replies_are_due() -> None:
+    from core.agents import trucker
+    from core.main import next_poll_wait
+
+    trucker.POLL_HINTS[:] = [100.0 + 31.0]
+    assert next_poll_wait(6.0, now=100.0) == 6.0
+    assert next_poll_wait(6.0, now=126.5) == 5.2
+    assert abs(next_poll_wait(6.0, now=125.5) - 5.5) < 1e-9
+    trucker.POLL_HINTS[:] = []
+    assert next_poll_wait(6.0, now=100.0) == 6.0

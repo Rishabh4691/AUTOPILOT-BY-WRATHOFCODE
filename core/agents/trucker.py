@@ -279,6 +279,10 @@ def in_eur(price: PickupPrice) -> PickupPrice | None:
     return price.model_copy(update={"total": total, "currency": "EUR"})
 
 
+REPLY_AFTER_S = 31.0
+POLL_HINTS: list[float] = []
+
+
 def best_offer(prices: list[PickupPrice], preference: str = "cheapest") -> PickupPrice:
     # A CHF or USD offer is compared in EUR instead of being ignored.
     pool = [p for p in (in_eur(x) for x in prices) if p is not None] or prices
@@ -366,6 +370,8 @@ class EmailTruckerPickupSource:
         if sent_id is not None:
             self._sent_ids[sent_id] = rfq_id
         log.info("trucker_request_sent", extra={"rfq": rfq_id, "length": len(body)})
+        # Truckers answer about 30.5 s after our request; ask the poll loop to fetch right then.
+        POLL_HINTS.append(time.monotonic() + REPLY_AFTER_S)
 
     def _rfq_for(self, mail: Mail) -> int | None:
         sender = mail.sender.strip().lower()

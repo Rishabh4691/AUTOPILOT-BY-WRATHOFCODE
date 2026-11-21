@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 import json
 import logging
 import os
@@ -114,6 +115,21 @@ def stop_file(settings: Settings) -> Path:
     return settings.db_path.parent / "STOP"
 
 
+MIN_POLL_GAP_S = 5.2  # the mailbox allows one poll per 5 seconds
+
+
+def next_poll_wait(interval_s: float, now: float | None = None) -> float:
+    """Poll again after interval_s, or earlier (never under 5.2 s) when trucker replies are due."""
+    from core.agents import trucker
+
+    now = time.monotonic() if now is None else now
+    trucker.POLL_HINTS[:] = [t for t in trucker.POLL_HINTS if t > now - 1]
+    due = [t - now for t in trucker.POLL_HINTS if t - now > 0]
+    if due and min(due) < interval_s:
+        return max(MIN_POLL_GAP_S, min(due))
+    return interval_s
+
+
 async def poll_loop(orchestrator: Orchestrator, interval_s: float, stop: asyncio.Event) -> None:
     while not stop.is_set():
         if stop_file(orchestrator.settings).exists():
@@ -125,7 +141,7 @@ async def poll_loop(orchestrator: Orchestrator, interval_s: float, stop: asyncio
         except Exception:
             log.exception("poll_failed")
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(stop.wait(), timeout=interval_s)
+            await asyncio.wait_for(stop.wait(), timeout=next_poll_wait(interval_s))
 
 
 def reprocess_ids() -> list[int]:
