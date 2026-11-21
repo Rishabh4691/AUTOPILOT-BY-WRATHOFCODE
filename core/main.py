@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from core.agents.attachments import AttachmentReader
 from core.agents.booking import BookingAgent
 from core.agents.classifier import RuleClassifier
 from core.agents.dg_guard import DgGuard
@@ -97,6 +98,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         tracker=TrackingAgent(),
         dg=dg,
         tariffs=TariffIntake(client, settings),
+        attachments=AttachmentReader(client),
         review_dir=settings.db_path.parent / "review",
     )
 
