@@ -86,7 +86,8 @@ async def test_answer_once_with_status_and_eta(tmp_path: Path) -> None:
     reply = orch.mailbox.sent[0]
     assert reply.in_reply_to == 700 and reply.to == "tracking@hackloop.mail"
     assert "BK-AB12CD34" in reply.body and "Meridian Freightways" in reply.body
-    assert "Thu 26 Nov 2026" in reply.body and "Cologne (CGN) to Chicago (ORD)" in reply.body
+    assert "Thu 26 Nov" in reply.body and "Cologne (CGN) to Chicago (ORD)" in reply.body
+    assert "2026-" not in reply.body and "→" not in reply.body
     store.close()
 
 
@@ -103,7 +104,26 @@ def test_answer_repeats_the_airline_status():
     text = TrackingAgent().answer(
         {**BOOKED, "status": "confirmed", "note": "booked and ready to ship"}, "en"
     )
-    assert "Status: booked and ready to ship (Meridian Freightways confirmed it)." in text
+    assert "Latest status from Meridian Freightways: booked and ready to ship." in text
+
+
+def test_answer_greets_asker_uses_our_reference_and_no_zero_days():
+    agent = TrackingAgent()
+    restarted = {**BOOKED, "transit_days": 0, "price": "3228.87", "currency": "EUR"}
+    text = agent.answer(restarted, "en", "Klaus")
+    assert text.startswith("Hi Klaus,\n\nHere's the latest on our reference WOC-276")
+    assert "0 days" not in text and "EUR 3,228.87" in text
+    assert "Cologne (CGN) to Chicago (ORD)" in text and "→" not in text
+    assert "Wed 25 Nov" in text and "Thu 26 Nov" in text
+    timed = agent.answer({**BOOKED, "transit_days": 1, "eta": "2026-11-27"}, "en")
+    assert timed.startswith("Hi,\n\n") and "leaving Wed 25 Nov" in timed and "Fri 27 Nov" in timed
+
+
+def test_asker_name_comes_from_the_signature():
+    from core.agents.tracking import asker_name
+
+    assert asker_name("Hi, where is WOC-276?\n\nThanks,\nKlaus") == "Klaus"
+    assert asker_name("Where is BK-AB12CD34?") == ""
 
 
 def test_match_by_weight_lane_and_date_without_company():

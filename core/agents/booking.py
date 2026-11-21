@@ -18,7 +18,7 @@ from mail import lang
 from mail.extract import extract as rules_extract
 from mail.extract import find_first_name, find_ready
 from mail.text import fresh_text, reply_subject
-from mail.writer import capitalize_sentences, place
+from mail.writer import arrival_date, capitalize_sentences, money, place, short_day
 
 log = logging.getLogger("core.booking")
 
@@ -107,23 +107,31 @@ DECLINE = [
 
 CONFIRM = {
     "en": "Hi {first},\n\ngood news, it's booked. Booking reference {ref}, our reference {team}.\n"
-    "{carrier}, {route}, {transit} transit, arriving around {eta}.\n"
+    "{carrier} flies it from {route}{transit}, arriving around {eta}. The all-in price stays at {price}.\n"
     "We'll keep an eye on it and let you know if anything changes.\n\nCheers,\n{agent}\n{company}",
     "de": "Hallo {first},\n\nerledigt, die Sendung ist gebucht. Buchungsnummer {ref}, unsere Referenz {team}.\n"
-    "{carrier}, {route}, {transit} Laufzeit, Ankunft etwa {eta}.\n"
+    "{carrier}, {route}{transit}, Ankunft etwa {eta}. Der All-in-Preis bleibt bei {price}.\n"
     "Wir behalten alles im Blick und melden uns, falls sich etwas ändert.\n\nViele Grüße\n{agent}\n{company}",
     "fr": "Bonjour {first},\n\nc'est réservé. Référence de réservation {ref}, notre référence {team}.\n"
-    "{carrier}, {route}, {transit} de transit, arrivée vers {eta}.\n"
+    "{carrier}, {route}{transit}, arrivée vers {eta}. Le prix tout compris reste {price}.\n"
     "Nous suivons l'envoi et vous prévenons si quelque chose change.\n\nBien à vous,\n{agent}\n{company}",
     "es": "Hola {first},\n\nya está reservado. Referencia de reserva {ref}, nuestra referencia {team}.\n"
-    "{carrier}, {route}, {transit} de tránsito, llegada sobre el {eta}.\n"
+    "{carrier}, {route}{transit}, llegada sobre el {eta}. El precio todo incluido sigue siendo {price}.\n"
     "Lo seguimos de cerca y te avisamos si cambia algo.\n\nUn saludo,\n{agent}\n{company}",
     "it": "Ciao {first},\n\nfatto, è prenotato. Riferimento prenotazione {ref}, il nostro riferimento {team}.\n"
-    "{carrier}, {route}, {transit} di transito, arrivo verso {eta}.\n"
+    "{carrier}, {route}{transit}, arrivo verso {eta}. Il prezzo tutto incluso resta {price}.\n"
     "Lo seguiamo noi e ti avvisiamo se cambia qualcosa.\n\nUn saluto,\n{agent}\n{company}",
-    "pl": "Dzień dobry {first},\n\nzarezerwowane. Numer rezerwacji {ref}, Państwa numer {team}.\n"
-    "{carrier}, {route}, {transit} tranzytu, przylot około {eta}.\n"
+    "pl": "Dzień dobry {first},\n\nzarezerwowane. Numer rezerwacji {ref}, nasz numer referencyjny {team}.\n"
+    "{carrier}, {route}{transit}, przylot około {eta}. Cena all-in pozostaje {price}.\n"
     "Pilnujemy przesyłki i damy znać, gdyby coś się zmieniło.\n\nPozdrawiam,\n{agent}\n{company}",
+}
+TRANSIT = {
+    "en": ", {n} {unit} in transit",
+    "de": ", {n} {unit} Laufzeit",
+    "fr": ", {n} {unit} de transit",
+    "es": ", {n} {unit} de tránsito",
+    "it": ", {n} {unit} di transito",
+    "pl": ", {n} {unit} tranzytu",
 }
 DAYS = {
     "en": ("day", "days"),
@@ -147,6 +155,39 @@ def is_acceptance(body: str) -> bool:
 
 def team_reference(rfq_id: str) -> str:
     return f"WOC-{rfq_id}"
+
+
+def booking_eta(info: dict, today: date | None = None) -> str:
+    """The arrival the quote promised; recomputed the same way only if it was never stored."""
+    stored = info.get("arrival")
+    if stored:
+        return str(stored)[:10]
+    return arrival_date(info.get("ready_date"), info.get("transit_days"), today).isoformat()
+
+
+def confirmation_body(
+    booking: dict, rfq: dict, language: str, first: str, agent: str, company: str
+) -> str:
+    language = language if language in CONFIRM else "en"
+    days = int(booking.get("transit_days") or 0)
+    one, many = DAYS[language]
+    transit = TRANSIT[language].format(n=days, unit=one if days == 1 else many) if days > 0 else ""
+    total = rfq.get("total") or booking.get("price")
+    currency = rfq.get("currency") or booking.get("currency") or "EUR"
+    body = CONFIRM[language].format(
+        first=first or {"en": "there"}.get(language, ""),
+        ref=booking.get("booking_reference") or "follows shortly",
+        team=booking["team_reference"],
+        carrier=carrier_name(booking["carrier"]),
+        route=f"{place(booking['origin'])} to {place(booking['destination'])}",
+        transit=transit,
+        eta=short_day(booking["eta"], language),
+        price=money(total, currency, language) if total else "as quoted",
+        agent=agent,
+        company=company,
+    )
+    body = re.sub(r"\byour reference (WOC-)", r"our reference \1", body, flags=re.I)
+    return capitalize_sentences(re.sub(r" +,", ",", body))
 
 
 class BookingAgent:
@@ -405,14 +446,8 @@ class BookingAgent:
 
     def _record(self, orch: Any, rfq: dict, info: dict, done: dict, method: str) -> dict:
         days = int(info.get("transit_days") or 0)
-        today = datetime.now(UTC).date()
         ready = info.get("ready_date")
-        depart = (
-            max(today + timedelta(days=1), date.fromisoformat(ready))
-            if ready
-            else today + timedelta(days=1)
-        )
-        eta = (depart + timedelta(days=days)).isoformat()
+        eta = booking_eta(info)
         booking = {
             "rfq_id": str(rfq["id"]),
             "thread_id": str(rfq["thread_id"]),
@@ -424,7 +459,7 @@ class BookingAgent:
             "carrier_code": done.get("airline_code") or info.get("carrier_code"),
             "origin": info.get("origin") or rfq.get("origin"),
             "destination": info.get("destination") or rfq.get("destination"),
-            "price": str(done.get("price") or rfq.get("total")),
+            "price": str(rfq.get("total") or done.get("price")),
             "currency": done.get("currency") or rfq.get("currency"),
             "transit_days": days,
             "ready_date": ready,
@@ -444,23 +479,14 @@ class BookingAgent:
             return
         language = lang.detect(fresh_text(mail.body) or mail.subject)
         language = language if language in CONFIRM else "en"
-        days = int(booking.get("transit_days") or 0)
-        one, many = DAYS[language]
-        eta_date = datetime.fromisoformat(booking["eta"]).date()
-        body = CONFIRM[language].format(
-            first=proper(find_first_name(mail.sender, mail.body)) or {"en": "there"}.get(language, ""),
-            ref=booking.get("booking_reference") or "follows shortly",
-            team=booking["team_reference"],
-            carrier=carrier_name(booking["carrier"]),
-            route=f"{place(booking['origin'])} to {place(booking['destination'])}",
-            transit=f"{days} {one if days == 1 else many}",
-            eta=f"{eta_date.strftime('%a')} {eta_date.day} {eta_date.strftime('%b')}"
-            if language == "en"
-            else eta_date.strftime("%d.%m."),
-            agent=self.agent_name,
-            company=self.company,
+        body = confirmation_body(
+            booking,
+            rfq,
+            language,
+            proper(find_first_name(mail.sender, mail.body)),
+            self.agent_name,
+            self.company,
         )
-        body = capitalize_sentences(re.sub(r" +,", ",", body))
         try:
             sent = await orch.mailbox.send(
                 OutgoingMail(
