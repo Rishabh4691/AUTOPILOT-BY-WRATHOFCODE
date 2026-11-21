@@ -162,7 +162,7 @@ class Orchestrator:
     tariffs: Any = None
     attachments: Any = None
     review_dir: Path | None = None
-    review_deadline_s: float = 110.0
+    review_deadline_s: float = 60.0
     review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
     bids: Any = None
 
