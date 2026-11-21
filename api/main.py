@@ -213,6 +213,7 @@ async def board():
 
 
 _mail_index: dict = {"since": 0, "mails": [], "at": 0.0}
+_mail_lock = asyncio.Lock()
 _round_cache: dict = {}
 NOTES_PATH = store.ROOT / "data" / "round_notes.json"
 
@@ -227,21 +228,60 @@ def _fiveu():
     return httpx.AsyncClient(base_url=base, headers={"X-API-Key": key}, timeout=15)
 
 
-async def _sync_mailbox(client) -> list[dict]:
-    import time as _t
+MAIL_INDEX_PATH = store.ROOT / "data" / "mail_index.json"
+_sync_task: dict = {"task": None}
 
-    if _t.time() - _mail_index["at"] < 5:
-        return _mail_index["mails"]
-    for _ in range(100):
-        r = await client.get("/v1/mailbox/messages", params={"since_id": _mail_index["since"], "limit": 200})
-        if r.status_code != 200:
-            break
-        data = r.json()
-        if not data.get("messages"):
-            break
-        _mail_index["mails"].extend(data["messages"])
-        _mail_index["since"] = data.get("next_since_id") or _mail_index["since"]
-    _mail_index["at"] = _t.time()
+
+def _load_mail_index() -> None:
+    if _mail_index["mails"]:
+        return
+    try:
+        saved = json.loads(MAIL_INDEX_PATH.read_text())
+        _mail_index["mails"] = saved.get("mails") or []
+        _mail_index["since"] = int(saved.get("since") or 0)
+    except (OSError, ValueError):
+        pass
+
+
+def _save_mail_index() -> None:
+    try:
+        MAIL_INDEX_PATH.write_text(json.dumps({"since": _mail_index["since"], "mails": _mail_index["mails"]}))
+    except OSError:
+        pass
+
+
+async def _sync_pages() -> None:
+    async with _mail_lock, _fiveu() as client:
+        seen = {m.get("id") for m in _mail_index["mails"]}
+        for _ in range(100):
+            r = await client.get("/v1/mailbox/messages", params={"since_id": _mail_index["since"], "limit": 200})
+            if r.status_code == 429:
+                await asyncio.sleep(max(5.5, float(r.headers.get("retry-after") or 0)))
+                continue
+            if r.status_code != 200:
+                break
+            data = r.json()
+            batch = data.get("messages") or []
+            _mail_index["mails"].extend(m for m in batch if m.get("id") not in seen)
+            seen.update(m.get("id") for m in batch)
+            _mail_index["since"] = data.get("next_since_id") or _mail_index["since"]
+            _save_mail_index()
+            if len(batch) < 200:
+                break
+            await asyncio.sleep(5.5)
+        _mail_index["at"] = time.time()
+
+
+async def _sync_mailbox(wait_s: float = 20) -> list[dict]:
+    _load_mail_index()
+    task = _sync_task["task"]
+    if (task is None or task.done()) and time.time() - _mail_index["at"] >= 30:
+        task = _sync_task["task"] = asyncio.create_task(_sync_pages())
+    if task is not None and not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=wait_s)
+        except asyncio.TimeoutError:
+            pass
     return _mail_index["mails"]
 
 
@@ -258,22 +298,23 @@ def _short(m: dict) -> dict:
     }
 
 
-async def _find_reply(client, rfq_id: int, thread: set[int]) -> dict | None:
-    sem = asyncio.Semaphore(16)
+def _is_reply(m: dict, thread: set[int]) -> bool:
+    return (m.get("from") or "").startswith("wrathofcode@") and m.get("in_reply_to") in thread
 
-    async def one(i):
-        async with sem:
-            r = await client.get(f"/v1/mailbox/messages/{i}")
-            if r.status_code == 200:
-                m = r.json()
-                if m.get("from", "").startswith("wrathofcode@") and m.get("in_reply_to") in thread:
-                    return m
-        return None
 
-    for start in range(rfq_id + 1, rfq_id + 600, 120):
-        found = [m for m in await asyncio.gather(*(one(i) for i in range(start, start + 120))) if m]
-        if found:
-            return min(found, key=lambda m: m["id"])
+async def _find_reply(client, rfq_id: int, thread: set[int], mails: list[dict]) -> dict | None:
+    found = [m for m in mails if _is_reply(m, thread)]
+    if found:
+        return min(found, key=lambda m: m["id"])
+    deadline = time.monotonic() + 15
+    for i in range(rfq_id + 1, rfq_id + 80):
+        if time.monotonic() > deadline:
+            break
+        r = await client.get(f"/v1/mailbox/messages/{i}")
+        if r.status_code == 429:
+            break
+        if r.status_code == 200 and _is_reply(r.json(), thread):
+            return r.json()
     return None
 
 
@@ -290,7 +331,7 @@ async def round_detail(round_no: int):
         cached = _round_cache.get(round_no)
         if cached and cached["verdict"] == req.get("verdict") and req.get("verdict") not in ("open", "pending"):
             return {**cached, "note": _notes().get(str(round_no), "")}
-        mails = await _sync_mailbox(client)
+        mails = await _sync_mailbox()
         sent = req["sent_at"][:19]
         rfq = next((m for m in mails if (m.get("received_at") or "")[:19] == sent and not m["from"].startswith("tracking@")), None)
         related, customer = [], []
@@ -305,7 +346,7 @@ async def round_detail(round_no: int):
                     (customer if m["from"] == rfq["from"] else related).append(_short(m))
                 elif re.search(rf"\b{rid}\b", s) or re.search(rf"\bref\s+{rid}\b", m.get("body") or "", re.I):
                     related.append(_short(m))
-        reply = await _find_reply(client, rfq["id"], {rfq["id"]}) if rfq else None
+        reply = await _find_reply(client, rfq["id"], {rfq["id"]}, mails) if rfq else None
         board = (await client.get("/v1/board")).json()
         start = datetime.fromisoformat(req["sent_at"])
         window = [
@@ -328,8 +369,10 @@ async def round_detail(round_no: int):
         "related": sorted(related, key=lambda m: m["id"])[:40],
         "others_booked": window,
     }
-    _round_cache[round_no] = out
-    return {**out, "note": _notes().get(str(round_no), "")}
+    if rfq and reply:
+        _round_cache[round_no] = out
+    loading = _sync_task["task"] is not None and not _sync_task["task"].done()
+    return {**out, "note": _notes().get(str(round_no), ""), "mail_loading": loading}
 
 
 def _notes() -> dict:

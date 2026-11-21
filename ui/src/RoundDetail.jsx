@@ -45,12 +45,21 @@ export default function RoundDetail({ round, onClose }) {
 
   useEffect(() => {
     let alive = true
+    let timer
     setD(null)
-    get(`/rounds/${round}`)
-      .then((x) => alive && (setD(x), setNote((x.note || '').replace(/\n\(by .*\)$/, ''))))
-      .catch((e) => alive && setErr(e.message))
+    const load = (first) =>
+      get(`/rounds/${round}`)
+        .then((x) => {
+          if (!alive) return
+          setD(x)
+          if (first) setNote((x.note || '').replace(/\n\(by .*\)$/, ''))
+          if (x.mail_loading) timer = setTimeout(() => load(false), 15000)
+        })
+        .catch((e) => alive && setErr(e.message))
+    load(true)
     return () => {
       alive = false
+      clearTimeout(timer)
     }
   }, [round])
 
@@ -128,7 +137,7 @@ export default function RoundDetail({ round, onClose }) {
             </Section>
 
             <Section title="Customer request">
-              {d.request ? <Mail m={d.request} tone="border-sky-500/30" /> : <p className="text-sm text-muted">Request mail not found.</p>}
+              {d.request ? <Mail m={d.request} tone="border-sky-500/30" /> : <p className="text-sm text-muted">{d.mail_loading ? 'Still reading the mailbox (5U allows one page every 5 s). This refreshes by itself.' : 'Request mail not found.'}</p>}
             </Section>
 
             <Section title="Our reply">
