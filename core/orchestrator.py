@@ -96,6 +96,7 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
 
 
 BID_CUTOFF_S = 75.0
+ORIGIN_COMPARE_S = 45.0
 
 
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
@@ -382,7 +383,18 @@ class Orchestrator:
                 return candidate, min(options, key=lambda o: (o.transit_days, o.total))
             return candidate, min(options, key=lambda o: (o.total, o.transit_days))
 
-        found = [r for r in await asyncio.gather(*(price(a) for a in airports)) if r is not None]
+        tasks = [asyncio.create_task(price(a)) for a in airports]
+        done, pending = await asyncio.wait(tasks, timeout=ORIGIN_COMPARE_S)
+        for task in pending:
+            task.cancel()
+        found = [
+            t.result() for t in done if not t.cancelled() and t.exception() is None and t.result()
+        ]
+        if pending:
+            log.info(
+                "origin_compare_cut",
+                extra={"rfq": rfq.mail_id, "answered": len(done), "late": len(pending)},
+            )
         if not found:
             return rfq
         if rfq.preference.value == "fastest":
