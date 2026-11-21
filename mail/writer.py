@@ -722,6 +722,9 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
     draft = tidy(fix_greeting(reply.text.strip().strip("`").strip(), lang))
+    # Round 49: the model wrote "valid until [HOLD]", which reads "until for you today" and
+    # threw the whole draft away. [HOLD] already carries its own preposition.
+    draft = re.sub(r"\b(?:until|by|for)\s+(\[(?:HOLD|VALID)\])", r"\1", draft)
     issues = empty_inline(draft, values) + problems(draft, values, rfq.get("customer_text", ""))
     body = fill(draft, values)
     if not issues:
