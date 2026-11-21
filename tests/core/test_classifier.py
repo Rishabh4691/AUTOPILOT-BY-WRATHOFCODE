@@ -107,3 +107,41 @@ def test_airline_status_update_is_routed_to_booking() -> None:
         received_at=datetime.now(UTC),
     )
     assert classifier.classify(mail, frozenset()).kind is MailKind.BOOKING_CONFIRMATION
+
+
+@pytest.mark.parametrize(
+    ("subject", "body"),
+    [
+        ("Quote request", "Please send me an all-in price to DXB (Dubai).\n4 pallets, 528 kilos."),
+        ("Luftfracht", "Bitte um ein Angebot nach ORD (Chicago).\n3 Paletten, 450 Kilogramm."),
+        ("Spedizione", "Potete quotare da MUC per BOG? 8 colli, peso lordo totale 1,2 t."),
+    ],
+)
+def test_rfqs_in_kilos_tonnes_or_other_languages_are_rfqs(
+    classifier: RuleClassifier, subject: str, body: str
+) -> None:
+    mail = make_mail("buyer@customer.mail", subject, body)
+    assert classifier.classify(mail, NO_THREADS).kind is MailKind.RFQ
+
+
+@pytest.mark.parametrize(
+    ("subject", "body"),
+    [
+        ("Quote accepted", "We accept the quotation for 300 kg MUC to ORD. Please go ahead."),
+        ("Shipment status", "Where is our shipment FRA to PVG, AWB 020-12345675, 450 kg?"),
+        ("Tracking AWB 176-55512341", "Can you send a tracking update (380 kg, DUS-DXB)?"),
+        ("Invoice 2026-1188", "Payment confirmation for invoice 2026-1188 (FRA-JFK, 450 kg)."),
+        ("Danke", "Vielen Dank für das Angebot über 450 kg nach JFK, wir melden uns."),
+    ],
+)
+def test_acceptances_tracking_and_thanks_are_not_new_rfqs(
+    classifier: RuleClassifier, subject: str, body: str
+) -> None:
+    mail = make_mail("buyer@customer.mail", subject, body)
+    assert classifier.classify(mail, NO_THREADS).kind is not MailKind.RFQ
+
+
+def test_a_real_request_that_mentions_tracking_is_still_an_rfq(classifier: RuleClassifier) -> None:
+    body = "Tracking was great last time. Please quote FRA to JFK, 3 pallets, 450 kg, 2.1 cbm."
+    mail = make_mail("buyer@customer.mail", "New shipment", body)
+    assert classifier.classify(mail, NO_THREADS).kind is MailKind.RFQ

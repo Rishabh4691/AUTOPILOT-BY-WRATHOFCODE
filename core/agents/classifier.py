@@ -11,9 +11,34 @@ STATUS_UPDATE = re.compile(r"\bBK-[A-Za-z0-9]{6,12}\b[\s\S]*^\s*status\s*:", re.
 TARIFF_PATTERN = re.compile(r"\b(tariff|rate\s+sheet|valid\s+from)\b", re.IGNORECASE)
 AIRPORT_PAIR_PATTERN = re.compile(r"\b[A-Z]{3}\b.*?\b[A-Z]{3}\b", re.DOTALL)
 REQUEST_WORD_PATTERN = re.compile(
-    r"\b(quote|quotation|rfq|request|anfrage|cotización|cotizacion|devis)\b", re.IGNORECASE
+    r"\b(quote|quotation|rfq|request|anfrage|angebot|cotización|cotizacion|cotizar|devis|"
+    r"cotation|preventivo|quotazione|wycen\w*|oferta|offerta|all-in price)\b",
+    re.IGNORECASE,
 )
-WEIGHT_PATTERN = re.compile(r"\d+[.,]?\d*\s*(kg|kgs|lb|lbs)\b", re.IGNORECASE)
+WEIGHT_PATTERN = re.compile(
+    r"\d+[.,]?\d*\s*(kg|kgs|kilos?|kilograms?|kilogramm\w*|kilogrammes?|lb|lbs|pounds?|"
+    r"t|tons?|tonnes?|tonnen)\b",
+    re.IGNORECASE,
+)
+# Mails about an existing shipment or quote that arrive without reply headers.
+NOT_A_REQUEST = re.compile(
+    r"\b(we accept|accept (?:your|the) (?:offer|quot\w+)|quote accepted|"
+    r"please (?:go ahead and )?book|tracking|where is (?:our|my) shipment|status (?:update|of)|"
+    r"AWB\s*\d{3}[- ]?\d{8}|out of (?:the )?office|abwesen\w*|nicht im büro|automatic reply|"
+    r"auto(?:matische)?[- ]?(?:reply|antwort)|invoice \d|payment confirmation|"
+    r"thank(?:s| you) for (?:the|your) (?:quote|offer|quotation)|"
+    r"danke für (?:das|ihr) angebot|vielen dank für (?:das|ihr) angebot)",
+    re.IGNORECASE,
+)
+_PRICE = r"(?:me |us )?(?:a |an |your )?(?:quote|price|offer|rate)"
+ASKS_FOR_PRICE = re.compile(
+    rf"\b(please (?:quote|send {_PRICE}|provide (?:a )?(?:quote|price))|"
+    rf"(?:could|can|would) you (?:please )?(?:quote|send {_PRICE}|give {_PRICE})|"
+    r"quote request|request for (?:a )?quot\w+|need a (?:quote|price|rate)|"
+    r"(?:bitte|benötigen|brauchen)[^.\n]{0,30}angebot|angebot für|anfrage luftfracht|devis|"
+    r"cotiza\w+|preventivo|potete quotare|wycen\w*|all-in price|price for)\b",
+    re.IGNORECASE,
+)
 
 
 def _text(mail: Mail) -> str:
@@ -23,6 +48,8 @@ def _text(mail: Mail) -> str:
 def looks_like_rfq(mail: Mail) -> bool:
     text = _text(mail)
     asks = bool(AIRPORT_PAIR_PATTERN.search(text) or REQUEST_WORD_PATTERN.search(text))
+    if NOT_A_REQUEST.search(text) and not ASKS_FOR_PRICE.search(text):
+        return False
     return asks and bool(WEIGHT_PATTERN.search(text))
 
 
