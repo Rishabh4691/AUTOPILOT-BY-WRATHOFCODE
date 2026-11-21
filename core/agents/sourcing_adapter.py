@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import logging
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
@@ -105,7 +106,7 @@ class SourcingPortalPriceSource:
         self.last_notes = list(notes)
         if notes:
             log.info("portal_notes", extra={"rfq": rfq.mail_id, "notes": notes[:5]})
-        if not options and any("PortalUnavailable" in note for note in notes):
+        if not options and any(re.search(r"unavailable|503", note, re.I) for note in notes):
             raise PortalDown(notes[0])
         if not options:
             raise SourceUnavailable(notes[0] if notes else "portal returned no prices")
