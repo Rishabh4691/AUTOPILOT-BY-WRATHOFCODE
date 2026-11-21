@@ -24,7 +24,7 @@ class Sender:
         self.lock = asyncio.Lock()
         if not settings.dry_run:
             with store.connect() as db:
-                db.execute("DELETE FROM outbox WHERE state='dry_run'")
+                db.execute("DELETE FROM mail_outbox WHERE state='dry_run'")
 
     def _is_customer(self, address: str) -> bool:
         a = address.lower()
@@ -39,7 +39,7 @@ class Sender:
                 return "a human has the controls"
         if self._is_customer(to) and stage not in CUSTOMER_FIRST:
             quoted = db.execute(
-                "SELECT 1 FROM outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','dry_run','unknown')", (thread_id,)
+                "SELECT 1 FROM mail_outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','dry_run','unknown')", (thread_id,)
             ).fetchone()
             if not quoted:
                 return f"first reply to a customer must be the quote, not {stage}"
@@ -55,7 +55,7 @@ class Sender:
                     return Sent(False, why)
                 try:
                     db.execute(
-                        "INSERT INTO outbox (thread_id, stage, rfq_id, recipient, in_reply_to, subject, body, state, created_at) VALUES (?,?,?,?,?,?,?, 'sending', ?)",
+                        "INSERT INTO mail_outbox (thread_id, stage, rfq_id, recipient, in_reply_to, subject, body, state, created_at) VALUES (?,?,?,?,?,?,?, 'sending', ?)",
                         (thread_id, stage, rfq_id, to, in_reply_to, subject, body, time.time()),
                     )
                 except sqlite3.IntegrityError:
@@ -67,9 +67,9 @@ class Sender:
             except MailboxError as e:
                 with store.connect() as db:
                     if e.maybe_sent:
-                        db.execute("UPDATE outbox SET state='unknown', error=? WHERE thread_id=? AND stage=?", (str(e)[:300], thread_id, stage))
+                        db.execute("UPDATE mail_outbox SET state='unknown', error=? WHERE thread_id=? AND stage=?", (str(e)[:300], thread_id, stage))
                     else:
-                        db.execute("DELETE FROM outbox WHERE thread_id=? AND stage=?", (thread_id, stage))
+                        db.execute("DELETE FROM mail_outbox WHERE thread_id=? AND stage=?", (thread_id, stage))
                     store.log_event(agent, rfq_id, f"send:{stage}", "fail",
                                     f"Send failed{' (may have gone out, not retrying)' if e.maybe_sent else ''}: {e}"[:300],
                                     (time.monotonic() - t0) * 1000, db=db)
@@ -79,7 +79,7 @@ class Sender:
             state = "dry_run" if out.get("dry_run") else "sent"
             with store.connect() as db:
                 db.execute(
-                    "UPDATE outbox SET state=?, message_id=?, sent_at=? WHERE thread_id=? AND stage=?",
+                    "UPDATE mail_outbox SET state=?, message_id=?, sent_at=? WHERE thread_id=? AND stage=?",
                     (state, mid, time.time(), thread_id, stage),
                 )
                 if mid is not None:

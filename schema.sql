@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS mails (
 CREATE INDEX IF NOT EXISTS idx_mails_thread ON mails(thread_id);
 CREATE INDEX IF NOT EXISTS idx_mails_state ON mails(state);
 
-CREATE TABLE IF NOT EXISTS outbox (
+CREATE TABLE IF NOT EXISTS mail_outbox (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   thread_id    INTEGER NOT NULL,
   stage        TEXT NOT NULL,

@@ -114,7 +114,7 @@ async def test_maybe_sent_failure_is_never_retried():
     c = FakeClient()
     assert not (await sd.Sender(c).reply(m, "quote", "Re", "x")).ok and c.sent == []
     with store.connect() as db:
-        assert db.execute("SELECT state FROM outbox").fetchone()[0] == "unknown"
+        assert db.execute("SELECT state FROM mail_outbox").fetchone()[0] == "unknown"
 
 
 async def test_dry_run_rows_are_cleared_when_going_live(monkeypatch):

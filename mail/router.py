@@ -96,11 +96,11 @@ def is_acceptance(text: str) -> bool:
 def thread_state(db, mail: Mail) -> dict:
     thread = mail.thread_id
     quoted = db.execute(
-        "SELECT rfq_id FROM outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','sending','dry_run','unknown') ORDER BY id LIMIT 1",
+        "SELECT rfq_id FROM mail_outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','sending','dry_run','unknown') ORDER BY id LIMIT 1",
         (thread,),
     ).fetchone()
     rfq = db.execute("SELECT id, status FROM rfqs WHERE thread_id=? ORDER BY received_at LIMIT 1", (str(thread),)).fetchone()
-    ours = db.execute("SELECT COUNT(*) FROM outbox WHERE thread_id=? AND recipient!=?", (thread, mail.sender_email)).fetchone()[0]
+    ours = db.execute("SELECT COUNT(*) FROM mail_outbox WHERE thread_id=? AND recipient!=?", (thread, mail.sender_email)).fetchone()[0]
     return {
         "quoted": bool(quoted),
         "rfq_id": (quoted[0] if quoted else None) or (rfq["id"] if rfq else None),

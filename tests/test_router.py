@@ -41,7 +41,7 @@ def kind(m):
 def quoted(thread_id, rfq_id="RFQ-1"):
     with store.connect() as db:
         db.execute(
-            "INSERT INTO outbox (thread_id, stage, rfq_id, recipient, state, created_at) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO mail_outbox (thread_id, stage, rfq_id, recipient, state, created_at) VALUES (?,?,?,?,?,?)",
             (thread_id, "quote", rfq_id, "anna@customer.mail", "sent", time.time()),
         )
 
@@ -68,7 +68,7 @@ def test_carrier_bid_vs_tariff():
     airline = "borealis-freight-airways@hackloop.mail"
     with store.connect() as db:
         db.execute(
-            "INSERT INTO outbox (thread_id, stage, recipient, state, created_at) VALUES (50, 'bid:borealis', ?, 'sent', ?)",
+            "INSERT INTO mail_outbox (thread_id, stage, recipient, state, created_at) VALUES (50, 'bid:borealis', ?, 'sent', ?)",
             (airline, time.time()),
         )
     assert kind(mail(51, airline, "Re: Bid request MUC-ORD", "We can offer 2.10 EUR/kg", refs=[50])) == "bid"
