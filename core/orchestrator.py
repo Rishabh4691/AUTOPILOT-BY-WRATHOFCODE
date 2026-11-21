@@ -11,6 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from core.agents.crosscheck import cross_check
 from core.agents.limits import FREIGHTER_ONLY_CM, tallest
 from core.agents.limits import usable as fit_limits
 from core.config import Settings
@@ -346,6 +347,11 @@ class Orchestrator:
                 log.exception("dg_check_failed", extra={"rfq": mail.id})
         elif await self.dangerous_goods_blocked(mail, rfq):
             return
+        checker = asyncio.create_task(
+            cross_check(self, mail, rfq, getattr(self.dg, "texts", None)), name=f"check-{mail.id}"
+        )
+        self.tasks.add(checker)
+        checker.add_done_callback(self.tasks.discard)
         if "site_unknown" in rfq.notes:
             try:
                 rfq = await self.best_origin(rfq)

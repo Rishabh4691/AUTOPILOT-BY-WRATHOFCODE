@@ -20,7 +20,9 @@ PRICES = {
 def price_per_m(model: str) -> tuple[float, float]:
     if os.getenv("LLM_PRICE_IN_PER_M") and os.getenv("LLM_PRICE_OUT_PER_M"):
         return float(os.environ["LLM_PRICE_IN_PER_M"]), float(os.environ["LLM_PRICE_OUT_PER_M"])
-    key = next((k for k in sorted(PRICES, key=len, reverse=True) if model.lower().startswith(k)), None)
+    key = next(
+        (k for k in sorted(PRICES, key=len, reverse=True) if model.lower().startswith(k)), None
+    )
     return PRICES.get(key, (0.40, 1.60))
 
 
@@ -50,9 +52,16 @@ class GatewayError(Exception):
     pass
 
 
-async def chat(messages, max_tokens=500, http: httpx.AsyncClient | None = None, timeout=25) -> Reply:
-    body = {"model": settings.llm_model, "messages": messages, "max_completion_tokens": max_tokens}
-    effort = reasoning_effort(settings.llm_model)
+async def chat(
+    messages,
+    max_tokens=500,
+    http: httpx.AsyncClient | None = None,
+    timeout=25,
+    model: str | None = None,
+) -> Reply:
+    model = model or settings.llm_model
+    body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens}
+    effort = reasoning_effort(model)
     if effort:
         body["reasoning_effort"] = effort
     own = http is None
@@ -82,7 +91,7 @@ async def chat(messages, max_tokens=500, http: httpx.AsyncClient | None = None, 
         text=text.strip(),
         prompt_tokens=p,
         completion_tokens=c,
-        cost_usd=round(p * price_per_m(settings.llm_model)[0] / 1e6 + c * price_per_m(settings.llm_model)[1] / 1e6, 8),
+        cost_usd=round(p * price_per_m(model)[0] / 1e6 + c * price_per_m(model)[1] / 1e6, 8),
         ms=int((time.monotonic() - t0) * 1000),
-        model=data.get("model") or settings.llm_model,
+        model=data.get("model") or model,
     )
