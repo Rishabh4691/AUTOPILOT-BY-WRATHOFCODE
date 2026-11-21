@@ -30,6 +30,8 @@ def to_rfq(mail: Mail, x) -> RFQ:
     notes = tuple(x.problems) + (() if x.preference_stated else (ASSUMED,))
     if not pieces and x.pieces:
         notes += (f"pieces: {x.pieces}",)
+    if s.door_pickup and s.pickup_postcode:
+        notes += (f"postcode: {s.pickup_postcode}",)
     return RFQ(
         mail_id=mail.id,
         thread_root_id=mail.thread_root_id,

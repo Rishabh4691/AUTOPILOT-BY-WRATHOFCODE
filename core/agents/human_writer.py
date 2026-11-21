@@ -60,7 +60,7 @@ class HumanEmailWriter:
 
     def _includes(self, option: PriceOption, door: bool) -> list[str]:
         b = option.breakdown
-        if b is None:
+        if b is None or option.source == "portal":
             return ["freight", "fuel", "security"] + (["pickup"] if door else [])
         out = ["freight"]
         out += [k for k in ("fuel", "security") if getattr(b, k)]

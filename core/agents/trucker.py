@@ -86,13 +86,23 @@ def shipment_lines(rfq: RFQ) -> list[str]:
     return lines
 
 
+def pickup_postcode(rfq: RFQ) -> str | None:
+    for note in rfq.notes:
+        if note.startswith("postcode: ") and note[10:].isdigit():
+            return note[10:]
+    return None
+
+
 def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
     ready = rfq.ready_date.isoformat() if rfq.ready_date else "as soon as possible"
+    postcode = pickup_postcode(rfq)
+    where = f"postcode {postcode} {area}" if postcode else f"zone {zone} ({area})"
     return "\n".join(
         [
             "Hello,",
             "",
-            f"Please quote a pickup from zone {zone} ({area}) to {airport} airport.",
+            f"Please quote a pickup from {where} to {airport} airport.",
+            f"Pickup postcode: {postcode or zone}.",
             *shipment_lines(rfq),
             f"Ready date: {ready}.",
             f"Please reply with your all-in price and keep 'Pickup request {rfq.mail_id}' "

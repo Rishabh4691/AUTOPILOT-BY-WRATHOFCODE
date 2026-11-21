@@ -166,23 +166,45 @@ def find_ready(text: str) -> date | None:
         return None
 
 
+NAME = re.compile(r"[A-ZÀ-ÝĄĆĘŁŃÓŚŹŻ][a-zà-ÿąćęłńóśźż'-]{1,20}")
+NOT_A_NAME = re.compile(
+    r"\b(gmbh|ag|ltd|llc|inc|bv|sa|srl|spa|sas|sp\. z|co|kg|team|logistics|logistik|freight|cargo|export|"
+    r"purchasing|procurement|manager|head|director|department|abteilung|einkauf|medtech|group|company|"
+    r"hi|hello|hey|dear|hallo|bonjour|hola|ciao|buongiorno|thanks|danke|merci|gracias|grazie)\b",
+    re.I,
+)
+
+
+def _person(line: str) -> str:
+    words = line.replace(",", " ").split()
+    if 1 <= len(words) <= 3 and all(NAME.fullmatch(w) for w in words) and not NOT_A_NAME.search(line):
+        return words[0]
+    return ""
+
+
 def find_first_name(sender: str, text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     for i, line in enumerate(lines):
         if SIGNOFF.match(line) and i + 1 < len(lines):
-            cand = re.split(r"[\s,]", lines[i + 1])[0]
-            if re.fullmatch(r"[A-ZÀ-ÝĄĆĘŁŃÓŚŹŻ][a-zà-ÿąćęłńóśźż'-]{1,20}", cand):
-                return cand
+            name = _person(lines[i + 1])
+            if name:
+                return name
     m = re.search(r"\b(?:regards|thanks|cheers|grüße|merci|saludos|saluti|pozdrawiam)[,.!]?\s+([A-Z][a-zà-ÿ'-]{1,20})\s*$", text or "", re.I | re.M)
-    if m:
+    if m and _person(m.group(1)):
         return m.group(1)
+    for line in reversed(lines[-4:]):
+        name = _person(line)
+        if name:
+            return name
     if "<" in (sender or ""):
-        name = sender.split("<")[0].strip().strip('"')
-        if name and "@" not in name:
-            return name.split()[0].title()
-    part = re.split(r"[._-]", sender_email(sender).split("@")[0])[0]
-    generic = ("info", "sales", "export", "logistics", "shipping", "procurement", "buyer", "orders")
-    return part.title() if part.isalpha() and len(part) > 1 and part not in generic else ""
+        display = sender.split("<")[0].strip().strip('"')
+        name = _person(display) if display and "@" not in display else ""
+        if name:
+            return name
+    local = sender_email(sender).split("@")[0]
+    if re.fullmatch(r"[a-z]{2,20}[._][a-z]{2,30}", local):
+        return local.split(".")[0].split("_")[0].title()
+    return ""
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:

@@ -109,3 +109,30 @@ async def test_volume_in_cbm_and_count_without_dims():
     assert chargeable_weight_kg(to_shipment(rfq)) == Decimal("967.0")
     assert piece_count(rfq) == 12
     assert str(rfq.ready_date) == "2026-11-25"
+
+
+@needs_kit
+async def test_live_rfq_432_postcode_reaches_trucker_and_name_is_person():
+    from core.agents.trucker import request_body
+    from mail.extract import find_first_name
+
+    body = (
+        "Dear Sir or Madam,\n\nCould you please quote the fastest air freight option to JFK "
+        "(New York, US)? The shipment will be ready for pickup at our site in 61018 (Bad Homburg), "
+        "Germany, on 2026-11-25. Please arrange trucking from our site to the departure airport.\n\n"
+        "The shipment consists of 6 pieces of precision instruments, with a gross weight of 1233 kg "
+        "and a total volume of 10.78 cbm.\n\nKind regards\nAnna Sonnberg\n"
+        "Head of Purchasing and Logistics\nSonnberg Kaffeeroesterei GmbH"
+    )
+    m = mail(body, "Air freight quote request to JFK", "sonnberg-roesterei@hackloop.mail")
+    rfq, usage = await RulesFirstExtractor(Fallback()).extract(m)
+    assert usage is None and rfq.destination == "JFK" and rfq.pickup_zone == "61"
+    text = request_body(rfq, "61", "Bad Homburg", "FRA")
+    assert "postcode 61018" in text and "10.78 cbm" in text and "Pieces: 6" in text
+    assert find_first_name(m.sender, body) == "Anna"
+    assert (
+        find_first_name(
+            "lindqvist-medtech@hackloop.mail", "Hi,\n\nquote\n\nSara\nLindqvist Medtech"
+        )
+        == "Sara"
+    )
