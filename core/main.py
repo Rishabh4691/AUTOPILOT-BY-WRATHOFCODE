@@ -74,12 +74,13 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
     )
     sender = DirectoryMailSender(client, settings, directory)
     portal = PortalPriceSource(client, settings, lambda: datetime.now(UTC))
+    dg = DgGuard(client, settings)
     return Orchestrator(
         settings=settings,
         store=store,
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
-        extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm)),
+        extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm), attachments=dg.texts),
         sources=[
             SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
             SheetPriceSource(),
@@ -94,7 +95,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
         tracker=TrackingAgent(),
-        dg=DgGuard(client, settings),
+        dg=dg,
         tariffs=TariffIntake(client, settings),
         review_dir=settings.db_path.parent / "review",
     )

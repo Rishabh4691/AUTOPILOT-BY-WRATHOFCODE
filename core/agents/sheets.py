@@ -95,7 +95,12 @@ class SheetPriceSource:
     name = "sheets"
 
     async def quote(self, rfq: RFQ) -> list[PriceOption]:
-        options = await asyncio.to_thread(get_sheet_prices, to_shipment(rfq))
+        shipment = to_shipment(rfq)
+        options = []
+        if rfq.ready_date is not None:
+            options = await asyncio.to_thread(get_sheet_prices, shipment, None, rfq.ready_date)
+        if not options:
+            options = await asyncio.to_thread(get_sheet_prices, shipment)
         out = [o for o in (convert(x) for x in options) if o is not None]
         log.info(
             "sheet_prices", extra={"rfq": rfq.mail_id, "found": len(options), "usable": len(out)}

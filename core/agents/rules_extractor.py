@@ -55,12 +55,26 @@ def to_rfq(mail: Mail, x) -> RFQ:
 
 
 class RulesFirstExtractor:
-    def __init__(self, fallback: RfqExtractor) -> None:
+    def __init__(self, fallback: RfqExtractor, attachments=None) -> None:
         self.fallback = fallback
+        self.attachments = attachments
 
     async def extract(self, mail: Mail) -> tuple[RFQ, LlmUsage | None]:
         try:
-            x = rules_extract(mail.subject, clean_body(mail.body), mail.sender, str(mail.id))
+            body = clean_body(mail.body)
+            x = rules_extract(mail.subject, body, mail.sender, str(mail.id))
+            if (
+                (x.shipment is None or not x.problems == [])
+                and mail.attachments
+                and self.attachments
+            ):
+                extra = "\n".join(t for _, t in await self.attachments(mail) if t)
+                if extra:
+                    y = rules_extract(mail.subject, f"{body}\n\n{extra}", mail.sender, str(mail.id))
+                    if y.shipment is not None and (
+                        x.shipment is None or len(y.problems) < len(x.problems)
+                    ):
+                        x = y
             if x.shipment is not None:
                 rfq = to_rfq(mail, x)
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
