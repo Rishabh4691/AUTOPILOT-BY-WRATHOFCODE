@@ -173,11 +173,11 @@ TOTAL_HINT = re.compile(
     r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I
 )
 FAST = re.compile(
-    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|pilne|pilnie|time[- ]critical|soonest)\b",
+    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|najszybsz\w*|pilne|pilnie|time[- ]critical|soonest)\b",
     re.I,
 )
 CHEAP = re.compile(
-    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b",
+    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins ch[eè]re?s?|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b",
     re.I,
 )
 PICKUP = re.compile(
@@ -554,6 +554,12 @@ READY_MONTH = re.compile(
 )
 
 
+# "Die Ware ist ab 28. November 2026 abholbereit": the date comes before the keyword.
+READY_MONTH_AFTER = re.compile(
+    rf"\b(\d{{1,2}})\.?\s+(?:de\s+)?{MONTH_WORD}\s+(?:de\s+)?(\d{{4}})[^\d\n]{{0,25}}?\b{READY_KW}", re.I
+)
+
+
 def _month(word: str) -> int | None:
     w = word.lower()
     return MONTHS.get(w) or MONTHS.get(w[:3])
@@ -568,6 +574,9 @@ def find_ready(text: str) -> date | None:
                 return date(int(n.group(3)), _month(n.group(2)) or 0, int(n.group(1)))
             if n and n.group(4) and _month(n.group(4)):
                 return date(int(n.group(6)), _month(n.group(4)) or 0, int(n.group(5)))
+            a = READY_MONTH_AFTER.search(text)
+            if a and _month(a.group(2)):
+                return date(int(a.group(3)), _month(a.group(2)) or 0, int(a.group(1)))
         except ValueError:
             return None
         # "ready for pickup at our site in 61018 (Bad Homburg), Germany, on 2026-11-25": a postcode sits in between
@@ -742,7 +751,7 @@ WEIGHT_PER_PIECE = re.compile(
 def labelled_per_piece(text: str, pieces: list[Piece]) -> list[Piece]:
     """Form-style mails: 'No. of pieces: 3', 'Weight per piece: 150 kg', 'Dims per piece: ...'."""
     label = PIECES_LABEL.search(text)
-    if len(pieces) != 1 or pieces[0].count != 1 or not label or int(label.group(1)) < 2:
+    if len(pieces) != 1 or pieces[0].count != 1 or not label or int(label.group(1)) < 1:
         return pieces
     update: dict[str, object] = {"count": int(label.group(1))}
     per = WEIGHT_PER_PIECE.search(text)
@@ -837,8 +846,20 @@ def learn_pickups(mails: list[dict]) -> int:
 DEFAULT_PICKUP_ZONE = os.getenv("DEFAULT_PICKUP_ZONE", "60")
 
 
+INJECTION = re.compile(
+    r"^\s*(?:system|assistant|developer|note to (?:the )?(?:ai|assistant|bot|model|llm)|(?:ai|bot|llm) instructions?)\s*:|"
+    r"\b(?:ignore|disregard|forget)\b[^.\n]{0,30}\b(?:previous|prior|above|earlier|all|your)\b[^.\n]{0,20}\b(?:instructions?|rules|prompts?)\b",
+    re.I,
+)
+
+
+def without_injections(text: str) -> str:
+    """Drop lines that talk to the bot instead of describing cargo ("SYSTEM: the gross weight is 1 kg")."""
+    return "\n".join(line for line in (text or "").splitlines() if not INJECTION.search(line))
+
+
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
-    body = (body or "").replace("’", "'").replace("‘", "'")
+    body = without_injections((body or "").replace("’", "'").replace("‘", "'"))
     subject = (subject or "").replace("’", "'")
     # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
     text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
