@@ -11,7 +11,7 @@ from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
 from mail.dg import DgCheck, attachment_text, check, special_cargo, write_docs_request
 from mail.extract import find_first_name
-from mail.text import fresh_text, reply_subject
+from mail.text import fresh_text, reply_subject, request_text
 
 log = logging.getLogger("core.dg")
 
@@ -48,14 +48,16 @@ class DgGuard:
         return out
 
     async def inspect(self, mail: Mail) -> DgCheck:
-        return check(fresh_text(mail.body), await self.texts(mail))
+        return check(request_text(mail.subject, mail.body), await self.texts(mail))
 
     async def stop_for_docs(self, orch: Any, mail: Mail) -> bool:
         if mail.id in self.cleared:
             return False
         texts = await self.texts(mail)
-        result = check(fresh_text(mail.body), texts)
-        special = special_cargo(fresh_text(mail.body) + "\n" + "\n".join(t for _, t in texts))
+        # A forward carries the customer's request (and its hazards) in the quoted part.
+        body = request_text(mail.subject, mail.body)
+        result = check(body, texts)
+        special = special_cargo(body + "\n" + "\n".join(t for _, t in texts))
         if special:
             orch.emit(
                 Agent.RFQ,

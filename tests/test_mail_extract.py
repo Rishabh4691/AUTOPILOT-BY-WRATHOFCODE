@@ -227,6 +227,19 @@ def test_ea_cbm_first_and_collected_or_available_dates():
 
 
 @needs_kit
+def test_forwarded_request_is_extracted_from_the_quoted_part():
+    body = (
+        "FYI, can you give us a price for this one?\nMarc\n\nBegin forwarded message:\n"
+        "From: Tobias <buyer@client.mail>\nSent: Friday, November 20, 2026 09:12\nSubject: RFQ\n\n"
+        "Please quote STR to KUL.\n6 pieces, gross weight 660 kg, total volume 2.1 cbm.\n"
+        "We will deliver to STR ourselves. Fastest please.\n\nRegards\nTobias"
+    )
+    x = run(body, subject="FW: RFQ STR - KUL")
+    assert (x.shipment.origin, x.shipment.destination) == ("STR", "KUL")
+    assert x.gross_kg == 660 and x.shipment.volume_cbm == Decimal("2.1") and x.preference == "fastest"
+
+
+@needs_kit
 def test_form_with_one_piece_uses_weight_per_piece():
     x = run("Quote CGN to LIM.\nNo. of pieces: 1\nWeight per piece: 94 kg\nDims per piece: 120 x 100 x 150 cm")
     assert x.shipment is not None and x.gross_kg == 94 and x.pieces == 1

@@ -10,7 +10,7 @@ from sourcing.models import Piece, Shipment
 from sourcing.weights import chargeable_weight_kg, gross_weight_kg, sanity_problems
 
 from . import kit, lang
-from .text import fresh_text
+from .text import fresh_text, request_text
 from .writer import preference
 
 ORIGINS = {
@@ -878,6 +878,10 @@ def without_injections(text: str) -> str:
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     body = without_injections((body or "").replace("’", "'").replace("‘", "'"))
     subject = (subject or "").replace("’", "'")
+    # "FW: ..." with "please quote the request below": the request is the forwarded mail.
+    forwarded = request_text(subject, body)
+    if forwarded != fresh_text(body):
+        body = forwarded
     # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
     text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
     pickup_guessed = False
