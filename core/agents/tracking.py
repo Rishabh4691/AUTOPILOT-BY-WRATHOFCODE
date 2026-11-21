@@ -85,6 +85,21 @@ def match(question: str, rows: list[dict]) -> dict | None:
             score += 1
         if r.get("carrier") and r["carrier"].lower() in low:
             score += 2
+        if r.get("origin") and r.get("destination"):
+            lane_re = rf"\b{r['origin']}\b.{{0,12}}\b{r['destination']}\b"
+            if re.search(lane_re, question):
+                score += 2
+        weight = r.get("weight_kg")
+        for w in re.findall(r"(\d[\d.,]*)\s*kg", question, re.I):
+            digits = re.sub(r"[.,](?=\d{3}\b)", "", w).replace(",", ".")
+            try:
+                v = float(digits)
+            except ValueError:
+                continue
+            if weight and abs(v - float(weight)) <= max(1.0, 0.01 * float(weight)):
+                score += 3
+        if r.get("ready_date") and str(r["ready_date"]) in question:
+            score += 2
         scored.append((score, r))
     scored.sort(key=lambda x: -x[0])
     best_score, best = scored[0]

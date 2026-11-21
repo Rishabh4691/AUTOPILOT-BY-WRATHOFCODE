@@ -62,9 +62,31 @@ def pdf_text(data: bytes) -> str:
         return "\n".join((page.extract_text() or "") for page in pdf.pages[:10])
 
 
+def image_text(data: bytes) -> str:
+    import pytesseract
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as img:
+        return pytesseract.image_to_string(img.convert("L"))
+
+
+SPECIAL = re.compile(
+    r"\b(perishables?|fresh (fish|fruit|flowers|meat)|frozen|chilled|temperature[- ]controlled|cool chain|"
+    r"\+2 ?(°|to) ?\+?8|pharma\w*|vaccines?|live animals?|lebende tiere|valuables?|gold|jewel\w*|banknotes?|"
+    r"human remains|diplomatic|weapons?|ammunition|munitions?|drones? with batter\w*|kühlware|tiefgekühlt)\b",
+    re.I,
+)
+
+
+def special_cargo(text: str) -> list[str]:
+    return sorted({m.group(0).lower() for m in SPECIAL.finditer(text or "")})
+
+
 def attachment_text(filename: str, data: bytes) -> str:
     name = filename.lower()
     try:
+        if name.endswith((".png", ".jpg", ".jpeg")):
+            return image_text(data)
         if name.endswith((".xlsx", ".xlsm")):
             return xlsx_text(data)
         if name.endswith(".docx"):

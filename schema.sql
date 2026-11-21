@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   price             TEXT,
   currency          TEXT,
   transit_days      INTEGER,
+  weight_kg         REAL,
   ready_date        TEXT,
   eta               TEXT,
   status            TEXT NOT NULL,

@@ -229,3 +229,14 @@ async def test_recover_books_a_yes_missed_while_the_bot_was_old(tmp_path: Path) 
     )
     assert len(orch.mailbox.sent) == 1
     store.close()
+
+
+def test_more_ways_to_say_yes():
+    for text in [
+        "Approved, please proceed.",
+        "Agreed.",
+        "PO attached, go for it.",
+        "We'll take it.",
+        "Auftrag erteilt, freigegeben.",
+    ]:
+        assert is_acceptance(text), text

@@ -104,3 +104,18 @@ def test_answer_repeats_the_airline_status():
         {**BOOKED, "status": "confirmed", "note": "booked and ready to ship"}, "en"
     )
     assert "Status: booked and ready to ship (Meridian Freightways confirmed it)." in text
+
+
+def test_match_by_weight_lane_and_date_without_company():
+    rows = [
+        {
+            **BOOKED,
+            "weight_kg": 486,
+            "origin": "MUC",
+            "destination": "CAI",
+            "ready_date": "2026-11-24",
+        },
+        OTHER,
+    ]
+    hit = match("Where is our shipment MUC to CAI, 486 kg, ready 2026-11-24?", rows)
+    assert hit is not None and hit["rfq_id"] == "276"

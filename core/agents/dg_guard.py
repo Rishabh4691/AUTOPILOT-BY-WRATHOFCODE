@@ -8,7 +8,7 @@ import httpx
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
-from mail.dg import DgCheck, attachment_text, check, docs_request
+from mail.dg import DgCheck, attachment_text, check, docs_request, special_cargo
 from mail.extract import find_first_name
 from mail.text import fresh_text, reply_subject
 
@@ -52,7 +52,17 @@ class DgGuard:
     async def stop_for_docs(self, orch: Any, mail: Mail) -> bool:
         if mail.id in self.cleared:
             return False
-        result = await self.inspect(mail)
+        texts = await self.texts(mail)
+        result = check(fresh_text(mail.body), texts)
+        special = special_cargo(fresh_text(mail.body) + "\n" + "\n".join(t for _, t in texts))
+        if special:
+            orch.emit(
+                Agent.RFQ,
+                "special_cargo",
+                EventStatus.HOLD,
+                f"Request {mail.id} mentions {', '.join(special)}: special handling, check the quote.",
+                mail.id,
+            )
         if not result.dangerous:
             return False
         orch.emit(

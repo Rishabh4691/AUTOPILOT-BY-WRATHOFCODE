@@ -38,3 +38,28 @@ def test_docs_request_text():
     assert body.startswith("Hi Klaus,") and "UN1133, class 3" in body
     assert "Shipper's Declaration for Dangerous Goods" in body and "EUR" not in body
     assert "—" not in body and "–" not in body
+
+
+def test_special_cargo_words():
+    from mail.dg import special_cargo
+
+    assert "vaccines" in special_cargo("2 boxes of vaccines, keep +2 to +8 C")
+    assert special_cargo("printed marketing material") == []
+
+
+def test_scanned_packing_list_is_read(tmp_path):
+    import shutil
+
+    import pytest
+    from PIL import Image, ImageDraw
+
+    if shutil.which("tesseract") is None:
+        pytest.skip("tesseract not installed")
+    img = Image.new("RGB", (900, 120), "white")
+    ImageDraw.Draw(img).text((10, 40), "Dangerous goods: UN1263 Class 3 Paint", fill="black")
+    buf = tmp_path / "scan.png"
+    img.save(buf)
+    from mail.dg import attachment_text
+
+    text = attachment_text("scan.png", buf.read_bytes())
+    assert check("see attached", [("scan.png", text)]).dangerous

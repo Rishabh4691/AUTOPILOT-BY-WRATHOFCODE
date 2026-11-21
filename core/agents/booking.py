@@ -14,6 +14,7 @@ from core.agents.portal import PortalPriceSource
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, MailKind, OutgoingMail, Stage
 from mail import lang
+from mail.extract import extract as rules_extract
 from mail.extract import find_first_name, find_ready
 from mail.text import fresh_text, reply_subject
 
@@ -35,6 +36,21 @@ ACCEPT = [
     r"\bthat works\b",
     r"\bworks for us\b",
     r"\bdeal\b",
+    r"\bapproved?\b",
+    r"\bagreed?\b",
+    r"\bproceed\b",
+    r"\bwe('ll| will) take it\b",
+    r"\bpo (attached|follows|number)\b",
+    r"\bpurchase order\b",
+    r"\bplease arrange\b",
+    r"\bgo for it\b",
+    r"\bbook (it|them) in\b",
+    r"\bfreigegeben\b",
+    r"\bauftrag\b",
+    r"\bbon pour accord\b",
+    r"\baprobado\b",
+    r"\bapprovato\b",
+    r"\bzatwierdzam\b",
     r"\bja\b",
     r"\bbitte buchen\b",
     r"\bbuchen sie\b",
@@ -161,6 +177,7 @@ class BookingAgent:
         return dict(zip(cols, row, strict=False))
 
     def _save(self, orch: Any, **fields: Any) -> None:
+        self._ensure_columns(orch)
         cols = ", ".join(fields)
         marks = ", ".join("?" for _ in fields)
         updates = ", ".join(f"{k}=excluded.{k}" for k in fields if k != "rfq_id")
@@ -255,7 +272,7 @@ class BookingAgent:
         )
         t0 = time.monotonic()
         info = json.loads(rfq.get("breakdown_json") or "{}")
-        info["ready_date"] = await self._ready_date(orch, rfq)
+        info.update(await self._shipment_facts(orch, rfq))
         booking = await self.book(orch, rfq, info)
         ms = int((time.monotonic() - t0) * 1000)
         if booking is None:
@@ -297,13 +314,30 @@ class BookingAgent:
                 return self._record(orch, rfq, info, done, "portal")
         return await self._email_airline(orch, rfq, info)
 
-    async def _ready_date(self, orch: Any, rfq: dict) -> str | None:
+    async def _shipment_facts(self, orch: Any, rfq: dict) -> dict:
         try:
             original = await orch.mailbox.read_one(int(rfq["id"]))
         except Exception:
-            return None
-        found = find_ready(fresh_text(original.body))
-        return found.isoformat() if found else None
+            return {}
+        body = fresh_text(original.body)
+        found = find_ready(body)
+        facts: dict = {"ready_date": found.isoformat() if found else None}
+        try:
+            x = rules_extract(original.subject, body, original.sender, str(rfq["id"]))
+            facts["gross_kg"] = x.gross_kg
+        except Exception:
+            facts["gross_kg"] = None
+        return facts
+
+    def _ensure_columns(self, orch: Any) -> None:
+        if getattr(self, "_columns_ok", False):
+            return
+        have = {r[1] for r in orch.store._conn.execute("PRAGMA table_info(bookings)")}
+        with orch.store._write() as conn:
+            for name, kind in (("weight_kg", "REAL"), ("ready_date", "TEXT"), ("note", "TEXT")):
+                if have and name not in have:
+                    conn.execute(f"ALTER TABLE bookings ADD COLUMN {name} {kind}")
+        self._columns_ok = True
 
     async def _portal_book(self, rate_id: str, team: str) -> dict | None:
         if self.settings.kill_switch:
@@ -392,6 +426,7 @@ class BookingAgent:
             "currency": done.get("currency") or rfq.get("currency"),
             "transit_days": days,
             "ready_date": ready,
+            "weight_kg": info.get("gross_kg"),
             "eta": eta,
             "status": "booked" if method == "portal" else "requested",
             "method": method,
