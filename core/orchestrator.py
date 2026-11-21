@@ -132,6 +132,7 @@ class Orchestrator:
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
     booker: Any = None
     tracker: Any = None
+    dg: Any = None
     tariffs: Any = None
     review_dir: Path | None = None
     review_deadline_s: float = 110.0
@@ -190,6 +191,10 @@ class Orchestrator:
         if kind is MailKind.RFQ:
             self.accept_rfq(mail)
             return
+        if self.dg is not None and kind is MailKind.FOLLOW_UP:
+            task = asyncio.create_task(self.dg.on_reply(self, mail), name=f"dg-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
         if self.booker is not None and kind in (MailKind.FOLLOW_UP, MailKind.BOOKING_CONFIRMATION):
             task = asyncio.create_task(self.booker.handle(self, mail, kind), name=f"book-{mail.id}")
             self.tasks.add(task)
@@ -297,6 +302,12 @@ class Orchestrator:
             mail.id,
             cost=extract_cost,
         )
+        if self.dg is not None:
+            try:
+                if await self.dg.stop_for_docs(self, mail):
+                    return
+            except Exception:
+                log.exception("dg_check_failed", extra={"rfq": mail.id})
         quote = await self.source_and_price(rfq)
         if quote is not None:
             await self.outbox.put(quote)

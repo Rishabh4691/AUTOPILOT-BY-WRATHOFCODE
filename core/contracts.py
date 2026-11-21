@@ -62,6 +62,7 @@ class Stage(StrEnum):
     TRACKING = "TRACKING"
     HELD = "HELD"
     SKIPPED = "SKIPPED"
+    WAITING_DOCS = "WAITING_DOCS"
 
 
 class MailKind(StrEnum):

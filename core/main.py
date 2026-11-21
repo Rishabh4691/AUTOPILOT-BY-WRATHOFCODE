@@ -15,6 +15,7 @@ import httpx
 
 from core.agents.booking import BookingAgent
 from core.agents.classifier import RuleClassifier
+from core.agents.dg_guard import DgGuard
 from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
 from core.agents.human_writer import HumanEmailWriter
@@ -93,6 +94,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
         tracker=TrackingAgent(),
+        dg=DgGuard(client, settings),
         tariffs=TariffIntake(client, settings),
         review_dir=settings.db_path.parent / "review",
     )
