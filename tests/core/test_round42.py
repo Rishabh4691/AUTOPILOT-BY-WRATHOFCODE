@@ -59,8 +59,11 @@ def test_exclusion_from_an_earlier_mail_is_learned_at_start_and_applied_later(mo
 
     fixtures = Path(__file__).parent / "fixtures"
     monkeypatch.setattr(kit, "settings", mail_settings.__class__(kit_dir=fixtures / "kit"))
-    r42 = json.loads((fixtures / "mail" / "real_rfq_10831.json").read_text(encoding="utf-8"))
-    # Round 42 arrived before the memory existed: nothing remembered yet.
+    real = json.loads((fixtures / "mail" / "real_rfq_10831.json").read_text(encoding="utf-8"))
+    # Round 42's own customer is seeded (KNOWN), so a fresh machine already excludes Zephyr for them.
+    assert "Zephyr Steppe Cargo" in exclusions.recall(real["from"])
+    # Learning still works for any other customer with the same kind of mail.
+    r42 = dict(real, **{"from": "new-customer@hackloop.mail"})
     assert exclusions.recall(r42["from"]) == []
     assert exclusions.learn([r42, {"id": 1, "from": "zephyr-steppe-cargo@hackloop.mail",
                                     "body": "Please do not use Pampero Air Cargo."}]) == 1

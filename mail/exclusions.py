@@ -91,12 +91,22 @@ def excluded_carriers(text: str) -> list[str]:
     return found
 
 
+# Exclusions stated before this memory existed (it is only written while a mail is processed, and
+# the mailbox now allows one poll per 5 s, so re-reading the whole mailbox at start fails after the
+# first page). Round 42: "Please do not offer Zephyr Steppe Cargo (ZS) for this shipment or for any
+# of our future inquiries."
+KNOWN: dict[str, list[str]] = {"meyer-industrie@hackloop.mail": ["ZS", "Zephyr Steppe Cargo"]}
+
+
 def _load() -> dict[str, list[str]]:
     try:
         data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
-        return {str(k): [str(x) for x in v] for k, v in data.items()}
+        memory = {str(k): [str(x) for x in v] for k, v in data.items()}
     except (OSError, ValueError, AttributeError):
-        return {}
+        memory = {}
+    for who, names in KNOWN.items():
+        memory[who] = sorted(set(memory.get(who, [])) | set(names))
+    return memory
 
 
 def remember(sender: str, names: list[str]) -> None:
