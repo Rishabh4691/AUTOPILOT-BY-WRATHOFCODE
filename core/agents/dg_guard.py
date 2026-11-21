@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -8,7 +9,7 @@ import httpx
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
-from mail.dg import DgCheck, attachment_text, check, docs_request, special_cargo
+from mail.dg import DgCheck, attachment_text, check, special_cargo, write_docs_request
 from mail.extract import find_first_name
 from mail.text import fresh_text, reply_subject
 
@@ -79,13 +80,23 @@ class DgGuard:
         ):
             return True
         language = lang.detect(fresh_text(mail.body) or mail.subject)
-        body = docs_request(
+        body, cost, used_llm, why_fallback = await write_docs_request(
             result,
             language,
             find_first_name(mail.sender, mail.body),
             f"WOC-{mail.id}",
             self.agent,
             self.company,
+        )
+        orch.emit(
+            Agent.RFQ,
+            "write",
+            EventStatus.OK if used_llm else EventStatus.WARN,
+            "Documents request written by the model"
+            if used_llm and not why_fallback
+            else f"Documents request from template ({why_fallback})",
+            mail.id,
+            cost=Decimal(str(cost)),
         )
         try:
             sent = await orch.mailbox.send(
