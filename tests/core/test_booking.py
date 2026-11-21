@@ -194,7 +194,10 @@ async def test_airline_confirmation_marks_booking(tmp_path: Path) -> None:
     )
     async with httpx.AsyncClient() as client:
         await agent(client).handle(orch, mail, MailKind.BOOKING_CONFIRMATION)
-    assert store._conn.execute("SELECT status FROM bookings").fetchone()[0] == "confirmed"
+    assert tuple(store._conn.execute("SELECT status, note FROM bookings").fetchone()) == (
+        "confirmed",
+        "booked and ready to ship",
+    )
     store.close()
 
 

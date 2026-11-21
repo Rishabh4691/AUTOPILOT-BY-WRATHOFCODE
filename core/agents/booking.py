@@ -219,10 +219,12 @@ class BookingAgent:
         ref = BOOKING_REF.search(f"{mail.subject} {mail.body}")
         if not ref:
             return
+        said = re.search(r"^\s*status:\s*(.+?)\s*$", mail.body, re.I | re.M)
         with orch.store._write() as conn:
             cur = conn.execute(
-                "UPDATE bookings SET status='confirmed', confirmed_at=? WHERE booking_reference=?",
-                (time.time(), ref.group(0)),
+                "UPDATE bookings SET status='confirmed', confirmed_at=?, note=COALESCE(?, note) "
+                "WHERE booking_reference=?",
+                (time.time(), said.group(1) if said else None, ref.group(0)),
             )
         if cur.rowcount:
             orch.emit(

@@ -110,6 +110,15 @@ class TrackingAgent:
     def answer(self, booking: dict, language: str) -> str:
         language = language if language in ANSWER else "en"
         status_key = booking.get("status") if booking.get("status") in STATUS else "booked"
+        airline_said = (booking.get("note") or "").strip().rstrip(".")
+        carrier = booking.get("carrier") or "the airline"
+        status_text = (
+            f"{airline_said} ({carrier} confirmed it)"
+            if airline_said and language == "en"
+            else f"{airline_said} (von {carrier} bestätigt)"
+            if airline_said
+            else STATUS[status_key][language].format(carrier=carrier)
+        )
         transit = int(booking.get("transit_days") or 0)
         eta = booking.get("eta")
         depart = None
@@ -120,9 +129,7 @@ class TrackingAgent:
             who=f"the shipment for {customer}"
             if language == "en"
             else f"der Sendung für {customer}",
-            status=STATUS[status_key][language].format(
-                carrier=booking.get("carrier") or "the airline"
-            ),
+            status=status_text,
             ref=booking.get("booking_reference") or "pending",
             team=booking.get("team_reference"),
             route=f"{booking.get('origin')} → {booking.get('destination')}",
