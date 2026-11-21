@@ -13,7 +13,7 @@ from tests.core.test_llm import SETTINGS
 
 BASE = "https://portal.test"
 REPLY = (
-    'portal rates for STR-EZE, 1805.0 kg, 6.92 cbm (your mail "Rate request STR-EZE ref 4138"):\n\n'
+    'portal rates for STR-EZE, 1805.0 kg, 6.92 cbm (your mail "Rate request STR-EZE ref 4138-STR"):\n\n'
     "- Aurelia Air Cargo (AU): 5974.55 EUR, 6 days, rate_id R-u3rSVtt9KGll6Uyr, valid until 21 Nov 2026 17:52 UTC\n"
     "- Nova Atlas Cargo (NV): 4638.85 EUR, 7 days, rate_id R-3eV_IRsAJoEV-xPr, valid until 21 Nov 2026 17:52 UTC\n"
     "- Orion Cargo Air (OR): not on the portal, email orion-cargo-air@hackloop.mail\n"
@@ -61,7 +61,7 @@ async def test_rate_desk_used_when_portal_is_down():
             if sender.sent:
                 break
             await asyncio.sleep(0.01)
-        assert sender.sent and "ref 4138" in sender.sent[0][1]
+        assert sender.sent and "ref 4138-STR" in sender.sent[0][1]
         src.on_mail(
             parse_mail(
                 {

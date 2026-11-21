@@ -345,9 +345,60 @@ class Orchestrator:
                 log.exception("dg_check_failed", extra={"rfq": mail.id})
         elif await self.dangerous_goods_blocked(mail, rfq):
             return
+        if "site_unknown" in rfq.notes:
+            try:
+                rfq = await self.best_origin(rfq)
+            except Exception:
+                log.exception("best_origin_failed", extra={"rfq": mail.id})
         quote = await self.source_and_price(rfq)
         if quote is not None:
             await self.outbox.put(quote)
+
+    async def best_origin(self, rfq: RFQ) -> RFQ:
+        from mail import kit
+
+        airports = sorted({z["airport"] for z in kit.pickup_zones().values()})
+        sheets = [s for s in self.sources if getattr(s, "name", "") == "sheets"]
+        desk = next((s for s in self.sources if getattr(s, "name", "") == "ratedesk"), None)
+        on_portal = await desk.lanes_to(rfq.destination) if desk is not None else set()
+        fallback_zone = getattr(self.pickup, "fallback_zone", None)
+
+        async def price(origin: str):
+            candidate = rfq.model_copy(
+                update={"origin": origin, "pickup_zone": None, "pickup_postcode": None}
+            )
+            zone = fallback_zone(candidate) if callable(fallback_zone) else None
+            candidate = candidate.model_copy(update={"pickup_zone": zone})
+            calls = [s.quote(candidate) for s in sheets]
+            if desk is not None and origin in on_portal:
+                calls.append(desk.quote(candidate, force=True))
+            results = await asyncio.gather(
+                *(asyncio.wait_for(c, timeout=95) for c in calls), return_exceptions=True
+            )
+            options = [o for r in results if isinstance(r, list) for o in r if o.currency == "EUR"]
+            if not options:
+                return None
+            if rfq.preference.value == "fastest":
+                return candidate, min(options, key=lambda o: (o.transit_days, o.total))
+            return candidate, min(options, key=lambda o: (o.total, o.transit_days))
+
+        found = [r for r in await asyncio.gather(*(price(a) for a in airports)) if r is not None]
+        if not found:
+            return rfq
+        if rfq.preference.value == "fastest":
+            candidate, best = min(found, key=lambda r: (r[1].transit_days, r[1].total))
+        else:
+            candidate, best = min(found, key=lambda r: (r[1].total, r[1].transit_days))
+        self.store.update_rfq(str(rfq.mail_id), origin=candidate.origin)
+        self.emit(
+            Agent.RFQ,
+            "origin",
+            EventStatus.INFO,
+            f"No pickup address given for request {rfq.mail_id}: compared {len(found)} airports, "
+            f"best is {candidate.origin} with {best.carrier} ({best.total} EUR, {best.transit_days} days).",
+            rfq.mail_id,
+        )
+        return candidate
 
     async def dangerous_goods_blocked(self, mail: Mail, rfq: RFQ) -> bool:
         from core.agents.attachments import dangerous_goods, has_dg_documents

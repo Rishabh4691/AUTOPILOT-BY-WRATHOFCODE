@@ -21,7 +21,8 @@ LINE = re.compile(
     r"(?P<days>\d+)\s*days?\s*,\s*rate_id\s*(?P<rate>R-[A-Za-z0-9_-]+)\s*,\s*valid until\s*(?P<valid>[^\n]+)$",
     re.I | re.M,
 )
-REF = re.compile(r"\bref\s+(\d+)\b", re.I)
+REF = re.compile(r"\bref\s+(\d+)(?:-([A-Z]{3}))?\b", re.I)
+CACHE_S = 600.0
 WAIT_S = 90.0
 PORTAL_DOWN_TTL_S = 300.0
 
@@ -64,7 +65,8 @@ class RateDeskSource:
         self.settings = settings
         self.sender = sender
         self.now = now
-        self._waiting: dict[int, asyncio.Future] = {}
+        self._waiting: dict[tuple[int, str], asyncio.Future] = {}
+        self._cache: dict[tuple[str, str, str], tuple[float, str]] = {}
         self._down_at = 0.0
 
     async def portal_down(self, rfq: RFQ) -> bool:
@@ -95,25 +97,41 @@ class RateDeskSource:
         ref = REF.search(mail.body) or REF.search(mail.subject)
         if not ref:
             return
-        future = self._waiting.get(int(ref.group(1)))
+        future = self._waiting.get((int(ref.group(1)), (ref.group(2) or "").upper()))
         if future is not None and not future.done():
             future.set_result(mail.body)
 
-    async def quote(self, rfq: RFQ) -> list[PriceOption]:
-        if not await self.portal_down(rfq):
+    async def lanes_to(self, destination: str) -> set[str]:
+        try:
+            r = await self.client.get(
+                f"{self.settings.base_url}/v1/portal/ports",
+                headers=auth_headers(self.settings),
+                timeout=8,
+            )
+            lanes = r.json().get("lanes", []) if r.status_code == 200 else []
+        except (httpx.HTTPError, ValueError):
+            return set()
+        return {lane["origin"] for lane in lanes if lane.get("destination") == destination}
+
+    async def quote(self, rfq: RFQ, force: bool = False) -> list[PriceOption]:
+        if not force and not await self.portal_down(rfq):
             return []
         volume = rfq.volume_cbm
         if volume is None and rfq.pieces:
             from core.pricing.weight import volume_cbm
 
             volume = volume_cbm(rfq.pieces)
-        subject = f"Rate request {rfq.origin}-{rfq.destination} ref {rfq.mail_id}"
+        key = (rfq.origin, rfq.destination, str(rfq.gross_kg))
+        cached = self._cache.get(key)
+        if cached and time.monotonic() - cached[0] < CACHE_S:
+            return self._options(cached[1])
+        subject = f"Rate request {rfq.origin}-{rfq.destination} ref {rfq.mail_id}-{rfq.origin}"
         body = (
             f"Hello,\n\nplease send your rates for {rfq.origin}-{rfq.destination}, {rfq.gross_kg} kg"
             f"{f', {volume} cbm' if volume else ''}, all airlines.\n\nThanks\nWRATHOFCODE Air Freight"
         )
         future: asyncio.Future = asyncio.get_running_loop().create_future()
-        self._waiting[rfq.mail_id] = future
+        self._waiting[(rfq.mail_id, rfq.origin)] = future
         try:
             await self.sender.send_new(self.settings.rate_desk_address, subject, body)
             log.info("ratedesk_requested", extra={"rfq": rfq.mail_id})
@@ -122,7 +140,13 @@ class RateDeskSource:
             log.warning("ratedesk_timeout", extra={"rfq": rfq.mail_id})
             return []
         finally:
-            self._waiting.pop(rfq.mail_id, None)
+            self._waiting.pop((rfq.mail_id, rfq.origin), None)
+        self._cache[key] = (time.monotonic(), reply)
+        options = self._options(reply)
+        log.info("ratedesk_options", extra={"rfq": rfq.mail_id, "options": len(options)})
+        return options
+
+    def _options(self, reply: str) -> list[PriceOption]:
         options = []
         for row in parse_reply(reply):
             if row["currency"] != "EUR":
@@ -140,5 +164,4 @@ class RateDeskSource:
                     transit_days=row["days"],
                 )
             )
-        log.info("ratedesk_options", extra={"rfq": rfq.mail_id, "options": len(options)})
         return options
