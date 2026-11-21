@@ -145,13 +145,13 @@ CITIES = {
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|każd\w*)\s*:?\s*)?\(?\s*)?"
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
     rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
-    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
+    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
     re.I,
 )
 WEIGHT = re.compile(
-    rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b",
+    rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b",
     re.I,
 )
 NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b", re.I)
@@ -210,7 +210,7 @@ COUNT_ONLY = re.compile(
     re.I,
 )
 READY_KW = r"(?:ready|pick-?up|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*)"
-READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\.(\d{1,2})\.(\d{4}))"
+READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})[./](\d{1,2})[./](\d{4}))"
 READY = re.compile(rf"\b{READY_KW}\D{{0,40}}?{READY_DATE}", re.I)
 READY_AFTER = re.compile(rf"{READY_DATE}[^\d\n]{{0,25}}?\b{READY_KW}", re.I)
 SELF_DROP_DATE = re.compile(
@@ -349,7 +349,7 @@ LOT_LINE = re.compile(
     re.I | re.M,
 )
 BULLET_LINE = re.compile(r"^\s*[-*•]\s*(?P<rest>\d.+)$", re.M)
-EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cada|ciascun\w*|każd\w*|pro stück)"
+EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cada|ciascun\w*|cadaun[oa]|każd\w*|pro stück)"
 TOGETHER = r"(?:together|total|in total|combined|insgesamt|zusammen|gesamt|au total|en total|in totale|łącznie)"
 LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?[a-zäöüéèàçñ]+", re.I)
 LOT_WEIGHT = re.compile(
@@ -477,7 +477,7 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         if NET_NEAR.search(before[-14:]) or NET_NEAR.search(after[:8]):
             continue
         each = re.search(
-            r"each|per piece|/\s*pc|je\b|chacun|cada|ciascuno|każd", after + before[-12:], re.I
+            r"each|per piece|/\s*pc|je\b|chacun|cada|ciascuno|cadaun[oa]|każd", after + before[-12:], re.I
         )
         gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
         found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
@@ -499,8 +499,8 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
 
 
 EACH_WEIGHT = re.compile(
-    rf"(?P<n>\d{{1,4}})\s*(?:x\s*)?[a-zäöüéèàçñąćęłńóśźż]+[^\n\d]{{0,20}}?(?P<pre>\b(?:each|je|à|chacun\w*|cada|ciascun\w*|każd\w*)\s*)?"
-    rf"(?P<v>{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?)\b\s*(?P<post>each|per (?:piece|unit|drum|carton|box|case|pallet)|/\s*pc|je|chacun\w*|cada uno|ciascun\w*|każd\w*)?",
+    rf"(?P<n>\d{{1,4}})\s*(?:x\s*)?[a-zäöüéèàçñąćęłńóśźż]+[^\n\d]{{0,20}}?(?P<pre>\b(?:each|je|à|chacun\w*|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*)?"
+    rf"(?P<v>{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?)\b\s*(?P<post>each|per (?:piece|unit|drum|carton|box|case|pallet)|/\s*pc|je|chacun\w*|cada uno|ciascun\w*|cadaun[oa]|każd\w*)?",
     re.I,
 )
 
@@ -666,11 +666,34 @@ def zone_from_signature(text: str, zones: dict) -> str | None:
     return None
 
 
+NOT_FAST = re.compile(r"\b(?:not|no|nicht|kein\w*|pas|ne|no es|non è|non|nie)\b[^.\n]{0,8}$", re.I)
+NOT_POSTCODE = re.compile(
+    r"\b(?:ref|reference|po|order|nr|no|auftrag\w*|bestell\w*|invoice|rechnung|commande|pedido|ordine|zamówienie)\b\W{0,6}$",
+    re.I,
+)
+
+
+def wants_fast(text: str) -> bool:
+    """A fast wish that is not negated ("not urgent", "no es urgente")."""
+    return any(not NOT_FAST.search(text[max(0, m.start() - 20) : m.start()]) for m in FAST.finditer(text))
+
+
+def find_postcode(text: str, zones: dict) -> str | None:
+    """First 5-digit number that is not a reference, preferring known pickup zones."""
+    found = [
+        m.group(1)
+        for m in POSTCODE.finditer(text)
+        if not NOT_POSTCODE.search(text[max(0, m.start() - 20) : m.start()])
+    ]
+    return next((p for p in found if p[:2] in zones), found[0] if found else None)
+
+
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     text = f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)
-    stated = bool(FAST.search(text) or CHEAP.search(text))
-    pref = "fastest" if FAST.search(text) and not CHEAP.search(text) else preference(None)
+    fast = wants_fast(text)
+    stated = bool(fast or CHEAP.search(text))
+    pref = "fastest" if fast and not CHEAP.search(text) else preference(None)
     route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
     origin, dest = find_route(route_text)
     pieces = find_pieces(text)
@@ -681,7 +704,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     if lots and lots[1] > 0:
         pieces, gross, wunit = [], lots[1], "kg"
     door = bool(PICKUP.search(text)) and not SELF_DELIVERY.search(text)
-    postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
+    postcode = find_postcode(text, kit.pickup_zones()) if door else None
     zones = kit.pickup_zones()
     zone = postcode[:2] if postcode and postcode[:2] in zones else None
     if door and zone and postcode:

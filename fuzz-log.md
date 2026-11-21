@@ -4,3 +4,4 @@
 - Round 2: 10 fake RFQs, 4 failed. Fixed DG "class N" in the body, dest equal to origin when "bring to MUC airport", "en dólares"/Swiss franc currency words, Italian "più veloce" and "pronti", more fastest phrases.
 - Round 3 (pricing): sheet source fell back to today when the departure day (ready +1 for door pickup) was after the sheet validity, so expired sheets were priced. Fixed in core/agents/sheets.py.
 - Round 4: 10 fake RFQs, 3 failed. Fixed door pickup keeping an explicit "from FRA" instead of the pickup zone airport, German "holt die Ware ab"/"abholbereit" not seen as pickup, "3 x (LxWxH), weight per pallet N kg" lot counts.
+- Round 5: 7 fake RFQs, 6 failed. Fixed reference numbers taken as pickup postcode, "not urgent"/"no es urgente" read as fastest, dd/mm/yyyy ready dates, "Kilogramm", Italian "da"/"cadauno" lot phrasing.
