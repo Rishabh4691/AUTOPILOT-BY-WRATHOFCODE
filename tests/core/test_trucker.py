@@ -238,3 +238,38 @@ async def test_waits_for_slower_truckers_until_100_seconds() -> None:
     trucker.now = lambda: NOW + timedelta(seconds=101)
     price = await trucker.collect(rfq)
     assert price is not None and price.total == Decimal("85.00")
+
+
+async def test_live_round_14_skips_pickups_slower_than_24_hours() -> None:
+    from core.contracts import PickupPrice
+
+    trucker, _ = source()
+    now = datetime(2026, 11, 21, 16, 20, 31, tzinfo=UTC)
+    offers = [
+        ("Westfalenroute", "321.74", 4.0),
+        ("Schwabenbote Transporte", "379.79", 6.0),
+        ("Rheinufer Spedition", "379.38", 7.0),
+        ("Spessart Spedition", "113.05", 32.0),
+    ]
+    rfq = make_rfq(True, "42")
+    trucker._prices[rfq.mail_id] = [
+        PickupPrice(
+            source="email", trucker=n, zone="42", total=Decimal(t), currency="EUR", received_at=now
+        )
+        for n, t, _ in offers
+    ]
+    for n, _, h in offers:
+        trucker._hours[(rfq.mail_id, n)] = h
+    trucker._asked[rfq.mail_id] = {"x"}
+    trucker._answered[rfq.mail_id] = {"x"}
+    best = await trucker.collect(rfq)
+    assert best is not None and best.trucker == "Westfalenroute" and best.total == Decimal("321.74")
+
+
+def test_pickup_hours_formats() -> None:
+    from core.agents.trucker import pickup_hours
+
+    assert pickup_hours("Pickup time: 32 hours") == 32
+    assert pickup_hours("Pickup within 30 hours of confirmation") == 30
+    assert pickup_hours("Abholung in 6 Stunden") == 6
+    assert pickup_hours("no time given") is None
