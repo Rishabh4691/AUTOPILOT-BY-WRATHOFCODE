@@ -252,6 +252,9 @@ def answers(rfq: dict, price: dict, lang: str) -> dict:
     today = date.today()
     ready = as_date(price.get("ready_date"))
     depart = departure_date(ready, today)
+    # The flight leaves the day after the cargo is ready (truck or drop-off first). That is the
+    # day arrival_date() counts from, so "departs X, N days transit, lands X+N" adds up.
+    flight = depart + timedelta(days=1)
     days = int(price.get("transit_days") or 0)
     pieces = int(rfq.get("pieces") or 0)
     them = "it" if pieces == 1 else "them"
@@ -277,18 +280,18 @@ def answers(rfq: dict, price: dict, lang: str) -> dict:
     else:
         handover = f"You drop {them} at {origin or origin_city}{when_ready}, and {they} should {reach} around {arrival}."
     lines = {
-        "DEPARTURE_LINE": f"The earliest departure is {short_day(depart)}." if "departure" in questions else "",
+        "DEPARTURE_LINE": f"The earliest departure is {short_day(flight)}." if "departure" in questions else "",
         "ARRIVAL_LINE": f"Transit is {days} day{'s' if days != 1 else ''}." if "arrival" in questions and days > 0 else "",
         "AWB_LINE": "All lots travel together as one consignment under a single air waybill." if "awb" in questions else "",
         "PICKUP_DATE_LINE": f"Our truck can collect {them} on {short_day(depart)}." if "pickup" in questions and door and not when_ready else "",
-        "DROPOFF_LINE": f"The latest drop-off at {origin} is {short_day(depart)}, the departure day." if "dropoff" in questions and not door else "",
+        "DROPOFF_LINE": f"The latest drop-off at {origin} is {short_day(depart)}, so it flies on {short_day(flight)}." if "dropoff" in questions and not door else "",
     }
     if lang != "en":
         lines = {k: "" for k in lines}
         handover = ""
     answer_text = " ".join(v for v in lines.values() if v)
     return {
-        "DEPARTURE": short_day(depart, lang),
+        "DEPARTURE": short_day(flight, lang),
         "PICKUP_DATE": short_day(depart, lang),
         "ORIGIN_CITY": origin_city,
         "DEST_CITY": dest_city,

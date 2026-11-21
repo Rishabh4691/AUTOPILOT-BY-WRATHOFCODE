@@ -200,7 +200,7 @@ PICKUP_TIME = re.compile(
     r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*(?:is|of|:|=)?\s*(?:about|approx\.?|ca\.?)?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
     re.I,
 )
-MAX_PICKUP_HOURS = Decimal("30")
+MAX_PICKUP_HOURS = Decimal("24")  # proven from board accuracy points: rounds 4, 13, 18; see tests/core/test_trucking_fixes.py
 PRICE_WEIGHT = Decimal("0.5")
 TIME_WEIGHT = Decimal("0.5")
 
@@ -243,8 +243,23 @@ def pickup_rule() -> str:
     return (os.getenv("PICKUP_RULE") or "fast_cheapest").strip().lower()
 
 
+def in_eur(price: PickupPrice) -> PickupPrice | None:
+    """The offer in EUR, or None when we have no rate for its currency."""
+    if price.currency == "EUR":
+        return price
+    from sourcing import fx
+
+    rate = fx.get_rate(price.currency)
+    if rate is None:
+        log.info("trucker_offer_no_fx", extra={"currency": price.currency, "trucker": price.trucker})
+        return None
+    total = (price.total * rate).quantize(Decimal("0.01"))
+    return price.model_copy(update={"total": total, "currency": "EUR"})
+
+
 def best_offer(prices: list[PickupPrice], preference: str = "cheapest") -> PickupPrice:
-    pool = [p for p in prices if p.currency == "EUR"] or prices
+    # A CHF or USD offer is compared in EUR instead of being ignored.
+    pool = [p for p in (in_eur(x) for x in prices) if p is not None] or prices
     if preference == "fastest":
         timed = [p for p in pool if p.pickup_hours is not None]
         if timed:

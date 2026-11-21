@@ -342,3 +342,22 @@ async def test_door_rfq_adds_pickup_leg(tmp_path: Path) -> None:
     await drain(h)
     assert len(h.mailbox.sent) == 1
     assert "335.50 EUR" in h.mailbox.sent[0].body
+
+
+async def test_send_retries_through_a_network_blip(tmp_path: Path) -> None:
+    h = harness(tmp_path)
+    calls = {"n": 0}
+    original = h.mailbox.send
+
+    async def flaky(outgoing: OutgoingMail) -> Mail:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("wifi down")
+        return await original(outgoing)
+
+    h.mailbox.send = flaky  # type: ignore[method-assign]
+    h.mailbox.batches = [[mail(1)]]
+    await h.orchestrator.poll_once()
+    await drain(h)
+    assert len(h.mailbox.sent) == 1
+    assert calls["n"] == 2

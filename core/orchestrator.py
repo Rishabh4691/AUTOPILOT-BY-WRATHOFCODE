@@ -421,7 +421,7 @@ class Orchestrator:
             to=rfq.customer, subject=reply_subject(rfq.subject), body=body, in_reply_to=rfq.mail_id
         )
         try:
-            sent = await self.mailbox.send(outgoing)
+            sent = await self.send_with_retry(outgoing)
         except Exception as error:
             self.store.mark_outbox_failed(rfq.thread_root_id, Stage.HELD, type(error).__name__)
             self.hold(rfq.mail_id, f"Dangerous goods ({declared}); asking for documents failed.")
@@ -792,6 +792,21 @@ class Orchestrator:
         log.info("review_timeout_autosend", extra={"rfq": quote.rfq_mail_id})
         return quote
 
+    async def send_with_retry(self, outgoing: OutgoingMail, budget_s: float = 75.0) -> Mail:
+        from core.agents.mailbox import SendRejected
+
+        deadline = time.monotonic() + budget_s
+        while True:
+            try:
+                return await self.mailbox.send(outgoing)
+            except SendRejected:
+                raise
+            except Exception as error:
+                if time.monotonic() + 3 >= deadline:
+                    raise
+                log.warning("send_retry", extra={"to": outgoing.to, "error": type(error).__name__})
+                await asyncio.sleep(3)
+
     async def send_quote(self, quote: Quote) -> None:
         if self.settings.kill_switch:
             self.hold(quote.rfq_mail_id, "Kill switch is on. Nothing is sent.")
@@ -819,7 +834,7 @@ class Orchestrator:
             to=quote.to, subject=quote.subject, body=quote.body, in_reply_to=quote.rfq_mail_id
         )
         try:
-            sent = await self.mailbox.send(outgoing)
+            sent = await self.send_with_retry(outgoing)
         except Exception as error:
             self.store.mark_outbox_failed(quote.thread_root_id, Stage.QUOTED, type(error).__name__)
             log.exception("send_failed")
