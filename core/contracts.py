@@ -143,6 +143,7 @@ class RFQ(Frozen):
     volume_cbm: Decimal | None = None
     door_pickup: bool
     pickup_zone: str | None = None
+    pickup_postcode: str | None = None
     preference: Preference
     preference_assumed: bool
     ready_date: date | None = None
