@@ -792,6 +792,8 @@ NEAREST_ZONE = {
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
+    body = (body or "").replace("’", "'").replace("‘", "'")
+    subject = (subject or "").replace("’", "'")
     # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
     text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)

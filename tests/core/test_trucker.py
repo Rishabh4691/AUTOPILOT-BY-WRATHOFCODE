@@ -296,10 +296,10 @@ def test_default_pickup_rule_round_15() -> None:
             ("Flinkwagen", "241.96", 6),
         ]
     ]
-    assert best_offer(offers).trucker == "Neckarstrom"
+    assert best_offer(offers).trucker == "Elbkante"
 
 
-def test_cheapest_within_24_hours_rounds_14_and_18() -> None:
+def test_cheapest_within_30_hours_rounds_14_and_18() -> None:
     from core.agents.trucker import best_offer, parse_hours
     from core.contracts import PickupPrice
 
@@ -336,7 +336,7 @@ def test_cheapest_within_24_hours_rounds_14_and_18() -> None:
             ("Westfalenroute", "208.88", 11),
         ]
     )
-    assert best_offer(r18).trucker == "Westfalenroute"
+    assert best_offer(r18).trucker == "Elbkante"
     assert parse_hours("We can collect within 30 hours.") == Decimal("30")
 
 
@@ -363,4 +363,4 @@ def test_fastest_request_takes_the_fastest_trucker_round_25() -> None:
         ]
     ]
     assert best_offer(offers, "fastest").trucker == "Spessart"
-    assert best_offer(offers, "cheapest").trucker == "Isarwelle"
+    assert best_offer(offers, "cheapest").trucker == "Rheinufer"

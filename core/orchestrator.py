@@ -97,7 +97,8 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
 
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
     portal = [option for option in options if option.source == "portal"]
-    return portal or options
+    bids = [option for option in options if option.source == "bid"]
+    return portal or bids or options
 
 
 def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
@@ -495,6 +496,10 @@ class Orchestrator:
         if self.bids is None:
             return
         try:
+            await self.bids.request_lane(rfq)
+        except Exception:
+            log.exception("lane_bid_request_failed")
+        try:
             await self.bids.request_rate_desk(rfq)
         except Exception:
             log.exception("rate_desk_request_failed")
@@ -506,7 +511,8 @@ class Orchestrator:
 
     def pending_sources(self, rfq: RFQ, state: SourcingState) -> frozenset[str]:
         pending = set(state.pending)
-        if self.bids is not None and not state.options and self.bids.waiting(rfq.mail_id):
+        priced = [o for o in state.options if o.source == "portal"]
+        if self.bids is not None and not priced and self.bids.waiting(rfq.mail_id):
             pending.add(self.bids.name)
         return frozenset(pending)
 

@@ -248,7 +248,7 @@ async def test_portal_503_asks_rate_desk_once_and_uses_reply(tmp_path: Path) -> 
     assert "FRA to ASU" in body
     same = rfq().model_copy(update={"mail_id": 1, "thread_root_id": 1})
     assert await h.orchestrator.bids.request_rate_desk(same) is False
-    assert len(sender.sent) == 1
+    assert len([m for m in sender.sent if 'ratedesk' in str(m[0])]) == 1
     h.mailbox.batches.append(
         [
             reply(

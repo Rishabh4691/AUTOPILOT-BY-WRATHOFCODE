@@ -130,6 +130,34 @@ class AirlineBidSource:
         log.info("airline_bids_sent", extra={"rfq": rfq.mail_id, "count": sent})
         return sent > 0
 
+    async def request_lane(self, rfq: RFQ) -> bool:
+        if rfq.mail_id in self._asked:
+            return self.waiting(rfq.mail_id)
+        try:
+            lanes = await self.ports()
+        except Exception:
+            lanes = []
+        o, d = rfq.origin.upper(), rfq.destination.upper()
+        names = {
+            str(getattr(airline, "name", "")).lower()
+            for lane in lanes
+            if str(lane.origin).upper() == o and str(lane.destination).upper() == d
+            for airline in getattr(lane, "airlines", [])
+        }
+        contacts = [c for c in self.directory.airlines_serving(rfq.destination) if c.name.lower() in names]
+        if not contacts:
+            return False
+        self._asked.add(rfq.mail_id)
+        sent = 0
+        for contact in contacts:
+            carrier = Carrier(name=contact.name, email=contact.email, kind="airline")
+            ref = bid_ref(str(rfq.mail_id), carrier)
+            subject, body = self._request_text(rfq, carrier, ref)
+            if await self._send(rfq.mail_id, contact.name, contact.email, ref, subject, body):
+                sent += 1
+        log.info("lane_bids_sent", extra={"rfq": rfq.mail_id, "count": sent})
+        return sent > 0
+
     async def request_rate_desk(self, rfq: RFQ) -> bool:
         """Once per RFQ: ask the rate desk for the lane when the portal is down."""
         if rfq.mail_id in self._rate_desk_asked:
