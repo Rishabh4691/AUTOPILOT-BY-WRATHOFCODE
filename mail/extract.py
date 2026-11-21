@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 
 from sourcing.models import Piece, Shipment
@@ -41,6 +42,7 @@ COUNT_ONLY = re.compile(
     r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?)\b",
     re.I,
 )
+READY = re.compile(r"\b(?:ready|pickup|abholbereit|bereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{4})-(\d{2})-(\d{2})|\b(?:ready|bereit|abholbereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{1,2})\.(\d{1,2})\.(\d{4})", re.I)
 LITHIUM = re.compile(r"UN\s?3480|lithium[- ]ion batter(y|ies) (packed )?alone", re.I)
 SIGNOFF = re.compile(
     r"^(thanks?|thank you|cheers|best|best regards|kind regards|regards|many thanks|viele grüße|beste grüße|mit freundlichen grüßen|grüße|danke|gruß|"
@@ -152,6 +154,18 @@ def sender_email(sender: str) -> str:
     return s[s.index("<") + 1 : s.index(">")] if "<" in s and ">" in s else s
 
 
+def find_ready(text: str) -> date | None:
+    m = READY.search(text)
+    if not m:
+        return None
+    try:
+        if m.group(1):
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        return date(int(m.group(6)), int(m.group(5)), int(m.group(4)))
+    except ValueError:
+        return None
+
+
 def find_first_name(sender: str, text: str) -> str:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     for i, line in enumerate(lines):
@@ -201,6 +215,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
             volume_cbm=volume,
             preference=pref, door_pickup=door, pickup_zone=zone, pickup_postcode=postcode,
             lithium_un3480=bool(LITHIUM.search(text)),
+            ready_date=find_ready(text),
         )
         gross_kg = float(gross_weight_kg(shipment))
         charge = float(chargeable_weight_kg(shipment))

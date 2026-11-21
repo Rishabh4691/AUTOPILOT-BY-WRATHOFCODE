@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from core.agents.directory import CarrierDirectory
 from core.contracts import RFQ, Mail, PickupPrice
+from core.pricing.weight import volume_cbm
 
 log = logging.getLogger("core.agents.trucker")
 
@@ -68,15 +69,31 @@ def parse_price(text: str) -> tuple[Decimal, str] | None:
     return None
 
 
-def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
+def shipment_lines(rfq: RFQ) -> list[str]:
     pieces = sum(piece.count for piece in rfq.pieces)
+    if not pieces:
+        noted = [n[8:] for n in rfq.notes if n.startswith("pieces: ") and n[8:].isdigit()]
+        pieces = int(noted[0]) if noted else 0
+    cbm = volume_cbm(rfq.pieces) if rfq.pieces else rfq.volume_cbm
+    lines = [f"Pieces: {pieces or 'see volume'}. Gross weight: {rfq.gross_kg} kg."]
+    if cbm:
+        lines.append(f"Volume: {cbm.quantize(Decimal('0.01'))} cbm.")
+    for piece in rfq.pieces:
+        lines.append(
+            f"Dimensions: {piece.count} x {piece.length_cm} x {piece.width_cm} x "
+            f"{piece.height_cm} cm."
+        )
+    return lines
+
+
+def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
     ready = rfq.ready_date.isoformat() if rfq.ready_date else "as soon as possible"
     return "\n".join(
         [
             "Hello,",
             "",
             f"Please quote a pickup from zone {zone} ({area}) to {airport} airport.",
-            f"Pieces: {pieces}. Gross weight: {rfq.gross_kg} kg.",
+            *shipment_lines(rfq),
             f"Ready date: {ready}.",
             f"Please reply with your all-in price and keep 'Pickup request {rfq.mail_id}' "
             "in the subject.",

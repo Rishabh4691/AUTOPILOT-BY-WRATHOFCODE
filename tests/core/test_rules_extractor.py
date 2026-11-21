@@ -97,6 +97,7 @@ async def test_volume_in_cbm_and_count_without_dims():
     body = (
         "Could you quote an all-in price in EUR for the fastest air freight option to ORD? "
         "Please arrange trucking from our site in 51447 Bergisch Gladbach to the departure airport.\n\n"
+        "The shipment is ready for pickup on 2026-11-25. "
         "It's 12 pieces of printed marketing material, 676 kg gross and 5.79 cbm.\n\nSara"
     )
     rfq, usage = await RulesFirstExtractor(Fallback()).extract(
@@ -107,3 +108,4 @@ async def test_volume_in_cbm_and_count_without_dims():
     assert rfq.volume_cbm == Decimal("5.79")
     assert chargeable_weight_kg(to_shipment(rfq)) == Decimal("967.0")
     assert piece_count(rfq) == 12
+    assert str(rfq.ready_date) == "2026-11-25"
