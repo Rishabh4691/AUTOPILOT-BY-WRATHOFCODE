@@ -223,6 +223,14 @@ SELF_DROP_DATE = re.compile(
     re.I,
 )
 READY_SAME_SENTENCE = re.compile(r"\b(?:ready|abholbereit|bereit)\b[^.!?\n]{0,90}?\b(\d{4})-(\d{2})-(\d{2})\b", re.I)
+# Same, with "30.11.2026" or "30 Nov 2026" (fuzz: R2 and R29 lost the ready date in those formats).
+# The dotted date's own dots are allowed; any other full stop ends the sentence.
+READY_SAME_SENTENCE_DOTTED = re.compile(
+    r"\b(?:ready|abholbereit|bereit)\b(?:[^.!?\n]|\.(?=\d)){0,90}?\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", re.I
+)
+READY_SAME_SENTENCE_WORDS = re.compile(
+    r"\b(?:ready|abholbereit|bereit)\b[^.!?\n]{0,90}?\b(\d{1,2})\.?\s+([A-Za-zäé]{3,9})\.?\s+(\d{4})\b", re.I
+)
 CURRENCY = re.compile(
     r"\b(?:in|price in|quote in|prices? in|all-in (?:price )?in|currency:?|währung:?|en|w|devise:?|valuta:?|moneda:?|waluta:?)\s*(USD|EUR|GBP|CHF|PLN|US ?dollars?|euros?|dollars?|d[oó]lar(?:es|s)?|"
     r"francs? suisses?|franchi svizzeri|schweizer franken|francos suizos|swiss francs?)\b",
@@ -598,12 +606,18 @@ def find_ready(text: str) -> date | None:
             return None
         # "ready for pickup at our site in 61018 (Bad Homburg), Germany, on 2026-11-25": a postcode sits in between
         late = READY_SAME_SENTENCE.search(text or "")
-        if not late:
-            return None
         try:
-            return date(int(late.group(1)), int(late.group(2)), int(late.group(3)))
+            if late:
+                return date(int(late.group(1)), int(late.group(2)), int(late.group(3)))
+            dotted = READY_SAME_SENTENCE_DOTTED.search(text or "")
+            if dotted:
+                return date(int(dotted.group(3)), int(dotted.group(2)), int(dotted.group(1)))
+            words = READY_SAME_SENTENCE_WORDS.search(text or "")
+            if words and _month(words.group(2)):
+                return date(int(words.group(3)), _month(words.group(2)) or 0, int(words.group(1)))
         except ValueError:
             return None
+        return None
     try:
         if m.group(1):
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))

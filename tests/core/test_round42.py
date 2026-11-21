@@ -88,3 +88,52 @@ def test_bid_choice_follows_the_preference_not_a_50_50_score_round_28() -> None:
     ]
     assert select(bids, Preference.CHEAPEST).carrier == "Ultraviolet Air Freight"
     assert select(bids, Preference.FASTEST).carrier == "Lumen Air Cargo"
+
+
+def test_ready_date_far_from_ready_in_dotted_or_word_format() -> None:
+    # Fuzz on rounds 2 and 29: "ready for pickup at our site in 61018 (Bad Homburg), Germany, on <date>".
+    from datetime import date
+
+    from mail.extract import find_ready
+
+    base = "The shipment will be ready for pickup at our site in 61018 (Bad Homburg), Germany, on {}."
+    assert find_ready(base.format("2026-11-25")) == date(2026, 11, 25)
+    assert find_ready(base.format("25.11.2026")) == date(2026, 11, 25)
+    assert find_ready(base.format("25 Nov 2026")) == date(2026, 11, 25)
+    assert find_ready("ready soon. We ship 2 pallets. Invoice 12.03.2025") is None
+
+
+EXCLUDING = [
+    "Please do not offer Zephyr Steppe Cargo (ZS) for this shipment or for any of our future inquiries.",
+    "Please don't use Zephyr Steppe Cargo.", "We do not want Zephyr Steppe Cargo on this shipment.",
+    "Please avoid Zephyr Steppe Cargo.", "Any airline except Zephyr Steppe Cargo is fine.",
+    "No Zephyr Steppe Cargo please.", "Please exclude Zephyr Steppe Cargo from your offer.",
+    "We no longer work with Zephyr Steppe Cargo.", "Zephyr Steppe Cargo is not acceptable for us.",
+    "Do not book Zephyr Steppe Cargo.", "Please do not quote ZS (Zephyr Steppe Cargo).",
+    "Bitte nicht mit Zephyr Steppe Cargo fliegen.", "Bitte kein Angebot mit Zephyr Steppe Cargo.",
+    "Never use Zephyr Steppe Cargo for our shipments.", "Please offer any carrier but Zephyr Steppe Cargo.",
+    "Do not use Pampero Air Cargo or Zephyr Steppe Cargo.",
+]
+NOT_EXCLUDING = [
+    "Last time Zephyr Steppe Cargo flew this lane well.", "Zephyr Steppe Cargo was fine for us before.",
+    "We do not need trucking, we deliver ourselves.", "Could Zephyr Steppe Cargo do it faster?",
+    "We don't need trucking; Zephyr Steppe Cargo is fine.",
+    "No pickup needed, Zephyr Steppe Cargo worked well last time.",
+    "We do not need insurance and Zephyr Steppe Cargo is our favourite.",
+    "Keine Abholung nötig, Zephyr Steppe Cargo ist gut.", "Please don't forget the docs. Zephyr Steppe Cargo is ok.",
+]
+
+
+def test_exclusion_phrasings_are_caught_without_false_alarms(monkeypatch) -> None:
+    from pathlib import Path
+
+    import pytest  # noqa: F401
+    from mail import kit
+    from mail.config import settings as mail_settings
+    from mail.exclusions import excluded_carriers
+
+    monkeypatch.setattr(kit, "settings", mail_settings.__class__(kit_dir=Path(__file__).parent / "fixtures" / "kit"))
+    for text in EXCLUDING:
+        assert is_excluded("Zephyr Steppe Cargo", "ZS", excluded_carriers(text)), text
+    for text in NOT_EXCLUDING:
+        assert excluded_carriers(text) == [], text
