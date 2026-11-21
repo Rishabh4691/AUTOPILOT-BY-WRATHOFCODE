@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import logging
 import time
@@ -97,6 +98,15 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
 
 
 BID_CUTOFF_S = 75.0
+
+
+def body_price(body: str) -> bool:
+    from core.agents.trucker import parse_price
+
+    return parse_price(body or "") is not None
+
+
+PICKUP_ESTIMATE_S = float(os.getenv("PICKUP_ESTIMATE_SECONDS") or "100")
 ORIGIN_COMPARE_S = 45.0
 
 
@@ -257,7 +267,7 @@ class Orchestrator:
             self.bids.offer(mail)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:
             offer = getattr(self.pickup, "offer", None)
-            if callable(offer) and mail.attachments and self.attachments is not None:
+            if callable(offer) and mail.attachments and self.attachments is not None and not body_price(mail.body):
                 task = asyncio.create_task(self.offer_with_attachments(offer, mail), name=f"truck-{mail.id}")
                 self.tasks.add(task)
                 task.add_done_callback(self.tasks.discard)
@@ -628,7 +638,7 @@ class Orchestrator:
             if pickup is None and rfq.door_pickup and options:
                 answered = getattr(self.pickup, "all_answered", None)
                 unreadable = elapsed >= 25 and callable(answered) and answered(rfq.mail_id)
-                late = elapsed >= self.policy.wait_until_s or unreadable
+                late = elapsed >= min(self.policy.wait_until_s, PICKUP_ESTIMATE_S) or unreadable
                 if late:
                     estimate = getattr(self.pickup, "estimate", None)
                     guess = estimate(rfq) if callable(estimate) else None
