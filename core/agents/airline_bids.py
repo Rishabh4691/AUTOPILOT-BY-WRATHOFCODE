@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC, datetime
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
@@ -27,6 +28,21 @@ log = logging.getLogger("core.agents.airline_bids")
 RATE_DESK_TAG = "RATEDESK"
 SUBJECT_REF = re.compile(r"\[BID\s+([A-Z0-9_-]+)\]", re.IGNORECASE)
 RATE_REF = re.compile(r"\b(R-[A-Za-z0-9_-]{8,40})\b")
+# "Offer valid until: 21 Nov 2026 18:00 UTC" -> the quote can say "for about 12 minutes"
+# instead of "for a short time" (5 of the last 13 quote emails said "a short time").
+VALID_UNTIL = re.compile(
+    r"valid\s+until:?\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{1,2}:\d{2})\s*UTC", re.I
+)
+
+
+def offer_valid_until(body: str) -> datetime | None:
+    found = VALID_UNTIL.search(body or "")
+    if not found:
+        return None
+    try:
+        return datetime.strptime(" ".join(found.group(1).split()), "%d %b %Y %H:%M").replace(tzinfo=UTC)
+    except ValueError:
+        return None
 NOT_SERVED = re.compile(
     r"\b(?:do not|don't|does not|doesn't|cannot|can't)\s+serve\b|\bnot\s+served\b", re.IGNORECASE
 )
@@ -248,6 +264,7 @@ class AirlineBidSource:
                 carrier=carrier,
                 rate_id=rate_ref.group(1) if rate_ref else None,
                 rate_id_at=mail.received_at if rate_ref else None,
+                valid_until=offer_valid_until(mail.body),
                 total=parsed.total,
                 currency=parsed.currency,
                 transit_days=parsed.transit_days,
