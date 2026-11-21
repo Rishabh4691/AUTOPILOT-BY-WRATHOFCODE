@@ -36,3 +36,26 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_rfq ON events(rfq_id);
 CREATE INDEX IF NOT EXISTS idx_events_agent_ts ON events(agent, ts);
+
+CREATE TABLE IF NOT EXISTS bookings (
+  rfq_id            TEXT PRIMARY KEY,
+  thread_id         TEXT NOT NULL,
+  customer          TEXT,
+  booking_reference TEXT,
+  team_reference    TEXT NOT NULL,
+  rate_id           TEXT,
+  carrier           TEXT,
+  carrier_code      TEXT,
+  origin            TEXT,
+  destination       TEXT,
+  price             TEXT,
+  currency          TEXT,
+  transit_days      INTEGER,
+  ready_date        TEXT,
+  eta               TEXT,
+  status            TEXT NOT NULL,
+  method            TEXT,
+  booked_at         REAL,
+  confirmed_at      REAL,
+  note              TEXT
+);

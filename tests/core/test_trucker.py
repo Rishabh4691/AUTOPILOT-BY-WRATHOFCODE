@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -99,6 +99,7 @@ async def test_no_request_without_door_pickup_or_zone(door: bool, zone: str | No
 
 async def test_offer_parsed_by_subject_reference(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
+    monkeypatch.setattr(trucker_module, "PICKUP_WAIT_S", 0.0)
     trucker, _ = source()
     rfq = make_rfq()
     await trucker.request(rfq)
@@ -117,6 +118,7 @@ async def test_offer_parsed_by_subject_reference(monkeypatch: pytest.MonkeyPatch
 
 async def test_offer_parsed_by_in_reply_to(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
+    monkeypatch.setattr(trucker_module, "PICKUP_WAIT_S", 0.0)
     trucker, sender = source()
     rfq = make_rfq()
     await trucker.request(rfq)
@@ -162,7 +164,8 @@ async def test_collect_returns_cheapest_not_first(monkeypatch: pytest.MonkeyPatc
     source._asked = {}
     source._answered = {}
     source._first_price_at = {}
-    rfq = type("R", (), {"mail_id": 432})()
+    source.now = lambda: now + timedelta(seconds=200)
+    rfq = type("R", (), {"mail_id": 432, "received_at": now})()
     best = await source.collect(rfq)
     assert best is not None and best.trucker == "Bodenseefracht" and best.total == Decimal("119.01")
 
@@ -186,7 +189,8 @@ async def test_collect_waits_for_other_truckers_within_grace() -> None:
     source._asked = {432: {"a@x", "b@x"}}
     source._answered = {432: {"a@x"}}
     source._first_price_at = {432: time.monotonic()}
-    rfq = type("R", (), {"mail_id": 432})()
+    source.now = lambda: now
+    rfq = type("R", (), {"mail_id": 432, "received_at": now})()
     assert await source.collect(rfq) is None
     cheaper = PickupPrice(
         source="email",
@@ -200,3 +204,15 @@ async def test_collect_waits_for_other_truckers_within_grace() -> None:
     source._answered[432].add("b@x")
     best = await source.collect(rfq)
     assert best is not None and best.total == Decimal("119.01")
+async def test_waits_for_slower_truckers_until_100_seconds() -> None:
+    trucker, sender = source()
+    rfq = make_rfq()
+    await trucker.request(rfq)
+    first = sender.sent[0][0]
+    trucker.offer(mail(first, "Re: your mail", "Price: 85,00 EUR", in_reply_to=1001))
+    trucker._first_price_at[rfq.mail_id] -= 60
+    if len(sender.sent) > 1:
+        assert await trucker.collect(rfq) is None
+    trucker.now = lambda: NOW + timedelta(seconds=101)
+    price = await trucker.collect(rfq)
+    assert price is not None and price.total == Decimal("85.00")

@@ -130,6 +130,9 @@ class PortalPriceSource:
         )
         return options
 
+    async def rate_for(self, rfq: RFQ, airline: str) -> PriceOption | None:
+        return await self._best_option(rfq, airline, time.monotonic() + self.deadline_s)
+
     async def fresh_rate(self, option: PriceOption, rfq: RFQ) -> PriceOption:
         if not option.carrier_code:
             raise SourceUnavailable("option has no airline code")

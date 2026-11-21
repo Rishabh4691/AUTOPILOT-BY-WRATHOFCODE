@@ -13,14 +13,17 @@ from typing import Any
 
 import httpx
 
+from core.agents.booking import BookingAgent
 from core.agents.classifier import RuleClassifier
 from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
 from core.agents.human_writer import HumanEmailWriter
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
-from core.agents.sourcing_adapter import SourcingPortalPriceSource
+from core.agents.portal import PortalPriceSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
+from core.agents.sourcing_adapter import SourcingPortalPriceSource
+from core.agents.tracking import TrackingAgent
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
 from core.contracts import MailboxClient, Stage
@@ -68,6 +71,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         DryRunMailbox(http_mailbox, settings.our_address) if settings.dry_run else http_mailbox
     )
     sender = DirectoryMailSender(client, settings, directory)
+    portal = PortalPriceSource(client, settings, lambda: datetime.now(UTC))
     return Orchestrator(
         settings=settings,
         store=store,
@@ -81,6 +85,8 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
         writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
+        booker=BookingAgent(client, settings, portal, directory, outbound=sender),
+        tracker=TrackingAgent(),
     )
 
 
@@ -142,6 +148,11 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                     "cursor": store.get_cursor(),
                 },
             )
+            if orchestrator.booker is not None:
+                try:
+                    await orchestrator.booker.recover(orchestrator)
+                except Exception:
+                    log.exception("booking_recover_failed")
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
             await reprocess(orchestrator)
             try:

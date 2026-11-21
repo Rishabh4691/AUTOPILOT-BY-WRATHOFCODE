@@ -15,6 +15,7 @@ from core.contracts import RFQ, Mail, PickupPrice
 from core.pricing.weight import volume_cbm
 
 PICKUP_GRACE_S = 8.0
+PICKUP_WAIT_S = 100.0
 
 log = logging.getLogger("core.agents.trucker")
 
@@ -214,6 +215,9 @@ class EmailTruckerPickupSource:
         if not prices:
             return None
         waited = time.monotonic() - self._first_price_at.get(rfq.mail_id, 0.0)
-        if not self.all_answered(rfq.mail_id) and waited < PICKUP_GRACE_S:
+        since_rfq = (self.now() - rfq.received_at).total_seconds()
+        if not self.all_answered(rfq.mail_id) and (
+            waited < PICKUP_GRACE_S or since_rfq < PICKUP_WAIT_S
+        ):
             return None
         return min(prices, key=lambda p: (p.currency != "EUR", p.total))

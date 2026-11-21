@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 from core.config import Settings
 from core.contracts import (
@@ -74,6 +75,8 @@ class Orchestrator:
     tick_s: float = 1.0
     outbox: asyncio.Queue[Quote] = field(default_factory=asyncio.Queue)
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
+    booker: Any = None
+    tracker: Any = None
 
     @property
     def policy(self) -> TimingPolicy:
@@ -128,6 +131,14 @@ class Orchestrator:
         if kind is MailKind.RFQ:
             self.accept_rfq(mail)
             return
+        if self.booker is not None and kind in (MailKind.FOLLOW_UP, MailKind.BOOKING_CONFIRMATION):
+            task = asyncio.create_task(self.booker.handle(self, mail, kind), name=f"book-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+        if self.tracker is not None and kind is MailKind.TRACKING:
+            task = asyncio.create_task(self.tracker.handle(self, mail), name=f"track-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:
             offer = getattr(self.pickup, "offer", None)
             if callable(offer):
@@ -369,6 +380,14 @@ class Orchestrator:
                 {
                     "flight": str(option.total),
                     "pickup": None if pickup is None else str(pickup.total),
+                    "transit_days": option.transit_days,
+                    "source": option.source,
+                    "carrier_code": option.carrier_code,
+                    "origin": rfq.origin,
+                    "destination": rfq.destination,
+                    "valid_until": None
+                    if option.valid_until is None
+                    else option.valid_until.isoformat(),
                 }
             ),
         )
