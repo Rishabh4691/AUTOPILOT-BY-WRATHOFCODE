@@ -14,6 +14,7 @@ IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp")
 AUDIO_EXT = (".mp3", ".wav", ".m4a", ".ogg", ".oga", ".opus", ".flac", ".aac", ".wma", ".amr")
 VIDEO_EXT = (".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm", ".wmv", ".3gp", ".mpeg", ".mpg")
 MAX_DEPTH = 2
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 SPEECH_HINT = (
     "Air freight quotation request. Pickup postcode, airport code, destination, pieces, pallets, "
     "gross weight in kilograms, volume in cubic metres, dimensions in centimetres, ready date."
@@ -33,7 +34,11 @@ def kind(filename: str, content_type: str = "", data: bytes = b"") -> str:
         return "video"
     if name.endswith(".pdf") or ctype == "application/pdf" or data[:5] == b"%PDF-":
         return "pdf"
-    for ext in (".xlsx", ".xlsm", ".xls", ".docx", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".zip"):
+    if name.endswith((".docx", ".docm", ".dotx", ".dotm")):
+        return "docx"
+    if name.endswith((".doc", ".dot")):
+        return "doc"
+    for ext in (".xlsx", ".xlsm", ".xls", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".zip"):
         if name.endswith(ext):
             return ext[1:]
     if name.endswith((".html", ".htm")) or "html" in ctype:
@@ -44,8 +49,10 @@ def kind(filename: str, content_type: str = "", data: bytes = b"") -> str:
         return "text"
     if data[:4] == b"PK\x03\x04":
         return _zip_kind(data)
-    if data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
-        return "xls"
+    if data[:8] == OLE_MAGIC:
+        return "doc" if "WordDocument".encode("utf-16-le") in data[:65536] or b"WordDocument" in data else "xls"
+    if data[:5] == b"{\\rtf":
+        return "rtf"
     if data[:3] == b"ID3" or data[:4] in (b"RIFF", b"OggS", b"fLaC"):
         return "audio"
     if data[4:8] == b"ftyp":
@@ -143,6 +150,24 @@ def docx_text(data: bytes) -> str:
         parts = [n for n in z.namelist() if re.match(r"word/(document|header\d*|footer\d*|footnotes)\.xml$", n)]
         parts.sort(key=lambda n: n != "word/document.xml")
         return "\n".join(_xml_text(z.read(n).decode("utf-8", "ignore"), r"</w:p>") for n in parts)
+
+
+def doc_text(data: bytes) -> str:
+    try:
+        import olefile
+
+        with olefile.OleFileIO(io.BytesIO(data)) as ole:
+            data = ole.openstream("WordDocument").read()
+    except Exception:
+        pass
+    printable = r"[\t\n\r\x20-\x7e\xa0-\xff\u2018-\u201e\u20ac]{4,}"
+    texts = []
+    for start in (0, 1):
+        chunk = data[start : start + (len(data) - start) // 2 * 2]
+        texts.append("\n".join(re.findall(printable, chunk.decode("utf-16-le", "ignore"))))
+    texts.append("\n".join(re.findall(printable.replace("{4,}", "{6,}"), data.decode("cp1252", "ignore"))))
+    best = max(texts, key=lambda t: len(re.findall(r"[A-Za-z]{3,}", t)))
+    return re.sub(r"\r", "\n", best)
 
 
 def pptx_text(data: bytes) -> str:
@@ -348,6 +373,7 @@ READERS = {
     "xls": xls_text,
     "ods": odf_text,
     "docx": docx_text,
+    "doc": doc_text,
     "pptx": pptx_text,
     "odt": odf_text,
     "odp": odf_text,

@@ -34,3 +34,17 @@ def test_request_only_in_attachment_is_an_rfq():
 
 def test_trucker_letter_total_not_base_charge():
     assert str(parse_price(LETTER)[0]) == "198.40"
+
+
+def test_old_word_doc_text():
+    body = "Air freight quote to YYZ. Gross weight 827 kg, volume 2.92 cbm, pickup 20103 Hamburg.\r"
+    fake = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 64 + "WordDocument".encode("utf-16-le") + b"\x00" * 32 + body.encode("utf-16-le")
+    assert kind("anfrage.doc", "application/msword", fake) == "doc"
+    assert kind("noname", "", fake) == "doc"
+    text = file_text("anfrage.doc", fake, "application/msword")
+    assert "827 kg" in text and "20103 Hamburg" in text
+
+
+def test_docx_by_name_and_macro_variant():
+    assert kind("q.docm") == "docx"
+    assert kind("q.DOCX") == "docx"
