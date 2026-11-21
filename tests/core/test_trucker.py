@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+
+from core.agents.directory import load_directory
+from core.agents.trucker import EmailTruckerPickupSource, parse_price
+from core.contracts import RFQ, Mail, Piece, Preference
+
+KIT = Path(__file__).parent / "fixtures" / "kit"
+NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+DIRECTORY = load_directory(KIT)
+
+
+class FakeSender:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    async def send_new(self, to: str, subject: str, body: str) -> int | None:
+        self.sent.append((to, subject, body))
+        return 1000 + len(self.sent)
+
+
+def make_rfq(door_pickup: bool = True, zone: str | None = "45") -> RFQ:
+    return RFQ(
+        mail_id=7,
+        thread_root_id=7,
+        customer="buyer@example.test",
+        subject="Quote",
+        origin="DUS",
+        destination="ORD",
+        pieces=(
+            Piece(count=3, length_cm=Decimal(50), width_cm=Decimal(50), height_cm=Decimal(50)),
+        ),
+        gross_kg=Decimal(120),
+        door_pickup=door_pickup,
+        pickup_zone=zone,
+        preference=Preference.CHEAPEST,
+        preference_assumed=False,
+        received_at=NOW,
+    )
+
+
+def mail(sender: str, subject: str, body: str, in_reply_to: int | None = None) -> Mail:
+    return Mail(
+        id=55,
+        sender=sender,
+        to="us@example.test",
+        subject=subject,
+        body=body,
+        in_reply_to=in_reply_to,
+        references=(),
+        received_at=NOW,
+    )
+
+
+def source() -> tuple[EmailTruckerPickupSource, FakeSender]:
+    sender = FakeSender()
+    return EmailTruckerPickupSource(DIRECTORY, sender, lambda: NOW), sender
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Our price is EUR 85.00 all in", (Decimal("85.00"), "EUR")),
+        ("We can do it for 85,00 EUR.", (Decimal("85.00"), "EUR")),
+        ("USD 120 flat", (Decimal("120"), "USD")),
+        ("Only €85", (Decimal("85"), "EUR")),
+        ("Total 1.250,50 EUR", (Decimal("1250.50"), "EUR")),
+        ("no price here, 3 pallets", None),
+    ],
+)
+def test_parse_price(text: str, expected: tuple[Decimal, str] | None) -> None:
+    assert parse_price(text) == expected
+
+
+async def test_request_sends_to_zone_truckers_only() -> None:
+    trucker, sender = source()
+    await trucker.request(make_rfq())
+    expected = {c.email for c in DIRECTORY.truckers_for_zone("45")}
+    assert {to for to, _, _ in sender.sent} == expected
+    assert all(s == "Pickup request 7 zone 45 to DUS" for _, s, _ in sender.sent)
+    body = sender.sent[0][2]
+    assert "Essen" in body and "Pieces: 3" in body and "120 kg" in body
+    await trucker.request(make_rfq())
+    assert len(sender.sent) == len(expected)
+
+
+@pytest.mark.parametrize(("door", "zone"), [(False, None), (True, None)])
+async def test_no_request_without_door_pickup_or_zone(door: bool, zone: str | None) -> None:
+    trucker, sender = source()
+    await trucker.request(make_rfq(door, zone))
+    assert sender.sent == []
+
+
+async def test_offer_parsed_by_subject_reference() -> None:
+    trucker, _ = source()
+    rfq = make_rfq()
+    await trucker.request(rfq)
+    trucker.offer(
+        mail("Grautal-Trucking@hackloop.mail", "Re: Pickup request 7 zone 45 to DUS", "EUR 85.00")
+    )
+    price = await trucker.collect(rfq)
+    assert price is not None
+    assert (price.total, price.currency, price.trucker, price.zone) == (
+        Decimal("85.00"),
+        "EUR",
+        "Grautal Trucking",
+        "45",
+    )
+
+
+async def test_offer_parsed_by_in_reply_to() -> None:
+    trucker, sender = source()
+    rfq = make_rfq()
+    await trucker.request(rfq)
+    first = sender.sent[0][0]
+    trucker.offer(mail(first, "Re: your mail", "Price: 85,00 EUR", in_reply_to=1001))
+    price = await trucker.collect(rfq)
+    assert price is not None and price.total == Decimal("85.00")
+
+
+async def test_offer_ignores_unrelated_and_garbage() -> None:
+    trucker, _ = source()
+    rfq = make_rfq()
+    await trucker.request(rfq)
+    trucker.offer(mail("stranger@example.test", "Pickup request 7", "EUR 10.00"))
+    trucker.offer(mail("rheinufer-spedition@hackloop.mail", "Pickup request 7", "EUR 10.00"))
+    trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 71", "EUR 10.00"))
+    trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 7", "call me"))
+    assert await trucker.collect(rfq) is None
