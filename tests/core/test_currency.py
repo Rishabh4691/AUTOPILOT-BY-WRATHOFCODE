@@ -51,3 +51,24 @@ def test_customer_currency_wins_and_eur_is_default() -> None:
 def test_unknown_rate_keeps_original_currency() -> None:
     assert convert_money(Decimal("5"), "XYZ", "EUR") is None
     assert [o.currency for o in in_currency([option("5", "XYZ")], "EUR")] == ["XYZ"]
+
+
+def test_portal_options_win_over_sheets_when_the_lane_is_on_the_portal() -> None:
+    from core.orchestrator import portal_first
+
+    portal = PriceOption(
+        source="portal",
+        carrier="Tamarind Airways",
+        total=Decimal("3298.38"),
+        currency="EUR",
+        transit_days=3,
+    )
+    sheet = PriceOption(
+        source="sheet",
+        carrier="Quetzal Air Freight",
+        total=Decimal("3617.27"),
+        currency="EUR",
+        transit_days=2,
+    )
+    assert portal_first([sheet, portal]) == [portal]
+    assert portal_first([sheet]) == [sheet]

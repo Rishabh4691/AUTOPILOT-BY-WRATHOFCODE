@@ -93,6 +93,11 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
     )
 
 
+def portal_first(options: list[PriceOption]) -> list[PriceOption]:
+    portal = [option for option in options if option.source == "portal"]
+    return portal or options
+
+
 def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
     if source == target:
         return amount
@@ -518,6 +523,7 @@ class Orchestrator:
                 f"Request {rfq.mail_id} has a {high} cm piece: freighter only, check the airline.",
                 rfq.mail_id,
             )
+        options = portal_first(options)
         usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)
         self.review_context[rfq.mail_id] = review_facts(rfq, usable, pickup)
