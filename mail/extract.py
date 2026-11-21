@@ -213,6 +213,7 @@ READY = re.compile(
     r"\b(?:ready|pickup|abholbereit|bereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{4})-(\d{2})-(\d{2})|\b(?:ready|bereit|abholbereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{1,2})\.(\d{1,2})\.(\d{4})",
     re.I,
 )
+READY_SAME_SENTENCE = re.compile(r"\b(?:ready|abholbereit|bereit)\b[^.!?\n]{0,90}?\b(\d{4})-(\d{2})-(\d{2})\b", re.I)
 CURRENCY = re.compile(
     r"\b(?:in|price in|quote in|prices? in|all-in (?:price )?in|currency:?|währung:?|en|devise:?)\s*(USD|EUR|GBP|CHF|PLN|US ?dollars?|euros?|dollars?)\b",
     re.I,
@@ -503,7 +504,14 @@ def sender_email(sender: str) -> str:
 def find_ready(text: str) -> date | None:
     m = READY.search(text)
     if not m:
-        return None
+        # "ready for pickup at our site in 61018 (Bad Homburg), Germany, on 2026-11-25": a postcode sits in between
+        late = READY_SAME_SENTENCE.search(text or "")
+        if not late:
+            return None
+        try:
+            return date(int(late.group(1)), int(late.group(2)), int(late.group(3)))
+        except ValueError:
+            return None
     try:
         if m.group(1):
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))

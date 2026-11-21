@@ -11,7 +11,7 @@ from core.pricing.weight import chargeable_kg
 from mail import lang
 from mail.extract import find_first_name
 from mail.text import fresh_text
-from mail.writer import write_quote_email
+from mail.writer import arrival_date, write_quote_email
 
 log = logging.getLogger("core.human_writer")
 
@@ -39,6 +39,7 @@ GOODS = (
     re.compile(r"\bfor\s+(?:our|the|some)\s+([a-z][a-z \-]{2,40}?)(?=[?,.;)]|\s+from\b|\s+to\b|$)", re.I | re.M),
     re.compile(r"\bfor\s+([a-z][a-z \-]{2,40}?)\?", re.I),
     re.compile(r"\bgoods(?:\s+description)?\s*[:=]\s*([A-Za-z][A-Za-z \-]{2,40})", re.I),
+    re.compile(r"\b(?:the|our)\s+([a-z][a-z \-]{2,30}?)\s+(?:will\s+be|are|is)\s+ready\b", re.I),
 )
 TOWN = re.compile(r"\b(\d{5})\s*\(?([A-ZÄÖÜ][A-Za-zäöüß\- ]{2,30}?)\)?(?=[,.\n]|\s+Germany|$)")
 
@@ -48,7 +49,7 @@ def goods_of(body: str) -> str:
         match = pattern.search(body or "")
         if match:
             words = match.group(1).strip().lower()
-            if not re.search(r"\b(air|freight|quote|price|option|shipment|cargo)\b", words):
+            if not re.search(r"\b(air|freight|quote|price|option|shipment|cargo|goods|consignment)\b", words):
                 return words
     return ""
 
@@ -162,7 +163,7 @@ class HumanEmailWriter:
             "subject": rfq.subject,
             "customer_text": body,
             "door_pickup": rfq.door_pickup,
-            "goods": goods_of(body),
+            "goods": goods_of(fresh_text(body)),
             "pickup_town": proper(pickup_town(body, rfq.pickup_postcode)) if rfq.door_pickup else "",
         }
         price = {
@@ -173,6 +174,7 @@ class HumanEmailWriter:
             "valid_until": option.valid_until.isoformat() if option.valid_until else None,
             "includes": self._includes(option, rfq.door_pickup),
             "ready_date": rfq.ready_date.isoformat() if rfq.ready_date else None,
+            "arrival": arrival_date(rfq.ready_date, option.transit_days).isoformat(),
         }
         email = await write_quote_email(rfq_dict, price)
         usage = None
