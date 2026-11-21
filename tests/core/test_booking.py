@@ -185,7 +185,7 @@ async def test_airline_confirmation_marks_booking(tmp_path: Path) -> None:
             "from": "meridian-freightways@hackloop.mail",
             "to": "wrathofcode@hackloop.mail",
             "subject": "Booking BK-AB12CD34 confirmed",
-            "body": "Confirmed.",
+            "body": "Booking reference: BK-AB12CD34\nStatus: booked and ready to ship\n",
             "in_reply_to": None,
             "references": [],
             "received_at": datetime.now(UTC).isoformat(),
