@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
-ENV_FILES = ("env.env", ".env")
+ENV_FILES = (".env",)
 
 
 class ConfigError(RuntimeError):
@@ -62,7 +62,7 @@ def load_settings(root: Path = ROOT, environ: Mapping[str, str] | None = None) -
     env = load_env(root, environ)
     api_key = env.get("FIVEU_API_KEY", "").strip()
     if not api_key:
-        raise ConfigError("FIVEU_API_KEY is missing from env.env, .env or the environment.")
+        raise ConfigError("FIVEU_API_KEY is missing from .env or the environment.")
     base_url = env.get("FIVEU_BASE_URL", "https://api.start-hack.5u.ai").rstrip("/")
     return Settings(
         api_key=api_key,

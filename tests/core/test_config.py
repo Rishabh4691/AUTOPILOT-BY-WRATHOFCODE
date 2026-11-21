@@ -18,7 +18,7 @@ def test_missing_key_is_an_error(tmp_path: Path) -> None:
 
 
 def test_env_file_is_read_and_environment_wins(tmp_path: Path) -> None:
-    (tmp_path / "env.env").write_text("FIVEU_API_KEY=from-file\nDRY_RUN=1\n")
+    (tmp_path / ".env").write_text("FIVEU_API_KEY=from-file\nDRY_RUN=1\n")
     settings = load_settings(tmp_path, {"DRY_RUN": "0"})
     assert settings.api_key == "from-file"
     assert settings.dry_run is False
