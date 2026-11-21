@@ -363,3 +363,35 @@ async def test_empty_optional_sentence_never_breaks_a_line():
     draft = GOOD.replace("Speak soon.", "[VOLUME_NOTE]")
     e = await write_quote_email({**RFQ, "chargeable_kg": 450}, PRICE, http=gw(draft))
     assert "  " not in e.body and "[VOLUME_NOTE]" not in e.body
+
+
+async def test_one_gateway_blip_is_retried_so_the_quote_keeps_its_cost_points():
+    # A quote sent without a model call scores 0 cost points (rounds 7, 11, 28).
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        if len(calls) == 1:
+            return httpx.Response(502, text="bad gateway")
+        return httpx.Response(200, json={
+            "model": "gpt-4.1-mini",
+            "choices": [{"message": {"content": GOOD}}],
+            "usage": {"prompt_tokens": 600, "completion_tokens": 200},
+        })
+
+    e = await write_quote_email(RFQ, PRICE, http=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    assert len(calls) == 2 and e.used_llm
+
+
+async def test_gateway_down_twice_falls_back_after_two_tries():
+    calls = []
+    e = await write_quote_email(RFQ, PRICE, http=gw(status=503, calls=calls))
+    assert len(calls) == 2 and not e.used_llm and one_total(e.body)
+
+
+def test_writer_model_default_is_the_cheap_one():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    assert 'or "gpt-4.1-mini"' in (root / "mail" / "config.py").read_text(encoding="utf-8")
+    assert "WRITER_MODEL=gpt-4.1-mini" in (root / ".env.example").read_text(encoding="utf-8")

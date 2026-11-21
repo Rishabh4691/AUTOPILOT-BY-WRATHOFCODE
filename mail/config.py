@@ -37,7 +37,9 @@ class Settings:
     tracking_desk: str = os.getenv("TRACKING_ADDRESS", "tracking@hackloop.mail").lower()
     dry_run: bool = _flag("DRY_RUN", "1")
     kill_switch: bool = _flag("KILL_SWITCH")
-    llm_model: str = os.getenv("WRITER_MODEL") or "gpt-4.1"
+    # gpt-4.1-mini: cost points fell 39.78 -> 37.75 per quote as the prompt grew on mini alone;
+    # full gpt-4.1 is about 5x the price per token. Change only with the board's cost points.
+    llm_model: str = os.getenv("WRITER_MODEL") or "gpt-4.1-mini"
     poll_seconds: float = float(os.getenv("POLL_INTERVAL_SECONDS") or 3)
     db_path: Path = _path(os.getenv("DB_PATH"), "data/app.db")
     kit_dir: Path = _path(os.getenv("KIT_DIR"), "data/kit")
