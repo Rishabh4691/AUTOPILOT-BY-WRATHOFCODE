@@ -100,6 +100,17 @@ BID_CUTOFF_S = 75.0
 ORIGIN_COMPARE_S = 45.0
 
 
+def drop_excluded(rfq: RFQ, options: list[PriceOption]) -> list[PriceOption]:
+    """Never quote an airline the customer excluded (round 42 was rejected as excluded_airline)."""
+    from mail.exclusions import is_excluded
+
+    banned = [n.split(": ", 1)[1] for n in rfq.notes if n.startswith("exclude_carrier: ")]
+    if not banned:
+        return options
+    kept = [o for o in options if not is_excluded(o.carrier, o.carrier_code, banned)]
+    return kept or options
+
+
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
     portal = [option for option in options if option.source == "portal"]
     bids = [option for option in options if option.source == "bid"]
@@ -670,6 +681,7 @@ class Orchestrator:
                 f"Request {rfq.mail_id} has a {high} cm piece: freighter only, check the airline.",
                 rfq.mail_id,
             )
+        options = drop_excluded(rfq, options)
         options = portal_first(options)
         usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)

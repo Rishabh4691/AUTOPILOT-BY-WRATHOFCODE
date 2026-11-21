@@ -124,3 +124,33 @@ def test_xlsx_pipe_packing_list_round_35() -> None:
     assert not dg.check("", [("s.xlsx", sheet)]).dangerous
     assert not dg.check("", [("s.xlsx", "Dangerous goods: : Not restricted")]).dangerous
     assert dg.check("", [("s.xlsx", "Dangerous goods: | UN1263 paint")]).dangerous
+
+
+def test_excluded_airline_is_never_quoted_or_named_round_42(tmp_path, monkeypatch) -> None:
+    from datetime import UTC, datetime
+
+    import mail.exclusions as ex
+    from core.agents.human_writer import strip_excluded
+    from core.agents.rules_extractor import with_exclusions
+    from core.contracts import RFQ, PriceOption, Preference
+    from core.orchestrator import drop_excluded
+
+    monkeypatch.setattr(ex, "MEMORY_PATH", tmp_path / "ex.json")
+    rfq = RFQ(
+        mail_id=10831, thread_root_id=10831, customer="p@meyer.mail", subject="s", origin="FRA",
+        destination="ULN", pieces=(), gross_kg=Decimal("911"), volume_cbm=Decimal("3.27"),
+        door_pickup=False, preference=Preference.CHEAPEST, preference_assumed=False,
+        received_at=datetime.now(UTC),
+    )
+    body = "Please do not offer Zephyr Steppe Cargo (ZS) for this shipment or for any of our future inquiries."
+    rfq = with_exclusions(rfq, body, "p@meyer.mail")
+    options = [
+        PriceOption(source="bid", carrier="Zephyr Steppe Cargo", total=Decimal("2780"), currency="EUR", transit_days=5),
+        PriceOption(source="bid", carrier="Lagoon Isles Airways", total=Decimal("3210"), currency="EUR", transit_days=3),
+    ]
+    assert [o.carrier for o in drop_excluded(rfq, options)] == ["Lagoon Isles Airways"]
+    later = with_exclusions(rfq.model_copy(update={"notes": ()}), "New request, cheapest please.", "p@meyer.mail")
+    assert [o.carrier for o in drop_excluded(later, options)] == ["Lagoon Isles Airways"]
+    text = "Hi Petra,\n\nI left Zephyr Steppe Cargo out. Lagoon Isles Airways is the cheapest.\n\nKind regards"
+    assert "Zephyr" not in strip_excluded(text, rfq)
+    assert "Lagoon Isles Airways is the cheapest." in strip_excluded(text, rfq)

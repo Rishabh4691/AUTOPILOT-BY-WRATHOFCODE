@@ -112,6 +112,20 @@ def document_totals(text: str) -> dict:
     return found
 
 
+def with_exclusions(rfq: RFQ, body: str, sender: str) -> RFQ:
+    from mail import exclusions
+    from mail.text import fresh_text
+
+    stated = exclusions.excluded_carriers(fresh_text(body) or body)
+    if stated:
+        exclusions.remember(sender, stated)
+    names = sorted(set(stated) | set(exclusions.recall(sender)))
+    if not names:
+        return rfq
+    log.info("carrier_exclusions", extra={"rfq": rfq.mail_id, "excluded": names})
+    return rfq.model_copy(update={"notes": (*rfq.notes, *(f"exclude_carrier: {n}" for n in names))})
+
+
 class RulesFirstExtractor:
     def __init__(self, fallback: RfqExtractor, attachments=None) -> None:
         self.fallback = fallback
@@ -171,6 +185,7 @@ class RulesFirstExtractor:
                     rfq = await self.attachment_totals(mail, rfq)
                 if site_unknown(body, rfq):
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, SITE_UNKNOWN)})
+                rfq = with_exclusions(rfq, body, mail.sender)
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})

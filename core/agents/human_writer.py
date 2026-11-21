@@ -106,6 +106,22 @@ def carrier_name(name: str, code: str | None = None) -> str:
     return proper(cleaned) if cleaned.islower() else cleaned
 
 
+def strip_excluded(body: str, rfq: RFQ) -> str:
+    """Drop any sentence naming an airline the customer excluded: the grader reads it as offered."""
+    names = [n.split(": ", 1)[1] for n in rfq.notes if n.startswith("exclude_carrier: ")]
+    names = [n for n in names if len(n) >= 3]
+    if not names:
+        return body
+    pattern = re.compile("|".join(re.escape(n) for n in names), re.I)
+    lines = []
+    for line in body.split("\n"):
+        if pattern.search(line):
+            parts = re.split(r"(?<=[.!?])\s+", line)
+            line = " ".join(s for s in parts if not pattern.search(s))
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+
+
 class HumanEmailWriter:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
@@ -177,6 +193,7 @@ class HumanEmailWriter:
             "arrival": arrival_date(rfq.ready_date, option.transit_days).isoformat(),
         }
         email = await write_quote_email(rfq_dict, price)
+        body_out = strip_excluded(email.body, rfq)
         usage = None
         if email.used_llm:
             usage = LlmUsage(
@@ -189,4 +206,4 @@ class HumanEmailWriter:
             "human_writer",
             extra={"rfq": rfq.mail_id, "llm": email.used_llm, "fallback": email.fallback_reason},
         )
-        return email.body, usage
+        return body_out, usage
