@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from core.agents.booking import BookingAgent
 from core.agents.classifier import RuleClassifier
 from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
@@ -68,19 +69,18 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         DryRunMailbox(http_mailbox, settings.our_address) if settings.dry_run else http_mailbox
     )
     sender = DirectoryMailSender(client, settings, directory)
+    portal = PortalPriceSource(client, settings, lambda: datetime.now(UTC))
     return Orchestrator(
         settings=settings,
         store=store,
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
         extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm)),
-        sources=[
-            PortalPriceSource(client, settings, lambda: datetime.now(UTC)),
-            SheetPriceSource(),
-        ],
+        sources=[portal, SheetPriceSource()],
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
         writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
+        booker=BookingAgent(client, settings, portal, directory, outbound=sender),
     )
 
 
