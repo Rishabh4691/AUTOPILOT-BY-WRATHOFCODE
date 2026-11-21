@@ -1,0 +1,11 @@
+{
+  "id": 101,
+  "from": "Buyer@Example.com",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Quote request FRA to ORD",
+  "body": "Hello,\nplease quote air freight from FRA to ORD.\n2 x 120x80x100 cm\nGross weight 350 kg\nDoor pickup in 60311 Frankfurt.\nWe need the fastest option.\nThanks",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T14:07:21.768955+00:00",
+  "attachments": []
+}

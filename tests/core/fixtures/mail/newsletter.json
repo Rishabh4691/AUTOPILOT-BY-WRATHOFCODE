@@ -1,0 +1,11 @@
+{
+  "id": 300,
+  "from": "news@logistics-weekly.example",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "This week in logistics",
+  "body": "Air cargo volumes rose again this month. Read our market outlook.",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T08:00:00+00:00",
+  "attachments": []
+}

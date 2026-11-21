@@ -1,0 +1,12 @@
+{
+  "id": 102,
+  "from": "einkauf@kunde.de",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Anfrage Luftfracht",
+  "body": "<html><body><p>Guten Tag,</p><p>bitte um Angebot MUC &rarr; SIN:</p><table><tr><td>3 Stk</td><td>60 x 40 x 50 cm</td><td>12,5 kg je</td></tr></table><p>Abholung in 80331 M&uuml;nchen, m&ouml;glichst g&uuml;nstig, Preis in EUR.</p><p>Bereit am 01.12.2026</p></body></html>",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T14:09:00+00:00",
+  "attachments": [],
+  "priority": "high"
+}
