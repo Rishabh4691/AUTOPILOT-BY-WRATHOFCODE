@@ -65,7 +65,7 @@ Every step writes one row to `events` and streams live to the UI, so we can see 
 | Part | Points | How we win it |
 |---|---|---|
 | Price accuracy | **45** | Check *all three* sources every time. Chargeable weight = max(gross, Σvolume/6000), rounded up to 0.5 kg. Always test the next weight break up. Minimum charge, per-kg surcharges, flat fees, pickup leg for door-to-port. Quote at cost. |
-| LLM cost | **40** | **Exactly one** small gateway call per quote: the email writer (~800 tokens, about $0.0002). Zero calls earns zero cost points, so we never skip it. Everything else runs in code. |
+| LLM cost | **40** | **Exactly one** small gateway call per quote: the email writer. Under 600 tokens in, `max_tokens` around 250, smallest model, about $0.0002. Zero calls earns zero cost points, so we never skip it. Router, extraction, pricing, tariffs and the dashboard use no LLM at all. Budget rules in `mail/README.md`. |
 | Response time | **15** | Fire portal + bid requests in parallel at t=0. Quote at 2:00 if bids are in or sheets clearly win; else wait until 4:00; hard stop 5:15. |
 | Tracking bonus | +10 | Every booking is logged with carrier, rate ID, status and ETA, so the answers come from data. |
 | Human email bonus | +10 | The one LLM call goes where the jury reads: the customer's language, tone and thread. |
@@ -85,19 +85,31 @@ Every step writes one row to `events` and streams live to the UI, so we can see 
 
 ```bash
 git clone https://github.com/Rishabh4691/WRATHOFCODE.git && cd WRATHOFCODE
-cp .env.example .env            # put the team key in X_API_KEY
+cp .env.example .env                     # team key goes in X_API_KEY
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt # coming with core/
+pip install -r requirements.txt
 
-# bot (core loop)
-python -m core                  # coming soon
+uvicorn api.main:app --port 8000         # control room API, reads app.db
+FAKE_DATA=1 uvicorn api.main:app --port 8000   # same, with demo traffic in fake.db
 
-# control room
-uvicorn api.main:app --reload   # API on :8000
-cd ui && npm install && npm run dev   # UI on :5173 (FAKE_DATA=1 works before 16:00)
+cd ui && npm install && npm run dev      # http://localhost:5173
 ```
 
 Before every push: `./scripts/scan_secrets.sh`
+
+### Control room API
+
+| Endpoint | What it returns |
+|---|---|
+| `GET /api/agents` | One card per agent: light, current task, tasks done, success, avg time, LLM cost, productivity |
+| `GET /api/rfqs` | Latest RFQs with status and 6-minute deadline |
+| `GET /api/rfqs/{id}` | One RFQ with breakdown, sent email and full event timeline |
+| `POST /api/rfqs/{id}/takeover` | `{"on": true}` takes the controls, `false` hands back. Core must skip sending when `rfqs.human_takeover = 1` |
+| `GET /api/stream` | Server-sent events, one per new row in `events` |
+
+Productivity = 50% success rate + 30% speed (vs. a per-agent target) + 20% low LLM cost (vs. $0.10 per task).
+
+**How to log so the dashboard works:** write one `events` row per step. Use `status` `start` when a task begins, `ok` or `fail` when it ends (with `duration_ms`), and `info` for anything in between. Put the gateway cost of the email call in `llm_cost_usd`. The schema is in `schema.sql`.
 
 ## Folder structure
 
@@ -109,6 +121,7 @@ Before every push: `./scripts/scan_secrets.sh`
 ├── api/       # FastAPI + server-sent events over app.db (Rishabh)
 ├── ui/        # React + Vite + Tailwind: Agent Control Room (Rishabh)
 ├── tests/     # pytest, mostly pricing
+├── schema.sql # shared app.db tables
 ├── docs/      # battle plan and challenge brief
 └── scripts/   # helper scripts (secret scan, …)
 ```
@@ -123,20 +136,22 @@ _Last updated: Sat 21 Nov 2026_
 **✅ Done**
 - [x] Repo, `.gitignore` (no `.env` / `app.db`), secret scanner
 - [x] README and battle plan in `docs/`
+- [x] Folder skeleton, shared `schema.sql`, LLM budget rules
+- [x] Control room API: agents, RFQs, detail, takeover, SSE stream, fake-data mode
+- [x] Control room UI: agent cards, RFQ list with countdown, detail drawer, take over, failure alarm
 
 **🛠️ In progress**
-- [ ] Folder skeleton: `core/ mail/ data/ api/ ui/ tests/`
 - [ ] `mvp_bot.py`: first RFQ priced from sheets and quoted end to end (Amaan)
 - [ ] Mailbox poll + router + reply in thread (Aditi)
 - [ ] Start kit parsed into structured tariffs, portal client (Aryan)
-- [ ] Agent Control Room: API + UI with fake-data mode (Rishabh)
+- [ ] Wire the real bot into `app.db` events (everyone)
 
 **⏭️ Next**
 - [ ] Carrier bids + 50/50 price-speed pick
 - [ ] Booking by rate ID, tracking answers
 - [ ] Automatic tariff ingestion
-- [ ] Board watcher + failed-quote alarms
-- [ ] RFQ radar with one-click takeover
+- [ ] Board watcher on `/board` + phone alarms
+- [ ] Edit and send from the takeover drawer, radar view
 - [ ] Pitch, rehearsal ×3, backup video (Sun 10:00 to 12:00)
 
 ## For the team 💪
