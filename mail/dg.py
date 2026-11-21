@@ -13,7 +13,9 @@ DG_FIELD = re.compile(
 NEGATIVE = re.compile(r"^\s*(no|none|n/?a|nein|non|keine?|not applicable|-|0)\b", re.I)
 DG_GOODS = re.compile(
     r"\b(adhesives?|glues?|klebstoff\w*|paints?|lacquers?|lacke?|varnish\w*|solvents?|lösungsmittel|thinners?|"
-    r"aerosols?|spray cans?|perfumes?|fragrances?|parfum\w*|lithium[- ]ion|lithium batter\w*|li-?ion|"
+    r"a[eé]ro[sz]ol\w*|spray ?cans?|spraydosen?|sprühdosen?|bombolett\w*|bombes? a[eé]rosol\w*|"
+    r"adh[eé]si(?:f|fs|vos?)|adesiv[io]|colla|klej\w*|pegamentos?|batterie al litio|bater[ií]as? de litio|litowo\w*|"
+    r"perfumes?|fragrances?|parfum\w*|lithium[- ]ion|lithium batter\w*|li-?ion|"
     r"flammable|entzündlich|inflammable|corrosive|ätzend|resins?|harze?|printing inks?|druckfarben?|"
     r"kraftstoff|petrol|gasoline|diesel fuel|ethanol|isopropanol|compressed gas|gas cylinders?|"
     r"dry ice|trockeneis|safety matches|fireworks|pesticides?|explosives?|oxidi[sz]ers?|peroxides?)\b",

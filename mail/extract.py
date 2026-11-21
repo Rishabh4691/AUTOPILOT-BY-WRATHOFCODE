@@ -145,7 +145,7 @@ CITIES = {
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada|ciascun\w*|każd\w*)\s*:?\s*)?)?"
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|każd\w*)\s*:?\s*)?)?"
     rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*)\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
     re.I,
@@ -206,11 +206,16 @@ def volume_cbm_of(m) -> Decimal:
 
 
 COUNT_ONLY = re.compile(
-    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
+    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
     re.I,
 )
-READY = re.compile(
-    r"\b(?:ready|pickup|abholbereit|bereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{4})-(\d{2})-(\d{2})|\b(?:ready|bereit|abholbereit|disponible|listo|pronto|gotow\w*)\D{0,40}?(\d{1,2})\.(\d{1,2})\.(\d{4})",
+READY_KW = r"(?:ready|pick-?up|\w*bereit|disponible|list[oa]s?|pront[oa]|gotow\w*|prêt\w*)"
+READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\.(\d{1,2})\.(\d{4}))"
+READY = re.compile(rf"\b{READY_KW}\D{{0,40}}?{READY_DATE}", re.I)
+READY_AFTER = re.compile(rf"{READY_DATE}[^\d\n]{{0,25}}?\b{READY_KW}", re.I)
+SELF_DROP_DATE = re.compile(
+    rf"\b(?:we(?:'ll| will| shall| can)? (?:deliver|bring|drop)|(?:liefern|bringen) wir|nous (?:livrerons|apporterons)|"
+    rf"entregaremos|consegneremo|dostarczymy)[^.\d]{{0,60}}?{READY_DATE}",
     re.I,
 )
 CURRENCY = re.compile(
@@ -270,6 +275,11 @@ LABELS = {
 }
 
 
+DEST_PHRASE = re.compile(
+    r"\b(?:destination|destino|destinazione|bestemming)\s*(?:de|du|des|a|à|al|di|per|:)?\s*(?:l'a[ée]roport\s*(?:de\s*)?)?\(?([A-Z]{3})\b"
+)
+
+
 def find_route(text: str) -> tuple[str | None, str | None]:
     known = airports()
     labelled = {}
@@ -277,6 +287,11 @@ def find_route(text: str) -> tuple[str | None, str | None]:
         m = re.search(rf"\b{pat}\s*[:\-]?\s*(?:airport\s*)?\(?([A-Z]{{3}})\)?\b", text)
         if m and m.group(1) in known:
             labelled[key] = m.group(1)
+    dm = DEST_PHRASE.search(text)
+    if dm and dm.group(1) in known:
+        labelled["d"] = dm.group(1)
+        if labelled.get("o") == dm.group(1):
+            del labelled["o"]
     seq = [c for c in re.findall(r"\b[A-Z]{3}\b", text) if c in known]
     if len(set(seq)) < 2:
         low = text.lower()
@@ -501,7 +516,7 @@ def sender_email(sender: str) -> str:
 
 
 def find_ready(text: str) -> date | None:
-    m = READY.search(text)
+    m = READY.search(text) or READY_AFTER.search(text) or SELF_DROP_DATE.search(text)
     if not m:
         return None
     try:
@@ -618,12 +633,32 @@ def recall_pickup(sender: str) -> str | None:
     return _load_memory().get(sender_email(sender))
 
 
+def _fold(text: str) -> str:
+    s = text.lower()
+    for a, b in (("ä", "a"), ("ö", "o"), ("ü", "u"), ("ß", "ss"), ("ae", "a"), ("oe", "o"), ("ue", "u")):
+        s = s.replace(a, b)
+    return s
+
+
+AREA_ALIASES = {
+    "Munich": ("munchen", "monaco di baviera", "munich", "munique", "múnich", "monachium"),
+    "Cologne": ("koln", "colonia", "kolonia"),
+    "Frankfurt am Main": ("frankfurt", "francfort", "francoforte", "frankfurt nad menem"),
+    "Hamburg": ("hambourg", "hamburgo", "amburgo"),
+    "Stuttgart": ("stoccarda",),
+}
+
+
 def zone_from_signature(text: str, zones: dict) -> str | None:
-    tail = "\n".join((text or "").strip().splitlines()[-8:])
+    tail = _fold("\n".join((text or "").strip().splitlines()[-8:]))
     for zone, info in sorted(zones.items(), key=lambda kv: -len(kv[1]["area"])):
         area = info["area"]
-        if re.search(rf"\b{re.escape(area)}\b", tail, re.I):
+        if re.search(rf"\b{re.escape(_fold(area))}\b", tail):
             return zone
+    for zone, info in sorted(zones.items(), key=lambda kv: -len(kv[1]["area"])):
+        for alias in AREA_ALIASES.get(info["area"], ()):
+            if re.search(rf"\b{re.escape(_fold(alias))}\b", tail):
+                return zone
     return None
 
 
