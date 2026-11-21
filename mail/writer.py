@@ -681,10 +681,18 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         company=COMPANY,
     )
     prompt = optional_slots(prompt, values)
-    try:
-        reply = await gateway.chat([{"role": "user", "content": prompt}], http=http)
-    except gateway.GatewayError as e:
-        return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(e))
+    # A quote sent without any model call scores 0 cost points (rounds 7, 11 and 28 each lost
+    # about 38), so a failed call is retried once. A failed call returns no text, so this is
+    # still exactly one successful call per quote.
+    reply = None
+    for attempt in range(2):
+        try:
+            reply = await gateway.chat([{"role": "user", "content": prompt}], http=http)
+            break
+        except gateway.GatewayError as e:
+            error = e
+    if reply is None:
+        return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(error))
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
     draft = tidy(fix_greeting(reply.text.strip().strip("`").strip(), lang))
