@@ -353,8 +353,39 @@ class Orchestrator:
                 runner.cancel()
 
     async def wait_and_build(self, rfq: RFQ, state: SourcingState) -> Quote | None:
+        warned = False
         while True:
             pickup = await self.current_pickup(rfq)
+            elapsed = self.elapsed_s(rfq.received_at)
+            if pickup is None and rfq.door_pickup and state.options:
+                late = elapsed >= self.policy.wait_until_s
+                if late:
+                    estimate = getattr(self.pickup, "estimate", None)
+                    guess = estimate(rfq) if callable(estimate) else None
+                    if guess is not None:
+                        self.emit(
+                            Agent.RFQ,
+                            "pickup_estimate",
+                            EventStatus.WARN,
+                            f"No trucker price for request {rfq.mail_id} after {int(elapsed)} s. "
+                            f"Quoting with the cheapest earlier offer for this zone ({guess.total} EUR).",
+                            rfq.mail_id,
+                        )
+                        return await self.build_quote(rfq, state.options, guess)
+            if (
+                not warned
+                and elapsed >= 180
+                and (not state.options or (rfq.door_pickup and pickup is None))
+            ):
+                warned = True
+                self.emit(
+                    Agent.RFQ,
+                    "late",
+                    EventStatus.HOLD,
+                    f"Request {rfq.mail_id} has no quote after 3 minutes "
+                    f"({'no price' if not state.options else 'no pickup price'}). Take over now.",
+                    rfq.mail_id,
+                )
             verdict = decide(
                 self.policy,
                 elapsed_s=self.elapsed_s(rfq.received_at),

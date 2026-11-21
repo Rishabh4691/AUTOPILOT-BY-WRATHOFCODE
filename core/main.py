@@ -83,7 +83,12 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
             SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
             SheetPriceSource(),
         ],
-        pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
+        pickup=EmailTruckerPickupSource(
+            directory,
+            sender,
+            lambda: datetime.now(UTC),
+            history_path=settings.db_path.with_name("pickup_history.jsonl"),
+        ),
         writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),

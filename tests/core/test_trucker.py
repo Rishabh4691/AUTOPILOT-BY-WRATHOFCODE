@@ -90,11 +90,31 @@ async def test_request_sends_to_zone_truckers_only() -> None:
     assert len(sender.sent) == len(expected)
 
 
-@pytest.mark.parametrize(("door", "zone"), [(False, None), (True, None)])
-async def test_no_request_without_door_pickup_or_zone(door: bool, zone: str | None) -> None:
+async def test_no_request_without_door_pickup() -> None:
     trucker, sender = source()
-    await trucker.request(make_rfq(door, zone))
+    await trucker.request(make_rfq(False, None))
     assert sender.sent == []
+
+
+async def test_door_pickup_without_zone_asks_the_origin_airports_zone() -> None:
+    trucker, sender = source()
+    await trucker.request(make_rfq(True, None))
+    assert sender.sent and all("to DUS" in subject for _, subject, _ in sender.sent)
+
+
+async def test_estimate_uses_cheapest_earlier_offer_for_the_zone(tmp_path) -> None:
+    import json
+
+    history = tmp_path / "pickup_history.jsonl"
+    rows = [
+        {"zone": "40", "airport": "DUS", "trucker": "A", "total": "160.00", "currency": "EUR"},
+        {"zone": "40", "airport": "DUS", "trucker": "B", "total": "119.50", "currency": "EUR"},
+        {"zone": "60", "airport": "FRA", "trucker": "C", "total": "90.00", "currency": "EUR"},
+    ]
+    history.write_text("\n".join(json.dumps(r) for r in rows))
+    trucker = EmailTruckerPickupSource(DIRECTORY, FakeSender(), lambda: NOW, history_path=history)
+    guess = trucker.estimate(make_rfq(True, "40"))
+    assert guess is not None and guess.total == Decimal("119.50") and guess.source == "estimate"
 
 
 async def test_offer_parsed_by_subject_reference(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +224,8 @@ async def test_collect_waits_for_other_truckers_within_grace() -> None:
     source._answered[432].add("b@x")
     best = await source.collect(rfq)
     assert best is not None and best.total == Decimal("119.01")
+
+
 async def test_waits_for_slower_truckers_until_100_seconds() -> None:
     trucker, sender = source()
     rfq = make_rfq()

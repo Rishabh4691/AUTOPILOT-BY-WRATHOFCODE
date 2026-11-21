@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import logging
-import time
 import re
+import time
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from pydantic import ValidationError
@@ -129,10 +131,12 @@ class EmailTruckerPickupSource:
         directory: CarrierDirectory,
         sender: NewMailSender,
         now: Callable[[], datetime],
+        history_path: Path | None = None,
     ) -> None:
         self.directory = directory
         self.sender = sender
         self.now = now
+        self.history_path = history_path
         self._asked: dict[int, set[str]] = {}
         self._answered: dict[int, set[str]] = {}
         self._first_price_at: dict[int, float] = {}
@@ -140,10 +144,19 @@ class EmailTruckerPickupSource:
         self._sent_ids: dict[int, int] = {}
         self._prices: dict[int, list[PickupPrice]] = {}
 
+    def fallback_zone(self, rfq: RFQ) -> str | None:
+        zones = [z for z in self.directory.zones if z.airport == rfq.origin]
+        served = [z for z in zones if self.directory.truckers_for_zone(z.zone)]
+        return (served or zones)[0].zone if (served or zones) else None
+
     async def request(self, rfq: RFQ) -> None:
-        if not rfq.door_pickup or not rfq.pickup_zone or rfq.mail_id in self._asked:
+        if not rfq.door_pickup or rfq.mail_id in self._asked:
             return
-        zone_code = rfq.pickup_zone.strip()
+        zone_code = (rfq.pickup_zone or "").strip() or self.fallback_zone(rfq)
+        if not zone_code:
+            return
+        if not rfq.pickup_zone:
+            log.warning("pickup_zone_guessed", extra={"rfq": rfq.mail_id, "zone": zone_code})
         zone = self.directory.zone(zone_code)
         airport = zone.airport if zone else rfq.origin
         area = zone.area if zone else f"zone {zone_code}"
@@ -204,11 +217,61 @@ class EmailTruckerPickupSource:
             return
         self._prices.setdefault(rfq_id, []).append(price)
         self._first_price_at.setdefault(rfq_id, time.monotonic())
+        self.remember(price, rfq_id)
         log.info("trucker_offer_stored", extra={"rfq": rfq_id, "mail": mail.id})
 
     def all_answered(self, rfq_id: int) -> bool:
         asked = self._asked.get(rfq_id, set())
         return bool(asked) and asked <= self._answered.get(rfq_id, set())
+
+    def remember(self, price: PickupPrice, rfq_id: int) -> None:
+        if self.history_path is None:
+            return
+        zone = self.directory.zone(price.zone)
+        row = {
+            "zone": price.zone,
+            "airport": zone.airport if zone else None,
+            "trucker": price.trucker,
+            "total": str(price.total),
+            "currency": price.currency,
+            "rfq": rfq_id,
+            "ts": time.time(),
+        }
+        try:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.history_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row) + "\n")
+        except OSError as error:
+            log.warning("pickup_history_write_failed", extra={"error": type(error).__name__})
+
+    def history(self) -> list[dict]:
+        if self.history_path is None or not self.history_path.exists():
+            return []
+        out = []
+        for line in self.history_path.read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+        return out
+
+    def estimate(self, rfq: RFQ) -> PickupPrice | None:
+        zone_code = (rfq.pickup_zone or "").strip() or self.fallback_zone(rfq)
+        rows = [r for r in self.history() if r.get("currency") == "EUR"]
+        same_zone = [Decimal(r["total"]) for r in rows if r.get("zone") == zone_code]
+        same_airport = [Decimal(r["total"]) for r in rows if r.get("airport") == rfq.origin]
+        pool = same_zone or same_airport
+        if not pool:
+            return None
+        cheapest = min(pool)
+        return PickupPrice(
+            source="estimate",
+            trucker="estimate from earlier offers",
+            zone=zone_code or "",
+            total=cheapest,
+            currency="EUR",
+            received_at=self.now(),
+        )
 
     async def collect(self, rfq: RFQ) -> PickupPrice | None:
         prices = self._prices.get(rfq.mail_id)
