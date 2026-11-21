@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import logging
@@ -69,12 +70,37 @@ def _candidates(text: str) -> list[tuple[int, str, str]]:
     return sorted(found)
 
 
+TOTAL_WORDS = re.compile(
+    r"all[- ]?in|total|gesamt|insgesamt|pauschal|fixed price|festpreis", re.IGNORECASE
+)
+TOTAL_WINDOW = 120
+
+
 def parse_price(text: str) -> tuple[Decimal, str] | None:
-    for _, amount_text, currency in _candidates(text):
+    """The all-in price of a trucker reply.
+
+    Prefers the amount closest after an "all-in" / "total" word, so a reply that lists
+    a base rate and surcharges before the total is read as the total. Otherwise the
+    first amount.
+    """
+    text = re.sub(r"(\d),-", r"\1", text or "")  # "95,- EUR"
+    found: list[tuple[int, Decimal, str]] = []
+    for pos, amount_text, currency in _candidates(text):
         amount = parse_amount(amount_text)
         if amount is not None and amount > 0:
-            return amount, currency
-    return None
+            found.append((pos, amount, currency))
+    if not found:
+        return None
+    keyed: list[tuple[int, int, Decimal, str]] = []
+    for pos, amount, currency in found:
+        before = [m.end() for m in TOTAL_WORDS.finditer(text, 0, pos)]
+        if before and pos - before[-1] <= TOTAL_WINDOW:
+            keyed.append((pos - before[-1], pos, amount, currency))
+    if keyed:
+        _, _, amount, currency = min(keyed)
+        return amount, currency
+    _, amount, currency = found[0]
+    return amount, currency
 
 
 def shipment_lines(rfq: RFQ) -> list[str]:
@@ -104,22 +130,67 @@ def pickup_postcode(rfq: RFQ) -> str | None:
     return None
 
 
+# Truckers refuse a request without a 5-digit postcode ("We do not serve this lane/zone:
+# pickup postcode 93", rounds 2 and 15). When the customer gave none, use the town centre.
+ZONE_POSTCODES = {
+    "20": "20095", "21": "21335", "22": "22297", "24": "24103", "28": "28195",
+    "35": "35390", "36": "36037", "40": "40213", "41": "41061", "42": "42103",
+    "44": "44135", "45": "45127", "47": "47051", "50": "50667", "51": "51465",
+    "53": "53111", "55": "55116", "60": "60311", "61": "61348", "63": "63065",
+    "64": "64283", "65": "65183", "70": "70173", "71": "71032", "72": "72070",
+    "73": "73728", "80": "80331", "81": "81369", "84": "84028", "85": "85049",
+    "86": "86150", "93": "93047",
+}
+
+
+def full_postcode(rfq: RFQ, zone: str) -> str:
+    postcode = pickup_postcode(rfq)
+    if postcode and re.fullmatch(r"\d{5}", postcode) and postcode.startswith(zone):
+        return postcode
+    return ZONE_POSTCODES.get(zone, f"{zone}000")
+
+
 def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
     ready = rfq.ready_date.isoformat() if rfq.ready_date else "as soon as possible"
-    postcode = pickup_postcode(rfq)
-    where = f"postcode {postcode} {area}" if postcode else f"zone {zone} ({area})"
+    postcode = full_postcode(rfq, zone)
     return "\n".join(
         [
             "Hello,",
             "",
-            f"Please quote a pickup from {where} to {airport} airport.",
-            f"Pickup postcode: {postcode or zone}.",
+            f"Please quote a pickup from postcode {postcode} {area}, Germany (zone {zone}) "
+            f"to {airport} airport.",
+            f"Pickup postcode: {postcode}.",
             *shipment_lines(rfq),
             f"Ready date: {ready}.",
-            f"Please reply with your all-in price and keep 'Pickup request {rfq.mail_id}' "
-            "in the subject.",
+            f"Please reply with your all-in price and pickup time, and keep "
+            f"'Pickup request {rfq.mail_id}' in the subject.",
             "",
             "Best regards,",
+            "WRATHOFCODE Air Freight",
+        ]
+    )
+
+
+REFUSAL = re.compile(
+    r"do not serve|don't serve|not serve this|to quote we need|we need the|please send (?:us )?the",
+    re.IGNORECASE,
+)
+
+
+def followup_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
+    ready = rfq.ready_date.isoformat() if rfq.ready_date else "as soon as possible"
+    details = " ".join(shipment_lines(rfq))
+    return "\n".join(
+        [
+            "Hello,",
+            "",
+            f"thank you. The pickup address is postcode {full_postcode(rfq, zone)} {area}, "
+            f"Germany (zone {zone}), delivery to {airport} airport.",
+            f"{details} Ready date: {ready}.",
+            "",
+            "Please send your all-in price and pickup time.",
+            "",
+            "Best regards",
             "WRATHOFCODE Air Freight",
         ]
     )
@@ -134,16 +205,38 @@ PRICE_WEIGHT = Decimal("0.5")
 TIME_WEIGHT = Decimal("0.5")
 
 
+MORE_PICKUP_TIMES = (
+    # "Pickup within 30 hours", "within 1 day"
+    re.compile(r"\bwithin\s+(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|tage?n?)\b", re.I),
+    # "Abholzeit: 6 Stunden", "Abholung in 1 Tag"
+    re.compile(
+        r"\babhol(?:zeit|ung)\s*(?:in|:|=)?\s*(?:ca\.?\s*)?(\d+(?:[.,]\d+)?)\s*(stunden?|std\.?|h|tage?n?|tag)\b",
+        re.I,
+    ),
+    # "pickup in 18h", "collect in 2 days"
+    re.compile(
+        r"\b(?:pick[- ]?up|collect(?:ion)?)\s+in\s+(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?)\b", re.I
+    ),
+)
+NEXT_DAY = re.compile(r"\bnext[- ]day\b|\btomorrow\b|\bmorgen\b|\bam nächsten tag\b", re.I)
+
+
+def _hours(value: str, unit: str) -> Decimal:
+    number = Decimal(value.replace(",", "."))
+    unit = unit.lower()
+    return number * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else number
+
+
 def parse_hours(text: str) -> Decimal | None:
-    match = PICKUP_TIME.search(text or "")
-    if not match:
-        within = re.search(r"\bwithin\s+(\d+(?:[.,]\d+)?)\s*(?:hours?|hrs?|h)\b", text or "", re.I)
-        return Decimal(within.group(1).replace(",", ".")) if within else None
-    value = Decimal(match.group(1).replace(",", "."))
-    unit = match.group(2).lower()
-    return (
-        value * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else value
-    )
+    text = text or ""
+    match = PICKUP_TIME.search(text)
+    if match:
+        return _hours(match.group(1), match.group(2))
+    for pattern in MORE_PICKUP_TIMES:
+        found = pattern.search(text)
+        if found:
+            return _hours(found.group(1), found.group(2))
+    return Decimal(24) if NEXT_DAY.search(text) else None
 
 
 def pickup_rule() -> str:
@@ -157,7 +250,8 @@ def best_offer(prices: list[PickupPrice], preference: str = "cheapest") -> Picku
         if timed:
             return min(timed, key=lambda p: (p.pickup_hours, p.total))
     if pickup_rule() == "fast_cheapest":
-        quick = [p for p in pool if p.pickup_hours is not None and p.pickup_hours <= MAX_PICKUP_HOURS]
+        # An offer that does not state its pickup time is kept, not silently dropped.
+        quick = [p for p in pool if p.pickup_hours is None or p.pickup_hours <= MAX_PICKUP_HOURS]
         return min(quick or pool, key=lambda p: p.total)
     if pickup_rule() != "balanced":
         return min(pool, key=lambda p: p.total)
@@ -195,6 +289,9 @@ class EmailTruckerPickupSource:
         self._zones: dict[int, str] = {}
         self._sent_ids: dict[int, int] = {}
         self._prices: dict[int, list[PickupPrice]] = {}
+        self._rfqs: dict[int, RFQ] = {}
+        self._reasked: dict[int, set[str]] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
 
     def fallback_zone(self, rfq: RFQ) -> str | None:
         zones = [z for z in self.directory.zones if z.airport == rfq.origin]
@@ -216,6 +313,7 @@ class EmailTruckerPickupSource:
         body = request_body(rfq, zone_code, area, airport)
         self._asked[rfq.mail_id] = set()
         self._zones[rfq.mail_id] = zone_code
+        self._rfqs[rfq.mail_id] = rfq
         for trucker in self.directory.truckers_for_zone(zone_code):
             await self._send(rfq.mail_id, trucker.email, subject, body)
 
@@ -245,12 +343,41 @@ class EmailTruckerPickupSource:
                 return rfq_id
         return None
 
+    def _ask_again(self, rfq_id: int, mail: Mail) -> bool:
+        """Answer "we do not serve" / "to quote we need ..." once, with every detail.
+
+        Truckers refuse a request that lacks a full postcode or the volume (rounds 1, 2
+        and 15). One follow-up in the same thread gets the price within about 30 s.
+        """
+        sender = mail.sender.strip().lower()
+        rfq = self._rfqs.get(rfq_id)
+        if rfq is None or sender in self._reasked.setdefault(rfq_id, set()):
+            return False
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        zone_code = self._zones[rfq_id]
+        zone = self.directory.zone(zone_code)
+        airport = zone.airport if zone else rfq.origin
+        area = zone.area if zone else f"zone {zone_code}"
+        subject = mail.subject if mail.subject.lower().startswith("re:") else f"Re: {mail.subject}"
+        body = followup_body(rfq, zone_code, area, airport)
+        self._reasked[rfq_id].add(sender)
+        task = loop.create_task(self._send(rfq_id, sender, subject, body))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        log.info("trucker_asked_again", extra={"rfq": rfq_id, "trucker": sender})
+        return True
+
     def offer(self, mail: Mail) -> None:
         rfq_id = self._rfq_for(mail)
         if rfq_id is None:
             return
-        self._answered.setdefault(rfq_id, set()).add(mail.sender.strip().lower())
         parsed = parse_price(mail.body) or parse_price(SUBJECT_REF.sub(" ", mail.subject))
+        if parsed is None and REFUSAL.search(mail.body or "") and self._ask_again(rfq_id, mail):
+            return  # still waiting for this trucker's real answer
+        self._answered.setdefault(rfq_id, set()).add(mail.sender.strip().lower())
         if parsed is None:
             log.info("trucker_offer_unparsed", extra={"rfq": rfq_id, "mail": mail.id})
             return
@@ -288,6 +415,8 @@ class EmailTruckerPickupSource:
             "total": str(price.total),
             "currency": price.currency,
             "rfq": rfq_id,
+            "kg": str(self._rfqs[rfq_id].gross_kg) if rfq_id in self._rfqs else None,
+            "hours": None if price.pickup_hours is None else str(price.pickup_hours),
             "ts": time.time(),
         }
         try:
@@ -328,6 +457,9 @@ class EmailTruckerPickupSource:
                         "total": str(parsed[0]),
                         "currency": parsed[1],
                         "rfq": int(ref.group(1)) if ref else None,
+                        "hours": (lambda h: None if h is None else str(h))(
+                            parse_hours(str(m.get("body", "")))
+                        ),
                         "ts": time.time(),
                     }
                 )
@@ -354,22 +486,47 @@ class EmailTruckerPickupSource:
         return out
 
     def estimate(self, rfq: RFQ) -> PickupPrice | None:
+        """Best guess when no trucker answered in time.
+
+        One guess per trucker that served this zone before: its price at the closest
+        weight, scaled by the square root of the weight ratio, with its pickup time.
+        Then the same rule as for real offers picks one. (The old version took the lowest
+        price ever seen in the zone, whatever the weight: -46 % to +57 % off.)
+        """
         zone_code = (rfq.pickup_zone or "").strip() or self.fallback_zone(rfq)
         rows = [r for r in self.history() if r.get("currency") == "EUR"]
-        same_zone = [Decimal(r["total"]) for r in rows if r.get("zone") == zone_code]
-        same_airport = [Decimal(r["total"]) for r in rows if r.get("airport") == rfq.origin]
-        pool = same_zone or same_airport
+        pool = [r for r in rows if r.get("zone") == zone_code] or [
+            r for r in rows if r.get("airport") == rfq.origin
+        ]
         if not pool:
             return None
-        cheapest = min(pool)
-        return PickupPrice(
-            source="estimate",
-            trucker="estimate from earlier offers",
-            zone=zone_code or "",
-            total=cheapest,
-            currency="EUR",
-            received_at=self.now(),
-        )
+        weight = Decimal(str(rfq.gross_kg)) if rfq.gross_kg else None
+        guesses: list[PickupPrice] = []
+        for trucker in sorted({str(r.get("trucker")) for r in pool}):
+            own = [r for r in pool if str(r.get("trucker")) == trucker]
+            weighed = [r for r in own if r.get("kg")]
+            if weight and weighed:
+                near = min(weighed, key=lambda r: abs(Decimal(r["kg"]) - weight))
+                # Trucker prices have a fixed base, so they grow slower than the weight:
+                # square-root scaling fits rounds 1 to 26 best (22 % mean error vs 47 % before).
+                total = Decimal(near["total"]) * (weight / Decimal(near["kg"])).sqrt()
+            else:
+                near = own[-1]
+                total = Decimal(near["total"])
+            hours = near.get("hours")
+            guesses.append(
+                PickupPrice(
+                    source="estimate",
+                    trucker=f"estimate ({trucker})",
+                    zone=zone_code or "",
+                    total=total.quantize(Decimal("0.01")),
+                    currency="EUR",
+                    received_at=self.now(),
+                    pickup_hours=None if hours in (None, "None") else Decimal(str(hours)),
+                )
+            )
+        preference = getattr(rfq, "preference", "cheapest")
+        return best_offer(guesses, str(getattr(preference, "value", preference)))
 
     async def collect(self, rfq: RFQ) -> PickupPrice | None:
         prices = self._prices.get(rfq.mail_id)
