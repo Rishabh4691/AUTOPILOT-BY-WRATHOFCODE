@@ -206,3 +206,13 @@ def test_templates_have_no_dashes_or_curly_quotes(lang):
 async def test_greeting_line_is_always_set_by_code():
     e = await write_quote_email(RFQ, PRICE, http=gw(GOOD.replace("Hi [FIRST],", "Dear ANNA,")))
     assert e.body.startswith("Hi Anna,")
+
+
+async def test_customer_dates_and_postcodes_are_allowed_in_llm_text():
+    from mail.writer import facts, problems
+
+    rfq = dict(RFQ, customer_text="Pickup in 61391 Bad Homburg, ready on 2026-11-28.")
+    _, values = facts(rfq, PRICE)
+    draft = GOOD.replace("Speak soon.", "We'll collect in 61391 once it's ready on 2026-11-28. Speak soon.")
+    assert "model wrote digits" not in problems(draft, values, rfq["customer_text"])
+    assert "model wrote digits" in problems(draft.replace("61391", "99999"), values, rfq["customer_text"])

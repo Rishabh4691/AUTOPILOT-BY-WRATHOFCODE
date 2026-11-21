@@ -247,6 +247,7 @@ Body is 5 to 8 short lines in two or three small paragraphs. First line is exact
 Use these placeholders exactly as written; never write any digit or price yourself:
 [REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID] [PREF] [GOODS_LINE] [PICKUP_LINE] [VOLUME_NOTE]
 Write flowing sentences like a person, never a list of facts and never arrows. Must contain, in your own words: a short thanks; [GOODS_LINE] as written; that for the [PREF] routing you'd put their [PIECES] ([GROSS]) on [CARRIER] from [ROUTE]; [TRANSIT] transit and arrival around [ARRIVAL]; [PICKUP_LINE] as written; one all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; the rate holds until [VALID]; just reply yes and you'll book it; our reference is [REF].
+Reply like a person who actually read their message: if they asked something specific (earliest departure or arrival, one air waybill, pickup, documents), answer it in one short sentence using only the facts above; if they said something friendly or personal, answer it briefly and naturally; you may mention their goods, their buyer or their town in plain words. Match their tone: casual if they are casual, a touch more formal if they are formal.
 One reply, one decision: give only this single routing and this single price. Never mention alternatives, other routings, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively" or "or".
 The customer asked for the {pref} routing; you may say it is the {pref} one. Customer's message, for tone only:
 ---
@@ -296,14 +297,20 @@ def fix_greeting(draft: str, lang: str) -> str:
     return "\n".join(lines)
 
 
-def problems(draft: str, values: dict) -> list[str]:
+def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
     out = []
     if draft.count("[TOTAL]") != 1:
         out.append(f"[TOTAL] appears {draft.count('[TOTAL]')} times")
     if "[REF]" not in draft:
         out.append("no [REF]")
-    bare = re.sub(r"\[[A-Z]+\]", "", draft)
-    if re.search(r"\d", bare):
+    bare = re.sub(r"\[[A-Z_]+\]", "", draft)
+    allowed = {
+        number
+        for number in re.findall(r"\d+(?:[.,:/-]\d+)*", customer_text or "")
+        if len(number) >= 4 or re.search(r"[:/-]", number)
+    }
+    written = re.findall(r"\d+(?:[.,:/-]\d+)*", bare)
+    if any(number not in allowed for number in written) or MONEY.search(bare):
         out.append("model wrote digits")
     if re.search(r"\[[A-Za-z_ ]+\]", bare):
         out.append("unknown placeholder")
@@ -355,7 +362,7 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
     return out
 
 
-def snippet(text: str, limit=500) -> str:
+def snippet(text: str, limit=900) -> str:
     t = re.sub(r"\s+", " ", fresh_text(text or "")).strip()
     return t[:limit]
 
@@ -384,7 +391,7 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
     draft = fix_greeting(reply.text.strip().strip("`").strip(), lang)
-    issues = problems(draft, values)
+    issues = problems(draft, values, rfq.get("customer_text", ""))
     body = fill(draft, values)
     if not issues:
         issues = check_final(body, values, lang)
