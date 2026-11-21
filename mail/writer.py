@@ -122,7 +122,6 @@ Best fit is [CARRIER]: [TRANSIT] transit, arriving around [ARRIVAL].
 All-in price: [TOTAL].
 That covers [INCLUDED].
 The rate holds until [VALID]. Just reply yes and we'll book it.
-Happy to check another routing if timing or budget changes.
 
 Cheers,
 {agent}
@@ -135,7 +134,6 @@ Am besten passt [CARRIER]: [TRANSIT] Laufzeit, Ankunft etwa [ARRIVAL].
 All-in-Preis: [TOTAL].
 Enthalten sind [INCLUDED].
 Die Rate gilt bis [VALID]. Antworten Sie einfach mit Ja, dann buchen wir.
-Wenn sich Termin oder Budget ändern, schaue ich gern nach einer anderen Option.
 
 Viele Grüße
 {agent}
@@ -144,11 +142,10 @@ Viele Grüße
 
 merci pour votre demande, notre référence est [REF].
 [ROUTE], [PIECES], [GROSS] brut, [CHARGEABLE] taxable.
-La meilleure option est [CARRIER] : [TRANSIT] de transit, arrivée vers [ARRIVAL].
+Nous partons avec [CARRIER] : [TRANSIT] de transit, arrivée vers [ARRIVAL].
 Prix tout compris : [TOTAL].
 Cela inclut [INCLUDED].
 Le tarif est valable jusqu'au [VALID]. Répondez simplement oui et nous réservons.
-Si le délai ou le budget change, je regarde volontiers une autre option.
 
 Bien à vous,
 {agent}
@@ -157,11 +154,10 @@ Bien à vous,
 
 gracias por tu solicitud, nuestra referencia es [REF].
 [ROUTE], [PIECES], [GROSS] brutos, [CHARGEABLE] tasables.
-La mejor opción es [CARRIER]: [TRANSIT] de tránsito, llegada sobre el [ARRIVAL].
+Vamos con [CARRIER]: [TRANSIT] de tránsito, llegada sobre el [ARRIVAL].
 Precio todo incluido: [TOTAL].
 Incluye [INCLUDED].
 La tarifa vale hasta el [VALID]. Responde sí y lo reservamos.
-Si cambian los plazos o el presupuesto, miro encantada otra opción.
 
 Un saludo,
 {agent}
@@ -170,11 +166,10 @@ Un saludo,
 
 grazie per la richiesta, il nostro riferimento è [REF].
 [ROUTE], [PIECES], [GROSS] lordi, [CHARGEABLE] tassabili.
-L'opzione migliore è [CARRIER]: [TRANSIT] di transito, arrivo verso [ARRIVAL].
+Partiamo con [CARRIER]: [TRANSIT] di transito, arrivo verso [ARRIVAL].
 Prezzo tutto incluso: [TOTAL].
 Comprende [INCLUDED].
 La tariffa vale fino al [VALID]. Rispondi sì e prenotiamo.
-Se cambiano tempi o budget, controllo volentieri un'altra opzione.
 
 Un saluto,
 {agent}
@@ -187,7 +182,6 @@ Najlepiej pasuje [CARRIER]: [TRANSIT] tranzytu, przylot około [ARRIVAL].
 Cena all-in: [TOTAL].
 Obejmuje [INCLUDED].
 Stawka jest ważna do [VALID]. Wystarczy odpisać tak, a zarezerwujemy.
-Jeśli zmieni się termin lub budżet, chętnie sprawdzę inną opcję.
 
 Pozdrawiam,
 {agent}
@@ -200,8 +194,9 @@ Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this fin
 Body is 6 to 10 short lines. Greet with "{greeting} [FIRST]," on the first line, then a blank line. [PIECES] already includes its unit word.
 Use these placeholders exactly as written; never write any digit or price yourself:
 [REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID]
-Must contain, in your own words: thanks, and that our reference is [REF]; [ROUTE]; [PIECES], [GROSS] gross and [CHARGEABLE] chargeable; [CARRIER], [TRANSIT] and arrival [ARRIVAL]; one all-in price [TOTAL] (exactly once); what it includes: [INCLUDED]; valid until [VALID]; tell them to just reply yes and we'll book it; one light line offering to check a {other} option, with no price.
-This is the {pref} option. Customer's message, for tone only:
+Must contain, in your own words: thanks, and that our reference is [REF]; [ROUTE]; [PIECES], [GROSS] gross and [CHARGEABLE] chargeable; [CARRIER], [TRANSIT] and arrival [ARRIVAL]; one all-in price [TOTAL] (exactly once); what it includes: [INCLUDED]; valid until [VALID]; tell them to just reply yes and we'll book it.
+One reply, one decision: give only this single routing and this single price. Never mention alternatives, other routings, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively" or "or".
+The customer asked for the {pref} routing; you may say it is the {pref} one. Customer's message, for tone only:
 ---
 {snippet}
 ---
@@ -243,11 +238,40 @@ def problems(draft: str, values: dict) -> list[str]:
     return out
 
 
-def check_final(body: str, values: dict) -> list[str]:
+ALTERNATIVES = {
+    "all": r"alternativ|\boptions?\b|\bor we can\b|\binsurance\b|\bcheaper\b|\bfaster\b|\banother (routing|carrier|quote|offer)\b|\b(check|look into|compare)\b",
+    "en": r"\bor\b",
+    "de": r"\boder\b|versicherung|günstiger|schneller|\bandere[nsr]? (option|route|möglichkeit|angebot)|\bmöglichkeit",
+    "fr": r"\bou\b|assurance|moins cher|plus rapide|\bautre (option|solution|offre)|\bsolution",
+    "es": r"\bo\b|opci[oó]n|seguro\b|más barat|más rápid|\botra (ruta|oferta)",
+    "it": r"\bo\b|\boppure\b|opzion|assicura|più economic|più velo|\baltra (rotta|offerta)",
+    "pl": r"\blub\b|\balbo\b|opcj|ubezpiecz|taniej|szybciej|\binn[aąey] (ofert|tras)",
+}
+
+
+def alternatives(body: str, lang: str) -> list[str]:
+    found = []
+    for key in ("all", lang):
+        pattern = ALTERNATIVES.get(key)
+        if pattern:
+            found += [m.group(0) for m in re.finditer(pattern, body, re.I)]
+    return found
+
+
+def preference(value) -> str:
+    v = str(value or "").lower()
+    return "fastest" if v.startswith(("fast", "quick", "express", "urgent", "schnell", "rapid", "veloc", "szyb")) else "cheapest"
+
+
+def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
+    out = []
     totals = MONEY.findall(body)
     if len(totals) != 1 or values["TOTAL"] not in body:
-        return [f"expected exactly one total, found {totals}"]
-    return []
+        out.append(f"expected exactly one total, found {totals}")
+    alt = alternatives(body.replace(values.get("CARRIER", ""), ""), lang)
+    if alt:
+        out.append(f"offers an alternative: {sorted(set(a.lower() for a in alt))}")
+    return out
 
 
 def snippet(text: str, limit=500) -> str:
@@ -264,11 +288,10 @@ def template(lang: str, values: dict) -> str:
 async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     lang, values = facts(rfq, price)
     subject = reply_subject(rfq.get("subject") or f"Air freight quote {rfq['origin']}-{rfq['destination']}")
-    pref = (rfq.get("preference") or price.get("option") or "cheapest").lower()
+    pref = preference(rfq.get("preference"))
     prompt = PROMPT.format(
         language=LANG_NAMES.get(lang, "English"),
         greeting=GREETING.get(lang, "Hi"),
-        other="faster" if pref.startswith("cheap") else "cheaper",
         pref=pref,
         snippet=snippet(rfq.get("customer_text", "")),
         signoff=SIGNOFF.get(lang, "Cheers,"),
@@ -287,7 +310,7 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     issues = problems(draft, values)
     body = fill(draft, values)
     if not issues:
-        issues = check_final(body, values)
+        issues = check_final(body, values, lang)
     if issues:
         body = template(lang, values)
     store.log_event(

@@ -5,7 +5,7 @@ import pytest
 
 from mail import store, writer
 from mail.config import settings
-from mail.writer import MONEY, TEMPLATES, check_final, facts, template, write_quote_email
+from mail.writer import MONEY, TEMPLATES, alternatives, check_final, facts, preference, template, write_quote_email
 
 RFQ = {
     "id": "RFQ-1",
@@ -37,7 +37,7 @@ For [ROUTE] with [PIECES], [GROSS] gross and [CHARGEABLE] chargeable, I'd go wit
 That's [TRANSIT] in transit, landing around [ARRIVAL].
 All-in you're looking at [TOTAL], which covers [INCLUDED].
 The rate holds until [VALID], so just reply yes and we'll book it.
-If timing gets tight, I'm happy to look at a faster option too.
+Speak soon.
 
 Cheers,
 Lena
@@ -135,3 +135,51 @@ def test_usd_total():
     _, values = facts(RFQ, {**PRICE, "currency": "USD", "total": 2050})
     body = template("en", values)
     assert "USD 2,050.00" in body and one_total(body, "USD")
+
+
+FORBIDDEN = re.compile(r"alternativ|\boptions?\b|\bor we can\b|\bor\b|opci[oó]n|opzion|opcj|insurance", re.I)
+
+
+def assert_one_decision(body, lang="en"):
+    assert len(MONEY.findall(body)) == 1, f"more than one price: {MONEY.findall(body)}"
+    assert not FORBIDDEN.search(body), f"offers an alternative: {FORBIDDEN.search(body).group(0)!r}"
+    assert not alternatives(body.replace(PRICE["carrier"], ""), lang)
+
+
+@pytest.mark.parametrize("lang", ["en", "de", "fr", "es", "it", "pl"])
+def test_templates_give_one_reply_one_decision(lang):
+    _, values = facts({**RFQ, "language": lang}, PRICE)
+    assert_one_decision(template(lang, values), lang)
+
+
+async def test_llm_email_gives_one_reply_one_decision():
+    e = await write_quote_email(RFQ, PRICE, http=gw(GOOD))
+    assert e.fallback_reason is None
+    assert_one_decision(e.body)
+
+
+@pytest.mark.parametrize("extra", [
+    "Alternatively, we could ship via DXB.",
+    "If you prefer, there is another option via FRA.",
+    "Or we can look at a faster routing.",
+    "We can also add insurance if you like.",
+    "Happy to check a cheaper carrier as well.",
+])
+async def test_alternative_in_llm_draft_is_replaced(extra):
+    draft = GOOD.replace("Speak soon.", extra)
+    e = await write_quote_email(RFQ, PRICE, http=gw(draft))
+    assert e.fallback_reason and "alternative" in e.fallback_reason
+    assert_one_decision(e.body)
+
+
+def test_second_price_is_caught():
+    _, values = facts(RFQ, PRICE)
+    body = template("en", values) + "\nExpress would be EUR 1,900.00."
+    assert check_final(body, values)
+    with pytest.raises(AssertionError):
+        assert_one_decision(body)
+
+
+@pytest.mark.parametrize("asked,want", [(None, "cheapest"), ("", "cheapest"), ("cheapest", "cheapest"), ("best price", "cheapest"), ("fastest", "fastest"), ("urgent", "fastest"), ("express", "fastest")])
+def test_default_preference_is_cheapest(asked, want):
+    assert preference(asked) == want
