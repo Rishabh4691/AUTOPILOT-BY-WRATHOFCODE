@@ -158,9 +158,10 @@ async def test_real_rfq_276_takes_origin_from_pickup_zone() -> None:
             encoding="utf-8"
         )
     )
-    rfq, usage = await Extractor(settings_for(environ={"FIVEU_API_KEY": "k"}), None).extract(
-        parse(raw)
-    )
+    from tests.kit_root import KIT
+
+    environ = {"FIVEU_API_KEY": "k", "KIT_DIR": str(KIT)}
+    rfq, usage = await Extractor(settings_for(environ=environ), None).extract(parse(raw))
     assert (rfq.origin, rfq.destination) == ("CGN", "ORD")
     assert rfq.door_pickup and rfq.pickup_zone == "51"
     assert str(rfq.gross_kg) == "676.00"

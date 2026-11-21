@@ -6,11 +6,19 @@ import pytest
 from core.agents.mailbox import parse_mail
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.contracts import Preference
-from mail.config import ROOT
+from mail import kit
+from mail.config import settings as mail_settings
+from tests.kit_root import KIT, needs_kit
 
-needs_kit = pytest.mark.skipif(
-    not (ROOT / "data" / "kit" / "carrier-list.csv").exists(), reason="start kit not downloaded"
-)
+
+@pytest.fixture(autouse=True)
+def kit_settings(monkeypatch):
+    monkeypatch.setattr(kit, "settings", mail_settings.__class__(kit_dir=KIT))
+    kit.carriers.cache_clear()
+    kit.pickup_zones.cache_clear()
+    yield
+    kit.carriers.cache_clear()
+    kit.pickup_zones.cache_clear()
 
 
 class Fallback:

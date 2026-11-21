@@ -3,11 +3,11 @@ from decimal import Decimal
 import pytest
 
 from mail import kit
-from mail.config import ROOT, settings
+from mail.config import settings
 from mail.extract import extract
+from tests.kit_root import KIT, needs_kit
 
-KIT = ROOT / "data" / "kit"
-pytestmark = pytest.mark.skipif(not (KIT / "carrier-list.csv").exists(), reason="start kit not downloaded")
+pytestmark = needs_kit
 
 
 @pytest.fixture(autouse=True)

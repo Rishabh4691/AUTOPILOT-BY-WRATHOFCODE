@@ -4,10 +4,8 @@ import pytest
 
 from mail import extract as ex
 from mail import kit
-from mail.config import ROOT, settings
-
-KIT = ROOT / "data" / "kit"
-needs_kit = pytest.mark.skipif(not (KIT / "carrier-list.csv").exists(), reason="start kit not downloaded")
+from mail.config import settings
+from tests.kit_root import KIT, needs_kit
 
 
 @pytest.fixture(autouse=True)
