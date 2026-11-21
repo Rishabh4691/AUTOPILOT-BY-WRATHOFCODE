@@ -624,7 +624,20 @@ def zone_from_signature(text: str, zones: dict) -> str | None:
         area = info["area"]
         if re.search(rf"\b{re.escape(area)}\b", tail, re.I):
             return zone
+    for city, zone in NEAREST_ZONE.items():
+        if zone in zones and re.search(rf"\b{re.escape(city)}\b", tail, re.I):
+            return zone
     return None
+
+
+NEAREST_ZONE = {
+    "nuremberg": "93", "nürnberg": "93", "nuernberg": "93", "erlangen": "93", "fürth": "93",
+    "fuerth": "93", "bamberg": "93", "würzburg": "63", "wuerzburg": "63", "ulm": "73",
+    "karlsruhe": "70", "freiburg": "72", "mannheim": "64", "heidelberg": "64", "kassel": "35",
+    "hannover": "28", "hanover": "28", "lübeck": "24", "luebeck": "24", "münster": "44",
+    "muenster": "44", "bielefeld": "44", "aachen": "50", "koblenz": "53", "trier": "53",
+    "saarbrücken": "55", "saarbruecken": "55", "augsburg": "86", "rosenheim": "81",
+}
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
