@@ -242,6 +242,10 @@ class Orchestrator:
         if kind is MailKind.RFQ:
             self.accept_rfq(mail)
             return
+        if kind is MailKind.OTHER and mail.in_reply_to is None and not mail.references:
+            task = asyncio.create_task(self.rescue_unknown(mail), name=f"rescue-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
         if self.dg is not None and kind is MailKind.FOLLOW_UP:
             task = asyncio.create_task(self.dg.on_reply(self, mail), name=f"dg-{mail.id}")
             self.tasks.add(task)
@@ -279,6 +283,40 @@ class Orchestrator:
             EventStatus.INFO,
             f"Mail {mail.id} sorted as {kind.value.replace('_', ' ')}: {classification.reason}",
             rfq_id=mail.thread_root_id if kind is MailKind.FOLLOW_UP else None,
+        )
+
+    async def rescue_unknown(self, mail: Mail) -> None:
+        """A new mail no rule recognised. Quote it only if the rules alone read a real shipment from it."""
+        from core.agents.rules_extractor import RulesFirstExtractor
+
+        class RulesOnly:
+            async def extract(self, _mail: Mail) -> Any:
+                raise LookupError("no shipment")
+
+        rfq = None
+        try:
+            reader = RulesFirstExtractor(RulesOnly(), attachments=getattr(self.extractor, "attachments", None))
+            rfq, _ = await reader.extract(mail)
+        except Exception:
+            rfq = None
+        if rfq is not None and rfq.destination and rfq.gross_kg and rfq.gross_kg > 0:
+            self.emit(
+                Agent.ROUTER,
+                "rescued",
+                EventStatus.WARN,
+                f"Mail {mail.id} from {mail.sender} matched no rule but reads as a request "
+                f"({rfq.origin} to {rfq.destination}, {rfq.gross_kg} kg). Quoting it.",
+                mail.id,
+            )
+            self.accept_rfq(mail)
+            return
+        self.emit(
+            Agent.ROUTER,
+            "unknown_mail",
+            EventStatus.HOLD,
+            f"Mail {mail.id} from {mail.sender} ('{mail.subject[:80]}') is not a request and was not answered. "
+            "A person should look at it if it could be a new kind of case.",
+            mail.id,
         )
 
     async def offer_with_attachments(self, offer: Any, mail: Mail) -> None:
