@@ -18,6 +18,7 @@ from core.agents.extractor import RegexRfqExtractor
 from core.agents.human_writer import HumanEmailWriter
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
 from core.agents.portal import PortalPriceSource
+from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
@@ -26,7 +27,7 @@ from core.llm import GatewayLlmClient
 from core.orchestrator import Orchestrator
 from core.outbound import DirectoryMailSender
 from core.store import SqliteEventSink, Store
-from mail.poller import AlreadyRunning, single_instance
+from mail.lock import AlreadyRunning, single_instance
 
 log = logging.getLogger("core.main")
 
@@ -70,7 +71,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         store=store,
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
-        extractor=RegexRfqExtractor(settings, llm),
+        extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm)),
         sources=[
             PortalPriceSource(client, settings, lambda: datetime.now(UTC)),
             SheetPriceSource(),

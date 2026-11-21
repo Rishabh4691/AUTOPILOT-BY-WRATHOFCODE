@@ -3,7 +3,7 @@ import re
 import httpx
 import pytest
 
-from mail import store, writer
+from mail import writer
 from mail.config import settings
 from mail.writer import MONEY, TEMPLATES, alternatives, check_final, facts, preference, template, write_quote_email
 
@@ -42,12 +42,6 @@ Speak soon.
 Cheers,
 Lena
 WRATHOFCODE Air Freight"""
-
-
-@pytest.fixture(autouse=True)
-def db(tmp_path, monkeypatch):
-    monkeypatch.setattr(store, "settings", settings.__class__(db_path=tmp_path / "app.db"))
-    store._ready.clear()
 
 
 def gw(text=None, status=200, calls=None):
@@ -103,9 +97,7 @@ async def test_bad_llm_draft_falls_back_to_template(bad):
 async def test_gateway_down_still_gives_clean_email():
     e = await write_quote_email(RFQ, PRICE, http=gw(status=503))
     assert not e.used_llm and e.cost_usd == 0
-    assert one_total(e.body)
-    with store.connect() as db:
-        assert db.execute("SELECT status FROM events WHERE step='write'").fetchone()[0] == "fail"
+    assert one_total(e.body) and e.fallback_reason
 
 
 @pytest.mark.parametrize("lang,total", [

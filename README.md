@@ -87,7 +87,7 @@ Every step writes one row to `events` and streams live to the UI, so we can see 
 git clone https://github.com/Rishabh4691/WRATHOFCODE.git && cd WRATHOFCODE
 cp .env.example .env                     # team key goes in FIVEU_API_KEY
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # everything: bot, sourcing, API, tests
 
 uvicorn api.main:app --port 8000         # control room API, reads app.db
 FAKE_DATA=1 uvicorn api.main:app --port 8000   # same, with demo traffic in fake.db
@@ -122,15 +122,16 @@ Productivity = 50% success rate + 30% speed (vs. a per-agent target) + 20% low L
 
 ```
 .
-├── core/      # orchestrator, state machine, pricing (Amaan)
-├── mail/      # poller, router, extraction, email writer, tracking (Aditi)
-├── data/      # rate sheets, portal client, bids, booking, tariffs (Aryan)
-├── api/       # FastAPI + server-sent events over app.db (Rishabh)
-├── ui/        # React + Vite + Tailwind: Agent Control Room (Rishabh)
-├── tests/     # pytest: API now, pricing next
-├── schema.sql # shared app.db tables
-├── docs/      # battle plan and challenge brief
-└── scripts/   # helper scripts (secret scan, …)
+├── core/       # the live bot: orchestrator, pricing, mailbox, classifier, portal, trucker (Amaan)
+├── sourcing/   # rate sheets, portal client, bids, booking, tariff ingestion (Aryan)
+├── mail/       # rules extraction, human email writer, gateway call, bot lock (Rishabh)
+├── api/        # FastAPI + server-sent events over app.db (Rishabh)
+├── ui/         # React + Vite + Tailwind: Agent Control Room (Rishabh)
+├── data/       # tariffs.json; kit/ and app.db stay local
+├── tests/      # pytest: core/, sourcing/, mail and api tests
+├── scripts/    # kit download, dry replay, secret scan
+├── docs/       # battle plan, API spec, mailbox, portal, kit, sourcing notes
+└── schema.sql  # shared rfqs and events tables
 ```
 
 Shared state: a single SQLite `app.db` (WAL mode) with tables `rfqs` and `events`
@@ -145,10 +146,10 @@ _Last updated: Sat 21 Nov 2026_
 - [x] Control room: API + UI, live stream, take over, fake-data mode
 - [x] Core bot (Amaan, `core/`): poll, classify, extract, portal prices, trucker pickup, pick cheapest/fastest, one LLM call, reply in thread, outbox guard, supervisor
 - [x] Sourcing (Aryan, `sourcing/`): 10 rate sheets in `data/tariffs.json`, portal client, bids, booking, tariff ingestion
-- [x] Mail layer (Rishabh, `mail/`): client, poller, router, extraction, human email writer, single sender
+- [x] Mail layer (Rishabh, `mail/`): rules extraction (no LLM for most RFQs), human email writer
 - [x] Sheet prices feed the core bot (`core/agents/sheets.py`), so sheet-only airlines are quoted
 - [x] Human email writer in the core bot (`core/agents/human_writer.py`): greeting by name, customer's language, one price, numbers set by code
-- [x] One bot per machine (shared `data/bot.lock`)
+- [x] One bot per machine (`data/bot.lock`); duplicate second bot removed
 
 **Missing (by priority)**
 - [ ] Accept -> book by rate ID -> confirmation in thread (core ignores "yes" today; `sourcing.book_option` + `mail.sender` are ready)

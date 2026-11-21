@@ -3,8 +3,7 @@ from decimal import Decimal
 import pytest
 
 from mail import extract as ex
-from mail import kit, store
-from mail.client import Mail
+from mail import kit
 from mail.config import ROOT, settings
 
 KIT = ROOT / "data" / "kit"
@@ -13,20 +12,13 @@ needs_kit = pytest.mark.skipif(not (KIT / "carrier-list.csv").exists(), reason="
 
 @pytest.fixture(autouse=True)
 def env(tmp_path, monkeypatch):
-    s = settings.__class__(db_path=tmp_path / "app.db", kit_dir=KIT)
-    for mod in (store, kit):
-        monkeypatch.setattr(mod, "settings", s)
+    monkeypatch.setattr(kit, "settings", settings.__class__(kit_dir=KIT))
     kit.carriers.cache_clear()
     kit.pickup_zones.cache_clear()
-    store._ready.clear()
 
 
-def mail(body, subject="Request", sender="Anna Kowalska <anna.kowalska@customer.mail>", i=1):
-    return Mail.model_validate({"id": i, "from": sender, "subject": subject, "body": body})
-
-
-def run(body, **kw):
-    return ex.extract(mail(body, **kw), "RFQ-1")
+def run(body, subject="Request", sender="Anna Kowalska <anna.kowalska@customer.mail>"):
+    return ex.extract(subject, body, sender, "RFQ-1")
 
 
 @needs_kit
@@ -131,15 +123,15 @@ def test_quoted_history_is_ignored():
 
 
 @needs_kit
-def test_save_rfq_writes_row_and_event():
-    m = mail("Quote MUC to JFK, 3 pallets 120x80x100 cm, total 450 kg", i=77)
-    x = ex.extract(m, "RFQ-77")
-    ex.save_rfq(m, "RFQ-77", x)
-    with store.connect() as db:
-        row = db.execute("SELECT status, origin, destination, chargeable_kg, thread_id FROM rfqs WHERE id='RFQ-77'").fetchone()
-        ev = db.execute("SELECT agent, step, status FROM events").fetchone()
-    assert tuple(row) == ("EXTRACTED", "MUC", "JFK", 481.0, "77")
-    assert tuple(ev) == ("rfq", "extract", "start")
+def test_preference_stated_or_assumed():
+    assert run("Quote MUC to JFK, 1 box 40x40x40 cm, 12 kg, cheapest please").preference_stated
+    assert not run("Quote MUC to JFK, 1 box 40x40x40 cm, 12 kg").preference_stated
+
+
+def test_first_name_from_display_name_or_address():
+    assert ex.find_first_name("Anna Kowalska <a.k@x.mail>", "no sign-off") == "Anna"
+    assert ex.find_first_name("lukas.weber@x.mail", "") == "Lukas"
+    assert ex.find_first_name("info@x.mail", "") == ""
 
 
 def test_number_formats():

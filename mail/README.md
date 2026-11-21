@@ -1,15 +1,9 @@
 # mail
 
-Owner: Aditi
+Helpers the core bot uses for the customer-facing parts. The bot itself is `core/` (`python -m core.main`).
 
-Mailbox poller, router, RFQ extraction, email writer, tracking replies.
-
-## LLM budget (this is the only place we call the gateway)
-
-- One call per quote, nothing else. Router and extraction are rules/regex.
-- Smallest gateway model. `max_tokens` around 250, `temperature` 0.4.
-- Prompt is short: the price facts as compact JSON plus the customer's last message
-  (trimmed, no quoted history, no signatures). Target under 600 input tokens.
-- No few-shot examples in the prompt, no retries that call the LLM again.
-- If the gateway fails, send a template email and log `llm_cost_usd = 0`.
-- Log tokens and cost on every call to `events.llm_cost_usd`.
+- `extract.py`: rule-based RFQ extraction (lane, pieces, cm/mm/in, kg/lb, cheapest/fastest, pickup zone, first name, language). Runs first via `core/agents/rules_extractor.py`, so most RFQs need no LLM call for extraction.
+- `writer.py`: the quote email. One gateway call writes the words with placeholders, code fills in every number. Rejects drafts with a second price, alternatives, stiff phrases or emojis and falls back to a template in the customer's language.
+- `gateway.py`: the one chat call, with `reasoning_effort` per model so the token cap is spent on the email.
+- `lang.py`, `text.py`: language detection, quoted-history stripping, reply subjects.
+- `lock.py`: one bot per machine (`data/bot.lock`).

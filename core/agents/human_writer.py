@@ -8,9 +8,8 @@ import httpx
 from core.contracts import RFQ, LlmUsage, PriceOption
 from core.pricing.weight import chargeable_kg
 from mail import lang
-from mail.client import Mail
 from mail.extract import find_first_name
-from mail.router import fresh_text
+from mail.text import fresh_text
 from mail.writer import write_quote_email
 
 log = logging.getLogger("core.human_writer")
@@ -28,17 +27,18 @@ class HumanEmailWriter:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
-    async def _original(self, rfq: RFQ) -> Mail | None:
+    async def _original(self, rfq: RFQ) -> dict:
         try:
             r = await self.client.get(f"/v1/mailbox/messages/{rfq.mail_id}", timeout=5)
             r.raise_for_status()
-            return Mail.model_validate(r.json())
+            data = r.json()
+            return data if isinstance(data, dict) else {}
         except Exception as error:
             log.warning(
                 "original_mail_unavailable",
                 extra={"rfq": rfq.mail_id, "error": type(error).__name__},
             )
-            return None
+            return {}
 
     def _chargeable(self, rfq: RFQ, option: PriceOption) -> Decimal:
         if option.breakdown and option.breakdown.chargeable_kg:
@@ -63,12 +63,13 @@ class HumanEmailWriter:
     async def write(
         self, rfq: RFQ, option: PriceOption, total: Decimal, currency: str
     ) -> tuple[str, LlmUsage | None]:
-        mail = await self._original(rfq)
-        body = mail.body if mail else ""
+        original = await self._original(rfq)
+        body = str(original.get("body") or "")
+        sender = str(original.get("from") or rfq.customer)
         rfq_dict = {
             "id": str(rfq.mail_id),
             "reference": f"WOC-{rfq.mail_id}",
-            "first_name": find_first_name(mail, body) if mail else "",
+            "first_name": find_first_name(sender, body),
             "language": lang.detect(fresh_text(body) or rfq.subject),
             "origin": rfq.origin,
             "destination": rfq.destination,

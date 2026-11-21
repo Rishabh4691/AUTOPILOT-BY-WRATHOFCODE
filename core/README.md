@@ -1,10 +1,7 @@
 # core
 
-Owner: Amaan
+The live bot (Amaan). `python -m core.main`, `DRY_RUN=1` logs instead of sending, `touch data/STOP` stops it.
 
-Orchestrator and pricing. Runs the per-RFQ state machine
-(NEW → EXTRACTED → SOURCING → PRICED → QUOTED → ACCEPTED → BOOKED → TRACKING),
-picks the option the customer asked for, decides when to stop waiting for bids,
-and owns the outbox (one quote per thread).
+Poll mailbox -> classify -> extract (rules first, LLM only if fields are missing) -> price from the portal and the rate sheets, plus trucker pickup for door-to-port -> pick cheapest or fastest -> one LLM call writes the email -> one reply in the customer's thread (outbox guard per thread and stage).
 
-Pricing rules live here and are tested in `tests/`. No LLM calls in this folder.
+Adapters that connect the other layers: `agents/sheets.py` (Aryan's sheet prices), `agents/rules_extractor.py` and `agents/human_writer.py` (mail layer).
