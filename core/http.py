@@ -71,6 +71,10 @@ async def request(
             if response.status_code not in retry_statuses:
                 return response
             wait = retry_after_seconds(response) or backoff_seconds(attempt)
+            if response.status_code == 429:
+                # Retrying exactly on Retry-After kept the mailbox locked for 10 minutes (round 63):
+                # each early retry restarts the "one poll per 5 seconds" window. Wait clearly longer.
+                wait = max(wait, 5.0) + 2.0 + random.random()
             log.warning("http_retryable_status", extra={"url": url, "status": response.status_code})
             if attempt + 1 >= max_attempts:
                 raise HttpGiveUp(
