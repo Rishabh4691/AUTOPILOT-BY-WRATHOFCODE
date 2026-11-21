@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from core.agents.directory import load_directory
+import core.agents.trucker as trucker_module
 from core.agents.trucker import EmailTruckerPickupSource, parse_price
 from core.contracts import RFQ, Mail, Piece, Preference
 
@@ -96,7 +97,8 @@ async def test_no_request_without_door_pickup_or_zone(door: bool, zone: str | No
     assert sender.sent == []
 
 
-async def test_offer_parsed_by_subject_reference() -> None:
+async def test_offer_parsed_by_subject_reference(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
     trucker, _ = source()
     rfq = make_rfq()
     await trucker.request(rfq)
@@ -113,7 +115,8 @@ async def test_offer_parsed_by_subject_reference() -> None:
     )
 
 
-async def test_offer_parsed_by_in_reply_to() -> None:
+async def test_offer_parsed_by_in_reply_to(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(trucker_module, "PICKUP_GRACE_S", 0.0)
     trucker, sender = source()
     rfq = make_rfq()
     await trucker.request(rfq)

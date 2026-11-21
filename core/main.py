@@ -18,7 +18,7 @@ from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
 from core.agents.human_writer import HumanEmailWriter
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
-from core.agents.portal import PortalPriceSource
+from core.agents.sourcing_adapter import SourcingPortalPriceSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
@@ -75,7 +75,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         classifier=RuleClassifier(settings, directory),
         extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm)),
         sources=[
-            PortalPriceSource(client, settings, lambda: datetime.now(UTC)),
+            SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
             SheetPriceSource(),
         ],
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),

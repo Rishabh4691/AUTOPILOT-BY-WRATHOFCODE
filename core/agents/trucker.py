@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import re
 from collections.abc import Callable
 from datetime import datetime
@@ -12,6 +13,8 @@ from pydantic import ValidationError
 from core.agents.directory import CarrierDirectory
 from core.contracts import RFQ, Mail, PickupPrice
 from core.pricing.weight import volume_cbm
+
+PICKUP_GRACE_S = 8.0
 
 log = logging.getLogger("core.agents.trucker")
 
@@ -130,6 +133,8 @@ class EmailTruckerPickupSource:
         self.sender = sender
         self.now = now
         self._asked: dict[int, set[str]] = {}
+        self._answered: dict[int, set[str]] = {}
+        self._first_price_at: dict[int, float] = {}
         self._zones: dict[int, str] = {}
         self._sent_ids: dict[int, int] = {}
         self._prices: dict[int, list[PickupPrice]] = {}
@@ -178,6 +183,7 @@ class EmailTruckerPickupSource:
         rfq_id = self._rfq_for(mail)
         if rfq_id is None:
             return
+        self._answered.setdefault(rfq_id, set()).add(mail.sender.strip().lower())
         parsed = parse_price(mail.body) or parse_price(SUBJECT_REF.sub(" ", mail.subject))
         if parsed is None:
             log.info("trucker_offer_unparsed", extra={"rfq": rfq_id, "mail": mail.id})
@@ -196,11 +202,18 @@ class EmailTruckerPickupSource:
             log.info("trucker_offer_invalid", extra={"rfq": rfq_id, "mail": mail.id})
             return
         self._prices.setdefault(rfq_id, []).append(price)
+        self._first_price_at.setdefault(rfq_id, time.monotonic())
         log.info("trucker_offer_stored", extra={"rfq": rfq_id, "mail": mail.id})
+
+    def all_answered(self, rfq_id: int) -> bool:
+        asked = self._asked.get(rfq_id, set())
+        return bool(asked) and asked <= self._answered.get(rfq_id, set())
 
     async def collect(self, rfq: RFQ) -> PickupPrice | None:
         prices = self._prices.get(rfq.mail_id)
         if not prices:
             return None
-        currency = prices[0].currency
-        return min((p for p in prices if p.currency == currency), key=lambda p: p.total)
+        waited = time.monotonic() - self._first_price_at.get(rfq.mail_id, 0.0)
+        if not self.all_answered(rfq.mail_id) and waited < PICKUP_GRACE_S:
+            return None
+        return min(prices, key=lambda p: (p.currency != "EUR", p.total))
