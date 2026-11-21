@@ -97,6 +97,31 @@ cd ui && npm install && npm run dev      # http://localhost:5173
 
 Tests: `pytest` (OCR tests for scanned sheets need `brew install tesseract`)
 
+### Attachments, voice and video
+
+Customers and truckers send the request or price as PDF, Word (.docx/.doc), Excel (.xlsx/.xls/.csv),
+text, images, Outlook .msg, Apple Pages/Numbers, zip, mp3/wav/ogg voice notes and mp4 videos.
+`mail/files.py` turns every one into text. Two system tools are needed besides `pip install -r requirements.txt`:
+
+| | Windows (bot laptop) | Linux (AMD server) | macOS |
+|---|---|---|---|
+| ffmpeg (audio, video) | `winget install Gyan.FFmpeg` | `sudo apt install ffmpeg` | `brew install ffmpeg` |
+| Tesseract (scans, images) | `winget install UB-Mannheim.TesseractOCR` | `sudo apt install tesseract-ocr` | `brew install tesseract` |
+
+Then once per machine: `python scripts/setup_speech.py` downloads the speech model (faster-whisper,
+about 460 MB for `small`, any language, offline, no gateway cost) and checks the tools.
+`python scripts/setup_speech.py path/to/voice.mp3` prints what the bot reads from a file.
+The bot loads the model in the background at start. Without faster-whisper it falls back to
+Windows speech (`scripts/stt.ps1`, only installed languages) or `STT_CMD="your-tool {wav}"`.
+Images that OCR cannot read go to one gateway vision call (`VISION_FALLBACK=0` turns it off).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `WHISPER_MODEL` | `small` | `base` is about twice as fast, `medium` more accurate |
+| `FFMPEG` | on PATH | full path to ffmpeg if it is not on PATH |
+| `STT_CMD` | unset | own speech-to-text command, `{wav}` is the audio file |
+| `PICKUP_ESTIMATE_SECONDS` | `100` | quote with the estimated truck price after this many seconds without a trucker price |
+
 Bot (the live one): `python -m core.main`. `DRY_RUN=1` in `.env` logs instead of sending; set `DRY_RUN=0` to go live.
 Only **one** bot may run for the whole team. A lock file stops a second one on the same machine, but nothing stops two laptops: agree who runs it. `touch data/STOP` stops it cleanly.
 Replay one sample without sending: `PYTHONPATH=. python scripts/replay_dry.py tests/core/fixtures/mail/rfq_port_to_port.json`

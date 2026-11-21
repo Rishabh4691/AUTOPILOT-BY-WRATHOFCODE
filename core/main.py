@@ -178,7 +178,18 @@ async def learn_customer_pickups(client: httpx.AsyncClient, base_url: str) -> in
     return learn_pickups(mails)
 
 
+async def warm_speech() -> None:
+    from mail.files import warm_speech as load
+
+    try:
+        ready = await asyncio.to_thread(load)
+        log.info("speech_model_ready" if ready else "speech_model_missing")
+    except Exception:
+        log.exception("speech_warmup_failed")
+
+
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
+    warmup = asyncio.create_task(warm_speech(), name="speech-warmup")
     try:
         seeded = seed_live_store(live_store())
         if seeded:
@@ -226,6 +237,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                 for task in list(orchestrator.tasks):
                     task.cancel()
     finally:
+        warmup.cancel()
         store.close()
 
 
