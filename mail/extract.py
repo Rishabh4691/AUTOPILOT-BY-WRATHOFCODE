@@ -481,7 +481,12 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         )
         gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
         found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
-    explicit = [f for f in found if f[4] and not f[3]]
+    if not found:
+        unit_first = list(UNIT_FIRST_WEIGHT.finditer(text))
+        if unit_first:
+            m = unit_first[-1]
+            return num(m.group("v")), "lb" if m.group("u").lower().startswith("lb") else "kg"
+    explicit =[f for f in found if f[4] and not f[3]]
     if len(explicit) == 1:
         return explicit[0][0], explicit[0][1]
     totals = [f for f in found if f[2] and not f[3]]
@@ -519,9 +524,43 @@ def sender_email(sender: str) -> str:
     return s[s.index("<") + 1 : s.index(">")] if "<" in s and ">" in s else s
 
 
+MONTHS = {
+    "jan": 1, "januar": 1, "janvier": 1, "enero": 1, "gennaio": 1, "stycznia": 1,
+    "feb": 2, "februar": 2, "février": 2, "febrero": 2, "febbraio": 2, "lutego": 2,
+    "mar": 3, "märz": 3, "mars": 3, "marzo": 3, "marca": 3,
+    "apr": 4, "avril": 4, "abril": 4, "aprile": 4, "kwietnia": 4,
+    "may": 5, "mai": 5, "mayo": 5, "maggio": 5, "maja": 5,
+    "jun": 6, "juni": 6, "juin": 6, "junio": 6, "giugno": 6, "czerwca": 6,
+    "jul": 7, "juli": 7, "juillet": 7, "julio": 7, "luglio": 7, "lipca": 7,
+    "aug": 8, "august": 8, "août": 8, "agosto": 8, "sierpnia": 8,
+    "sep": 9, "sept": 9, "september": 9, "septembre": 9, "septiembre": 9, "settembre": 9, "września": 9,
+    "oct": 10, "okt": 10, "oktober": 10, "octobre": 10, "octubre": 10, "ottobre": 10, "października": 10,
+    "nov": 11, "november": 11, "novembre": 11, "noviembre": 11, "listopada": 11,
+    "dec": 12, "dez": 12, "dezember": 12, "décembre": 12, "diciembre": 12, "dicembre": 12, "grudnia": 12,
+}
+MONTH_WORD = r"([a-zäéèûóśź]{3,12})\.?"
+READY_MONTH = re.compile(
+    rf"\b{READY_KW}[^\d\n]{{0,40}}?(?:(\d{{1,2}})\.?\s+(?:de\s+)?{MONTH_WORD}\s+(?:de\s+)?(\d{{4}})|{MONTH_WORD}\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+(\d{{4}}))",
+    re.I,
+)
+
+
+def _month(word: str) -> int | None:
+    w = word.lower()
+    return MONTHS.get(w) or MONTHS.get(w[:3])
+
+
 def find_ready(text: str) -> date | None:
     m = READY.search(text) or READY_AFTER.search(text) or SELF_DROP_DATE.search(text)
     if not m:
+        n = READY_MONTH.search(text)
+        try:
+            if n and n.group(1) and _month(n.group(2)):
+                return date(int(n.group(3)), _month(n.group(2)) or 0, int(n.group(1)))
+            if n and n.group(4) and _month(n.group(4)):
+                return date(int(n.group(6)), _month(n.group(4)) or 0, int(n.group(5)))
+        except ValueError:
+            return None
         return None
     try:
         if m.group(1):
@@ -726,7 +765,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
             num(m.group("v"))
             for m in UNIT_FIRST_VOLUME.finditer(text)
             if re.search(r"total", text[max(0, m.start() - 12) : m.start()], re.I)
-        ][-1:]
+        ][-1:] or [num(m.group("v")) for m in UNIT_FIRST_VOLUME.finditer(text)][-1:]
     if len(vols) > 1 and len(LOT.findall(text)) > 1:
         volume = sum(vols, Decimal(0)) if not pieces else None
     else:

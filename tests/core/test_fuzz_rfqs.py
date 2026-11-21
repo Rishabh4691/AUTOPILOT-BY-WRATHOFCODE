@@ -229,6 +229,31 @@ EXPECTED: dict[int, dict[str, object]] = {
         "ready": "2026-11-28",
         "dg": False,
     },
+    9072: {
+        "origin": "DUS",
+        "dest": "BOM",
+        "gross": 812.0,
+        "vol": 3.3,
+        "charge": 812.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-27",
+        "dg": False,
+    },
+    9073: {
+        "origin": "MUC",
+        "dest": "ORD",
+        "gross": 520.0,
+        "vol": 2.2,
+        "charge": 520.0,
+        "door": True,
+        "zone": "86",
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-30",
+        "dg": False,
+    },
 }
 
 
