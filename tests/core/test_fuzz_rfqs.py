@@ -368,6 +368,17 @@ EXPECTED: dict[int, dict[str, object]] = {
     9123: {"dg": True},
     9124: {"dg": False},
     9127: {"dg": False},
+    9138: {
+        "origin": "CGN",
+        "dest": "SIN",
+        "gross": 450.0,
+        "charge": 450.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-27",
+        "dg": False,
+    },
 }
 
 

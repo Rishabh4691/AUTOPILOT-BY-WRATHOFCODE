@@ -718,6 +718,27 @@ NOT_POSTCODE = re.compile(
 )
 
 
+PIECES_LABEL = re.compile(
+    r"(?:no\.? of |number of |total )?(?:pieces|pcs|packages|pallets|colli|cartons|crates)\s*[:=]\s*(\d{1,4})\b", re.I
+)
+WEIGHT_PER_PIECE = re.compile(
+    rf"weight per (?:piece|pallet|unit|package|carton|crate)\s*[:=]?\s*(?P<v>{NUM})\s*(?P<u>kgs?|lbs?)\b", re.I
+)
+
+
+def labelled_per_piece(text: str, pieces: list[Piece]) -> list[Piece]:
+    """Form-style mails: 'No. of pieces: 3', 'Weight per piece: 150 kg', 'Dims per piece: ...'."""
+    label = PIECES_LABEL.search(text)
+    if len(pieces) != 1 or pieces[0].count != 1 or not label or int(label.group(1)) < 2:
+        return pieces
+    update: dict[str, object] = {"count": int(label.group(1))}
+    per = WEIGHT_PER_PIECE.search(text)
+    if per and pieces[0].weight is None:
+        update["weight"] = num(per.group("v"))
+        update["weight_unit"] = "lb" if per.group("u").lower().startswith("lb") else "kg"
+    return [pieces[0].model_copy(update=update)]
+
+
 def without_signature(text: str) -> str:
     """Drop the lines after the last closing ("Best regards"), where company names live."""
     lines = text.splitlines()
@@ -758,7 +779,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     pref = "fastest" if fast and not CHEAP.search(text) else preference(None)
     route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
     origin, dest = find_route(route_text)
-    pieces = find_pieces(text)
+    pieces = labelled_per_piece(text, find_pieces(text))
     gross, wunit = find_gross(text, pieces)
     if gross is None and not pieces:
         gross, wunit = each_times_count(text)

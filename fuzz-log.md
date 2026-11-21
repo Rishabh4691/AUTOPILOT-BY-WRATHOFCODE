@@ -9,3 +9,4 @@
 - Round 7: 6 fake RFQs, 4 failed. Fixed weight taken from a "RE: FW:" subject, fallback DG check reading quoted history, Outlook history without an address ("From: Sales Team" + "Sent:", underscore line) not cut, "1.2 cbm each" not multiplied by the piece count.
 - Round 8: 5 fake RFQs, 5 failed. Fixed US consignee ZIP (IL 60606) taken as pickup postcode, "Express" in a signature company name forcing fastest, Italian "peso lordo kg 450, volume mc 2,5", German "wird bei uns abgeholt", "each 50x40x30 cm and 18.5 kg".
 - Round 9 (DG): 8 fake RFQs, 3 failed. Fixed German "Lithium-Ionen-Akkus"/"Lithiumbatterien" and French "colle"/"piles au lithium" not flagged; negated wording still passes.
+- Round 10: 5 fake RFQs, 1 failed. Fixed form-style "No. of pieces: 3 / Weight per piece: 150 kg / Dims per piece" read as one piece.
