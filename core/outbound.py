@@ -44,6 +44,12 @@ class DirectoryMailSender:
             self.dry_run_log.append((to, subject))
             log.info("dry_run_send_new", extra={"to": to, "subject": subject, "chars": len(body)})
             return None
+        from core.agents.guard import leaks_secret
+        from core.agents.mailbox import _secrets
+
+        if leaks_secret(f"{subject}\n{body}", _secrets(self.settings)):
+            log.error("secret_blocked", extra={"to": to})
+            return None
         response = await request(
             self.client,
             "POST",

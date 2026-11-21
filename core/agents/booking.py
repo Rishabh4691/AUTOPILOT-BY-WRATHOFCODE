@@ -24,6 +24,11 @@ from mail.writer import WEEKDAYS, arrival_date, capitalize_sentences, money, pla
 log = logging.getLogger("core.booking")
 
 RATE_FRESH_S = 14 * 60
+DELAY = re.compile(
+    r"\b(delay\w*|postponed|rebooked|offloaded|missed (?:the )?(?:flight|connection)|on hold|held at customs|"
+    r"verspätet|verschoben|retard\w*|reporté|retrasad\w*|ritard\w*|opóźni\w*)\b",
+    re.I,
+)
 BOOKING_REF = re.compile(r"\bBK-[A-Za-z0-9]{6,12}\b")
 
 ACCEPT = [
@@ -313,6 +318,7 @@ class BookingAgent:
         self.company = company
         self.declined: set[int] = set()
         self.retry_after_s = 30.0
+        self.notified: set[str] = set()
 
     def _quoted(self, orch: Any, thread_id: int) -> dict | None:
         row = orch.store._conn.execute(
@@ -339,6 +345,7 @@ class BookingAgent:
         try:
             if kind is MailKind.BOOKING_CONFIRMATION:
                 self.confirmed(orch, mail)
+                await self.notify_delay(orch, mail)
                 return
             await self.on_reply(orch, mail)
         except Exception as error:
@@ -381,6 +388,43 @@ class BookingAgent:
                 f"Re-checked {done} replies for missed bookings.",
             )
         return done
+
+    async def notify_delay(self, orch: Any, mail: Mail) -> bool:
+        """Tell the customer first when the airline reports a delay (PROACTIVE_UPDATES=1)."""
+        import os
+
+        if os.getenv("PROACTIVE_UPDATES", "0") != "1":
+            return False
+        ref = BOOKING_REF.search(f"{mail.subject} {mail.body}")
+        status = re.search(r"^\s*status:\s*(.+?)\s*$", mail.body, re.I | re.M)
+        text = status.group(1) if status else mail.body
+        if not ref or not DELAY.search(text):
+            return False
+        row = orch.store._conn.execute(
+            "SELECT b.rfq_id, r.customer, r.subject FROM bookings b JOIN rfqs r ON r.id = b.rfq_id "
+            "WHERE b.booking_reference=?",
+            (ref.group(0),),
+        ).fetchone()
+        if row is None:
+            return False
+        rfq_id, customer, subject = row
+        if ref.group(0) in self.notified:
+            return False
+        self.notified.add(ref.group(0))
+        body = (
+            f"Hi,\n\na quick heads-up on booking {ref.group(0)} (our reference {team_reference(str(rfq_id))}): "
+            f"the airline just told us \"{text.strip()[:160]}\". We are on it and will send the new arrival as soon as we have it.\n\n"
+            f"Cheers,\n{self.agent_name}\n{self.company}"
+        )
+        try:
+            await orch.mailbox.send(
+                OutgoingMail(to=customer, subject=reply_subject(subject or "Your shipment"), body=body, in_reply_to=int(rfq_id))
+            )
+        except Exception:
+            log.exception("delay_notice_failed")
+            return False
+        orch.emit(Agent.BOOKING, "delay_notice", EventStatus.INFO, f"Told the customer about a delay on {ref.group(0)}.", int(rfq_id))
+        return True
 
     def confirmed(self, orch: Any, mail: Mail) -> None:
         ref = BOOKING_REF.search(f"{mail.subject} {mail.body}")

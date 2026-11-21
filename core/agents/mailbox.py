@@ -69,9 +69,23 @@ def parse_mail(raw: Mapping[str, object]) -> Mail:
         raise MailShapeError(f"bad mail shape: {type(error).__name__}") from error
 
 
-def _ensure_safe(mail: OutgoingMail, our_address: str | None) -> None:
+def _secrets(settings: Settings | None = None) -> list[str]:
+    import os
+
+    found = [os.getenv("FIVEU_API_KEY", ""), os.getenv("OPENAI_API_KEY", "")]
+    if settings is not None:
+        found.append(settings.api_key)
+    return [s for s in found if s]
+
+
+def _ensure_safe(mail: OutgoingMail, our_address: str | None, settings: Settings | None = None) -> None:
+    from core.agents.guard import outgoing_leaks
+
     if our_address and mail.to.strip().lower() == our_address.strip().lower():
         raise UnsafeRecipient("refusing to send mail to our own address")
+    if outgoing_leaks(mail.subject, mail.body, mail.attachments, _secrets(settings)):
+        log.error("secret_blocked", extra={"to": mail.to})
+        raise UnsafeRecipient("refusing to send a key or password")
 
 
 class HttpMailboxClient:
@@ -117,7 +131,7 @@ class HttpMailboxClient:
             return None
 
     async def send(self, mail: OutgoingMail) -> Mail:
-        _ensure_safe(mail, self._settings.our_address)
+        _ensure_safe(mail, self._settings.our_address, self._settings)
         response = await request(
             self._client,
             "POST",

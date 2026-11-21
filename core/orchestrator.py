@@ -239,6 +239,7 @@ class Orchestrator:
         if not self.store.mark_seen(mail, classification.kind):
             return
         kind = classification.kind
+        self.flag_social_engineering(mail)
         if kind is MailKind.RFQ:
             self.accept_rfq(mail)
             return
@@ -284,6 +285,23 @@ class Orchestrator:
             f"Mail {mail.id} sorted as {kind.value.replace('_', ' ')}: {classification.reason}",
             rfq_id=mail.thread_root_id if kind is MailKind.FOLLOW_UP else None,
         )
+
+    def flag_social_engineering(self, mail: Mail) -> None:
+        from core.agents.guard import social_engineering
+
+        try:
+            signs = social_engineering(mail.subject, mail.body)
+        except Exception:
+            return
+        if signs:
+            self.emit(
+                Agent.ROUTER,
+                "security",
+                EventStatus.HOLD,
+                f"Mail {mail.id} from {mail.sender} looks like social engineering ({', '.join(signs)}). "
+                "Never send keys, passwords or bank changes. Not answered unless it is also a real request.",
+                mail.id,
+            )
 
     async def rescue_unknown(self, mail: Mail) -> None:
         """A new mail no rule recognised. Quote it only if the rules alone read a real shipment from it."""
@@ -924,6 +942,40 @@ class Orchestrator:
                 log.warning("send_retry", extra={"to": outgoing.to, "error": type(error).__name__})
                 await asyncio.sleep(3)
 
+    def self_check(self, quote: Quote, outgoing: OutgoingMail) -> list[str]:
+        """Last look before a quote leaves: problems go to the control room, the quote still goes out."""
+        import re as _re
+
+        issues: list[str] = []
+        try:
+            from mail import lang
+            from mail.reply_files import request_text, wanted
+
+            digits = _re.sub(r"\D", "", outgoing.body)
+            whole = str(int(quote.total))
+            if whole not in digits:
+                issues.append(f"total {quote.total} not found in the mail")
+            if f"WOC-{quote.rfq_mail_id}" not in outgoing.body:
+                issues.append("our reference is missing")
+            asked = request_text(quote.rfq_mail_id)
+            if asked and wanted(asked) and not outgoing.attachments:
+                issues.append(f"customer asked for {', '.join(wanted(asked))} but nothing is attached")
+            want = lang.for_request(quote.rfq_mail_id, asked or "")
+            got = lang.detect(outgoing.body, want)
+            if asked and want != got:
+                issues.append(f"request is in {lang.NAMES.get(want, want)}, reply reads as {lang.NAMES.get(got, got)}")
+        except Exception:
+            log.exception("self_check_failed")
+        if issues:
+            self.emit(
+                Agent.RFQ,
+                "self_check",
+                EventStatus.WARN,
+                f"Quote {quote.rfq_mail_id}: " + "; ".join(issues) + ".",
+                quote.rfq_mail_id,
+            )
+        return issues
+
     def reply_files(self, quote: Quote) -> list[dict]:
         try:
             from mail.reply_files import quote_attachments
@@ -971,6 +1023,7 @@ class Orchestrator:
             in_reply_to=quote.rfq_mail_id,
             attachments=tuple(self.reply_files(quote)),
         )
+        self.self_check(quote, outgoing)
         try:
             try:
                 sent = await self.send_with_retry(outgoing)
