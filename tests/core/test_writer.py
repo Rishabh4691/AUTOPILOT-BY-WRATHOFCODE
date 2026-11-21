@@ -128,3 +128,8 @@ async def test_budget_factory_ignored_for_plain_clients() -> None:
     writer = LlmEmailWriter(llm, budget_factory=lambda rfq: TokenBudget(10))
     body, _ = await writer.write(make_rfq(), OPTION, TOTAL, "EUR")
     assert body == GOOD
+
+
+def test_raw_field_dump_is_rejected() -> None:
+    body = "Price: 10.00 EUR\nDoor pickup included: false\nWRATHOFCODE Air Freight"
+    assert "raw field leaked" in verify_body(body, Decimal("10"), "EUR")

@@ -7,6 +7,7 @@ import logging
 import signal
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -79,8 +80,16 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
     )
 
 
+def stop_file(settings: Settings) -> Path:
+    return settings.db_path.parent / "STOP"
+
+
 async def poll_loop(orchestrator: Orchestrator, interval_s: float, stop: asyncio.Event) -> None:
     while not stop.is_set():
+        if stop_file(orchestrator.settings).exists():
+            log.info("stop_file_found")
+            stop.set()
+            break
         try:
             await orchestrator.poll_once()
         except Exception:

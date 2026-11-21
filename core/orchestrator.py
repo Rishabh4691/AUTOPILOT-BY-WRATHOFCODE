@@ -442,7 +442,7 @@ class Orchestrator:
             "quoted",
             EventStatus.OK,
             f"{verb} quote for request {quote.rfq_mail_id}: {quote.total} {quote.currency}, "
-            f"{'written by the model' if quote.used_llm else 'template'}.",
+            f"{'one model call made' if quote.used_llm else 'no model call'}.",
             quote.rfq_mail_id,
             cost=None if quote.usage is None else quote.usage.cost_usd,
             data={"dry_run": self.settings.dry_run},
