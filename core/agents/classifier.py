@@ -15,6 +15,12 @@ REQUEST_WORD_PATTERN = re.compile(
     r"cotation|preventivo|quotazione|wycen\w*|oferta|offerta|all-in price)\b",
     re.IGNORECASE,
 )
+ATTACHED_REQUEST = re.compile(
+    r"\b(attach\w*|enclosed|recording|voice (?:message|memo|note)|video|anbei|anhang|angehängt|"
+    r"beigefügt|sprachnachricht|ci-joint|pi[eè]ce jointe|adjunt\w*|allegat\w*|in allegato|za[lł][aą]cz\w*|"
+    r"spreadsheet|document|pdf|file|scan|photo|picture|image)\b",
+    re.IGNORECASE,
+)
 WEIGHT_PATTERN = re.compile(
     r"\d+[.,]?\d*\s*(kg|kgs|kilos?|kilograms?|kilogramm\w*|kilogrammes?|lb|lbs|pounds?|"
     r"t|tons?|tonnes?|tonnen)\b",
@@ -50,6 +56,8 @@ def looks_like_rfq(mail: Mail) -> bool:
     asks = bool(AIRPORT_PAIR_PATTERN.search(text) or REQUEST_WORD_PATTERN.search(text))
     if NOT_A_REQUEST.search(text) and not ASKS_FOR_PRICE.search(text):
         return False
+    if asks and mail.attachments and ATTACHED_REQUEST.search(text):
+        return True
     return asks and bool(WEIGHT_PATTERN.search(text))
 
 

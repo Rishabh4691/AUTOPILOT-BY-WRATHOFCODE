@@ -172,6 +172,7 @@ class RulesFirstExtractor:
         return rfq
 
     async def extract(self, mail: Mail) -> tuple[RFQ, LlmUsage | None]:
+        extra = ""
         try:
             body = clean_body(mail.body)
             x = rules_extract(mail.subject, body, mail.sender, str(mail.id))
@@ -191,9 +192,10 @@ class RulesFirstExtractor:
                 rfq = to_rfq(mail, x)
                 if mail.attachments and self.attachments:
                     rfq = await self.attachment_totals(mail, rfq)
-                if site_unknown(body, rfq):
+                full = f"{body}\n\n{extra}" if extra else body
+                if site_unknown(full, rfq):
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, SITE_UNKNOWN)})
-                rfq = with_exclusions(rfq, body, mail.sender)
+                rfq = with_exclusions(rfq, full, mail.sender)
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})
@@ -201,4 +203,6 @@ class RulesFirstExtractor:
             log.warning(
                 "rules_extract_failed", extra={"rfq": mail.id, "error": type(error).__name__}
             )
+        if extra:
+            return await self.fallback.extract(mail.model_copy(update={"body": f"{mail.body}\n\n{extra[:6000]}"}))
         return await self.fallback.extract(mail)

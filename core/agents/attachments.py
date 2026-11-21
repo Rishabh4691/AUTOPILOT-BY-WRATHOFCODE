@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import re
@@ -13,7 +14,7 @@ from core.http import HttpGiveUp, request
 
 log = logging.getLogger("core.attachments")
 
-MAX_ATTACHMENT_BYTES = 2_000_000
+MAX_ATTACHMENT_BYTES = 30_000_000
 UN_NUMBER = re.compile(r"\bUN\s?-?(\d{4})\b", re.I)
 DG_FIELD = re.compile(
     r"\b(?:dangerous goods|hazardous (?:goods|materials?)|gefahrgut|DG|hazmat)\b\s*[:=]\s*"
@@ -78,20 +79,41 @@ def pdf_text(content: bytes) -> str:
         return ""
 
 
-def to_text(filename: str, content: bytes) -> str:
-    name = filename.lower()
-    try:
-        if name.endswith((".xlsx", ".xlsm")):
-            return xlsx_text(content)
-        if name.endswith(".docx"):
-            return docx_text(content)
-        if name.endswith(".pdf"):
-            return pdf_text(content)
-        if name.endswith((".csv", ".txt", ".json", ".tsv")):
-            return content.decode("utf-8", "replace")
-    except (zipfile.BadZipFile, KeyError, ValueError) as error:
-        log.info("attachment_unreadable", extra={"file": filename, "error": type(error).__name__})
-    return ""
+def to_text(filename: str, content: bytes, content_type: str = "") -> str:
+    from mail.files import file_text
+
+    return file_text(filename, content, content_type)
+
+
+async def read_attachments(client: httpx.AsyncClient, mail: Mail, headers=None, limit: int = 5) -> list[tuple[str, str]]:
+    from mail.files import CACHE
+
+    out: list[tuple[str, str]] = []
+    for attachment in mail.attachments[:limit]:
+        cached = CACHE.get(mail.id, attachment.id)
+        if cached is not None:
+            out.append(cached)
+            continue
+        if attachment.size is not None and attachment.size > MAX_ATTACHMENT_BYTES:
+            log.info("attachment_too_big", extra={"mail": mail.id, "file": attachment.filename})
+            continue
+        try:
+            response = await request(
+                client,
+                "GET",
+                f"/v1/mailbox/messages/{mail.id}/attachments/{attachment.id}",
+                deadline=time.monotonic() + 30,
+                headers=headers,
+            )
+        except HttpGiveUp as error:
+            log.warning("attachment_download_failed", extra={"mail": mail.id, "error": str(error)})
+            continue
+        if response.status_code != 200 or len(response.content) > MAX_ATTACHMENT_BYTES:
+            continue
+        text = await asyncio.to_thread(to_text, attachment.filename, response.content, attachment.content_type)
+        CACHE.put(mail.id, attachment.id, attachment.filename, text)
+        out.append((attachment.filename, text))
+    return out
 
 
 def dangerous_goods(text: str) -> str | None:
@@ -116,19 +138,5 @@ class AttachmentReader:
         self.client = client
 
     async def text(self, mail: Mail) -> str:
-        parts: list[str] = []
-        for attachment in mail.attachments:
-            if attachment.size is not None and attachment.size > MAX_ATTACHMENT_BYTES:
-                continue
-            try:
-                response = await request(
-                    self.client,
-                    "GET",
-                    f"/v1/mailbox/messages/{mail.id}/attachments/{attachment.id}",
-                    deadline=time.monotonic() + 15,
-                )
-            except HttpGiveUp:
-                continue
-            if response.status_code == 200:
-                parts.append(to_text(attachment.filename, response.content))
-        return "\n".join(part for part in parts if part)
+        parts = await read_attachments(self.client, mail, limit=10)
+        return "\n".join(text for _, text in parts if text)

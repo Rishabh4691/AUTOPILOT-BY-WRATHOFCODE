@@ -143,21 +143,9 @@ def special_cargo(text: str) -> list[str]:
 
 
 def attachment_text(filename: str, data: bytes) -> str:
-    name = filename.lower()
-    try:
-        if name.endswith((".png", ".jpg", ".jpeg")):
-            return image_text(data)
-        if name.endswith((".xlsx", ".xlsm")):
-            return xlsx_text(data)
-        if name.endswith(".docx"):
-            return docx_text(data)
-        if name.endswith(".pdf"):
-            return pdf_text(data)
-        if name.endswith((".csv", ".txt", ".tsv")):
-            return data.decode("utf-8", "ignore")
-    except Exception:
-        return ""
-    return ""
+    from .files import file_text
+
+    return file_text(filename, data)
 
 
 def check(body: str, attachments: list[tuple[str, str]]) -> DgCheck:

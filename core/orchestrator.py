@@ -257,7 +257,11 @@ class Orchestrator:
             self.bids.offer(mail)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:
             offer = getattr(self.pickup, "offer", None)
-            if callable(offer):
+            if callable(offer) and mail.attachments and self.attachments is not None:
+                task = asyncio.create_task(self.offer_with_attachments(offer, mail), name=f"truck-{mail.id}")
+                self.tasks.add(task)
+                task.add_done_callback(self.tasks.discard)
+            elif callable(offer):
                 offer(mail)
         self.emit(
             Agent.ROUTER,
@@ -266,6 +270,14 @@ class Orchestrator:
             f"Mail {mail.id} sorted as {kind.value.replace('_', ' ')}: {classification.reason}",
             rfq_id=mail.thread_root_id if kind is MailKind.FOLLOW_UP else None,
         )
+
+    async def offer_with_attachments(self, offer: Any, mail: Mail) -> None:
+        try:
+            attached = await self.attachments.text(mail)
+        except Exception:
+            log.exception("trucker_attachment_failed")
+            attached = ""
+        offer(mail.model_copy(update={"body": f"{mail.body}\n\n{attached}"}) if attached else mail)
 
     def accept_rfq(self, mail: Mail) -> None:
         if is_stale(mail.received_at, self.clock(), self.settings.rfq_lifetime_s):

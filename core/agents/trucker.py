@@ -74,6 +74,11 @@ TOTAL_WORDS = re.compile(
     r"all[- ]?in|total|gesamt|insgesamt|pauschal|fixed price|festpreis", re.IGNORECASE
 )
 TOTAL_WINDOW = 120
+COMPONENT_WORDS = re.compile(
+    r"(base|weight|fuel|toll|handling|waiting|km|kilometre|distance|extra)[- ]?(charge|fee|rate|surcharge|part)?"
+    r"\s*(of|is|:)?\s*$|surcharge\s*(of|is|:)?\s*$|per kg\s*(of|is|:)?\s*$|grundpreis\s*:?\s*$|zuschlag\s*:?\s*$",
+    re.IGNORECASE,
+)
 
 
 def parse_price(text: str) -> tuple[Decimal, str] | None:
@@ -91,6 +96,8 @@ def parse_price(text: str) -> tuple[Decimal, str] | None:
             found.append((pos, amount, currency))
     if not found:
         return None
+    whole = [f for f in found if not COMPONENT_WORDS.search(text[max(0, f[0] - 30) : f[0]])]
+    found = whole or found
     keyed: list[tuple[int, int, Decimal, str]] = []
     for pos, amount, currency in found:
         before = [m.end() for m in TOTAL_WORDS.finditer(text, 0, pos)]

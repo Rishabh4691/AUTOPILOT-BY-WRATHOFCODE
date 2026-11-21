@@ -31,21 +31,13 @@ class DgGuard:
         self.cleared: set[int] = set()
 
     async def texts(self, mail: Mail) -> list[tuple[str, str]]:
-        out = []
-        for a in mail.attachments[:5]:
-            try:
-                r = await self.client.get(
-                    f"{self.settings.base_url}/v1/mailbox/messages/{mail.id}/attachments/{a.id}",
-                    headers=auth_headers(self.settings),
-                    timeout=10,
-                )
-                if r.status_code == 200 and len(r.content) < 5_000_000:
-                    out.append((a.filename, attachment_text(a.filename, r.content)))
-            except httpx.HTTPError as error:
-                log.warning(
-                    "attachment_failed", extra={"mail": mail.id, "error": type(error).__name__}
-                )
-        return out
+        from core.agents.attachments import read_attachments
+
+        try:
+            return await read_attachments(self.client, mail, headers=auth_headers(self.settings))
+        except Exception as error:
+            log.warning("attachment_failed", extra={"mail": mail.id, "error": type(error).__name__})
+            return []
 
     async def inspect(self, mail: Mail) -> DgCheck:
         return check(request_text(mail.subject, mail.body), await self.texts(mail))
