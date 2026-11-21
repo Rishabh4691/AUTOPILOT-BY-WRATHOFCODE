@@ -1,0 +1,11 @@
+{
+  "id": 9102,
+  "from": "test-102@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Air freight quote to ORD",
+  "body": "Hello,\n\nconsignee: Midwest Tools Inc., 233 S Wacker Dr, Chicago, IL 60606, USA.\n\nPlease quote your cheapest air freight to ORD. Pickup at our plant, Ruppmannstr. 10, 70565 Stuttgart, ready 2026-11-26.\n\n2 pallets, 450 kg gross, 2.0 cbm. EUR please.\n\nRegards\nDirk Hahn",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T10:00:00+00:00",
+  "attachments": []
+}

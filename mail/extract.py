@@ -145,7 +145,7 @@ CITIES = {
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?P<each0>each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
     rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
     re.I,
@@ -181,7 +181,7 @@ CHEAP = re.compile(
     re.I,
 )
 PICKUP = re.compile(
-    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|hol\w* (?:die|unsere) ware[^.\n]{0,30}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b",
+    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|abgehol\w*|hol\w* (?:die|unsere) ware[^.\n]{0,30}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b",
     re.I,
 )
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
@@ -193,7 +193,7 @@ SELF_DELIVERY = re.compile(
 )
 LOT = re.compile(r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]", re.I)
 VOLUME = re.compile(
-    rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft)(?![a-z])",
+    rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|mc|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft)(?![a-z])",
     re.I,
 )
 CUFT = Decimal("0.0283168")
@@ -226,7 +226,13 @@ CURRENCY = re.compile(
 UNIT_FIRST_WEIGHT = re.compile(
     rf"(?:gross )?weight\s*\((?P<u>kg|kgs|lbs?)\)\s*[:=]?\s*(?P<v>{NUM})", re.I
 )
-UNIT_FIRST_VOLUME = re.compile(rf"volume\s*\((?:cbm|m3|m³)\)\s*[:=]?\s*(?P<v>{NUM})", re.I)
+UNIT_FIRST_VOLUME = re.compile(
+    rf"(?:volume|volumen|vol\.)\s*(?:\((?:cbm|m3|m³)\)|cbm|m3|m³|mc)\s*[:=]?\s*(?P<v>{NUM})", re.I
+)
+KG_FIRST_WEIGHT = re.compile(
+    rf"(?:gross|lordo|brutto|bruto|brut|weight|peso|gewicht|poids|waga)\s*(?:weight)?\s*:?\s*(?P<u>kgs?|lbs?)\.?\s*(?P<v>{NUM})\b",
+    re.I,
+)
 LITHIUM = re.compile(r"UN\s?3480|lithium[- ]ion batter(y|ies) (packed )?alone", re.I)
 SIGNOFF = re.compile(
     r"^(thanks?|thank you|cheers|best|best regards|kind regards|regards|many thanks|viele grüße|beste grüße|mit freundlichen grüßen|grüße|danke|gruß|"
@@ -327,7 +333,7 @@ def find_pieces(text: str) -> list[Piece]:
         count = int(m.group("count") or 1)
         weight = None
         wunit = "kg"
-        if m.group("pw") and (m.group("each") or m.group("pre")):
+        if m.group("pw") and (m.group("each") or m.group("pre") or m.group("each0")):
             weight = num(m.group("pw"))
             wunit = "lb" if m.group("pwu").lower().startswith(("lb", "pound")) else "kg"
         out.append(
@@ -482,7 +488,7 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
         found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
     if not found:
-        unit_first = list(UNIT_FIRST_WEIGHT.finditer(text))
+        unit_first = list(UNIT_FIRST_WEIGHT.finditer(text)) or list(KG_FIRST_WEIGHT.finditer(text))
         if unit_first:
             m = unit_first[-1]
             return num(m.group("v")), "lb" if m.group("u").lower().startswith("lb") else "kg"
@@ -712,6 +718,15 @@ NOT_POSTCODE = re.compile(
 )
 
 
+def without_signature(text: str) -> str:
+    """Drop the lines after the last closing ("Best regards"), where company names live."""
+    lines = text.splitlines()
+    closing = [
+        i for i, line in enumerate(lines) if len(line.strip()) <= 40 and (SIGNOFF.match(line.strip()) or CLOSING.search(line))
+    ]
+    return "\n".join(lines[: closing[-1] + 1]) if closing else text
+
+
 def wants_fast(text: str) -> bool:
     """A fast wish that is not negated ("not urgent", "no es urgente")."""
     return any(not NOT_FAST.search(text[max(0, m.start() - 20) : m.start()]) for m in FAST.finditer(text))
@@ -723,15 +738,22 @@ def find_postcode(text: str, zones: dict) -> str | None:
         m.group(1)
         for m in POSTCODE.finditer(text)
         if not NOT_POSTCODE.search(text[max(0, m.start() - 20) : m.start()])
+        and not re.search(r"\b[A-Z]{2}\s*$", text[max(0, m.start() - 4) : m.start()])
     ]
-    return next((p for p in found if p[:2] in zones), found[0] if found else None)
+    near = [
+        m.group(1)
+        for p in PICKUP.finditer(text)
+        for m in POSTCODE.finditer(text[p.end() : p.end() + 120])
+        if m.group(1) in found
+    ]
+    return next((p for p in near + found if p[:2] in zones), found[0] if found else None)
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
     text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)
-    fast = wants_fast(text)
+    fast = wants_fast(without_signature(text))
     stated = bool(fast or CHEAP.search(text))
     pref = "fastest" if fast and not CHEAP.search(text) else preference(None)
     route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
