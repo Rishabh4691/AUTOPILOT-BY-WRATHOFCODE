@@ -103,3 +103,10 @@ def test_currency_in_quoted_history_is_ignored() -> None:
     )
     rfq, _ = asyncio.run(extractor([]).extract(_mail(body, attachments=False)))
     assert rfq.currency in (None, "EUR")
+
+
+def test_document_totals_reads_double_colon_xlsx() -> None:
+    # Round 35's xlsx: "Total gross weight (kg):: 1751" (mail text said 2644 kg).
+    text = ("Total pieces:: 19\nTotal gross weight (kg):: 1751\nTotal volume (cbm):: 11.97\n"
+            "Dangerous goods:: Not restricted")
+    assert document_totals(text) == {"pieces": 19, "gross_kg": Decimal("1751"), "volume_cbm": Decimal("11.97")}
