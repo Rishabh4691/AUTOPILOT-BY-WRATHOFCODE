@@ -717,6 +717,45 @@ def _dates(sentence: str, start: int, end: int, year: int) -> list[date]:
     return found
 
 
+REVISION_CUE = re.compile(
+    r"\b(?:update\s*:|is now|are now|details (?:have )?changed|(?:have|has) changed|changed to|change[sd]? (?:to|are)|final packing list|"
+    r"updated? (?:figures|details|shipment|packing)|revised|correction|corrected|new (?:figures|details|dimensions|weight|volume)|"
+    r"update (?:your|the) (?:offer|quote|quotation|price)|updated (?:offer|quote)|instead of|"
+    r"geändert|aktualisier\w*|neue (?:daten|maße|werte)|korrigiert|modifi\w+|nouvelles? (?:données|dimensions|informations)|"
+    r"mettre à jour|cambiad\w+|actualiz\w+|nuevos datos|cambiat\w+|aggiorn\w+|nuovi dati|gewijzigd|bijgewerkt|"
+    r"alterad\w+|atualiz\w+|zmieni\w+|zaktualiz\w+|изменил\w+|обнов\w+|değiş\w+|güncel\w+)\b|"
+    r"变更|更改|修改|更新|変更|更新|변경|수정",
+    re.I,
+)
+
+
+def revised_figures(text: str) -> dict:
+    """New pieces, gross kg and cbm from a customer's 'the details have changed' mail."""
+    text = text or ""
+    if not REVISION_CUE.search(text):
+        return {}
+    pieces = find_pieces(text)
+    gross, unit = find_gross(text, pieces)
+    if gross is None and pieces and all(p.weight is not None for p in pieces):
+        gross = sum((p.weight * p.count for p in pieces), Decimal(0))
+        unit = pieces[0].weight_unit
+    if gross is not None and unit == "lb":
+        gross = gross * Decimal("0.45359237")
+    volumes = [volume_cbm_of(m) for m in VOLUME.finditer(text)]
+    volume = volumes[-1] if volumes else None
+    if volume is None and pieces:
+        factor = {"in": Decimal("2.54")}
+        volume = sum(
+            (p.length * p.width * p.height * (factor.get(p.dim_unit, Decimal(1)) ** 3) * p.count / Decimal(1_000_000) for p in pieces),
+            Decimal(0),
+        )
+    counts = [int(m.group("n")) for m in COUNT_ONLY.finditer(text)] or [int(m.group("n")) for m in COUNT_INTL.finditer(text)]
+    count = sum(p.count for p in pieces) if pieces else (counts[0] if counts else None)
+    if gross is None and volume is None:
+        return {}
+    return {"gross_kg": gross, "volume_cbm": volume, "pieces": count}
+
+
 def find_deadline(text: str, year: int | None = None) -> date | None:
     """Latest arrival the customer accepts: "must arrive no later than 2 Dec", "spätestens am 02.12.2026"."""
     year = year or date.today().year

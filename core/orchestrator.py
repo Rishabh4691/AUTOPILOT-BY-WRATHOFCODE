@@ -247,6 +247,10 @@ class Orchestrator:
             task = asyncio.create_task(self.rescue_unknown(mail), name=f"rescue-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
+        if kind is MailKind.FOLLOW_UP:
+            task = asyncio.create_task(self.revise_if_changed(mail), name=f"revise-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
         if self.dg is not None and kind is MailKind.FOLLOW_UP:
             task = asyncio.create_task(self.dg.on_reply(self, mail), name=f"dg-{mail.id}")
             self.tasks.add(task)
@@ -302,6 +306,63 @@ class Orchestrator:
                 "Never send keys, passwords or bank changes. Not answered unless it is also a real request.",
                 mail.id,
             )
+
+    async def revise_if_changed(self, mail: Mail) -> bool:
+        """Customer sends new figures after our quote ("details have changed, please update your offer"):
+        quote again once, in the same thread, with the new pieces, weight and volume."""
+        from core.agents.booking import is_acceptance
+        from mail.extract import revised_figures
+        from mail.text import fresh_text
+
+        if mail.sender.strip().lower() == (self.settings.our_address or "").lower():
+            return False
+        body = fresh_text(mail.body)
+        figures = revised_figures(body)
+        if not figures or is_acceptance(body):
+            return False
+        root = mail.thread_root_id
+        revised = getattr(self, "_revised", set())
+        self._revised = revised
+        if root in revised:
+            return False
+        if self.store.outbox_status(root, Stage.QUOTED) is None and self.store.outbox_status(root, Stage.HELD) is None:
+            return False
+        revised.add(root)
+        try:
+            original = await self.mailbox.read_one(root)
+            rfq, usage = await self.extractor.extract(original)
+        except Exception:
+            log.exception("revision_extract_failed", extra={"rfq": root})
+            self.hold(root, f"Customer changed the shipment in mail {mail.id}, but the request could not be read again.")
+            return False
+        notes = tuple(n for n in rfq.notes if not n.startswith("pieces: "))
+        if figures.get("pieces"):
+            notes = (*notes, f"pieces: {figures['pieces']}")
+        update: dict[str, Any] = {
+            "mail_id": mail.id,
+            "thread_root_id": mail.id,
+            "received_at": mail.received_at,
+            "notes": notes,
+        }
+        if figures.get("gross_kg") is not None:
+            update["gross_kg"] = Decimal(str(figures["gross_kg"]))
+        if figures.get("volume_cbm") is not None:
+            update.update(volume_cbm=Decimal(str(figures["volume_cbm"])), pieces=())
+        rfq = rfq.model_copy(update=update)
+        self.store.upsert_rfq(str(mail.id), str(root), original.sender, original.subject, mail.received_at, Stage.NEW.value)
+        self.emit(
+            Agent.RFQ,
+            "revised",
+            EventStatus.INFO,
+            f"Customer changed request {root}: now {figures.get('pieces') or '?'} pieces, {rfq.gross_kg} kg, "
+            f"{rfq.volume_cbm} cbm. Quoting again.",
+            root,
+        )
+        quote = await self.source_and_price(rfq)
+        if quote is None:
+            return False
+        await self.outbox.put(quote)
+        return True
 
     async def rescue_unknown(self, mail: Mail) -> None:
         """A new mail no rule recognised. Quote it only if the rules alone read a real shipment from it."""
