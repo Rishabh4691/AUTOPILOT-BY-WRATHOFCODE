@@ -76,6 +76,7 @@ class Orchestrator:
     outbox: asyncio.Queue[Quote] = field(default_factory=asyncio.Queue)
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
     booker: Any = None
+    tracker: Any = None
 
     @property
     def policy(self) -> TimingPolicy:
@@ -132,6 +133,10 @@ class Orchestrator:
             return
         if self.booker is not None and kind in (MailKind.FOLLOW_UP, MailKind.BOOKING_CONFIRMATION):
             task = asyncio.create_task(self.booker.handle(self, mail, kind), name=f"book-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+        if self.tracker is not None and kind is MailKind.TRACKING:
+            task = asyncio.create_task(self.tracker.handle(self, mail), name=f"track-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:

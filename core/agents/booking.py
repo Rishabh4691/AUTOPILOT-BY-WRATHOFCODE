@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -14,7 +14,7 @@ from core.agents.portal import PortalPriceSource
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, MailKind, OutgoingMail, Stage
 from mail import lang
-from mail.extract import find_first_name
+from mail.extract import find_first_name, find_ready
 from mail.text import fresh_text, reply_subject
 
 log = logging.getLogger("core.booking")
@@ -224,6 +224,7 @@ class BookingAgent:
         )
         t0 = time.monotonic()
         info = json.loads(rfq.get("breakdown_json") or "{}")
+        info["ready_date"] = await self._ready_date(orch, rfq)
         booking = await self.book(orch, rfq, info)
         ms = int((time.monotonic() - t0) * 1000)
         if booking is None:
@@ -264,6 +265,14 @@ class BookingAgent:
                 info = {**info, "transit_days": option.transit_days}
                 return self._record(orch, rfq, info, done, "portal")
         return await self._email_airline(orch, rfq, info)
+
+    async def _ready_date(self, orch: Any, rfq: dict) -> str | None:
+        try:
+            original = await orch.mailbox.read_one(int(rfq["id"]))
+        except Exception:
+            return None
+        found = find_ready(fresh_text(original.body))
+        return found.isoformat() if found else None
 
     async def _portal_book(self, rate_id: str, team: str) -> dict | None:
         if self.settings.kill_switch:
@@ -329,7 +338,14 @@ class BookingAgent:
 
     def _record(self, orch: Any, rfq: dict, info: dict, done: dict, method: str) -> dict:
         days = int(info.get("transit_days") or 0)
-        eta = (datetime.now(UTC) + timedelta(days=1 + days)).date().isoformat()
+        today = datetime.now(UTC).date()
+        ready = info.get("ready_date")
+        depart = (
+            max(today + timedelta(days=1), date.fromisoformat(ready))
+            if ready
+            else today + timedelta(days=1)
+        )
+        eta = (depart + timedelta(days=days)).isoformat()
         booking = {
             "rfq_id": str(rfq["id"]),
             "thread_id": str(rfq["thread_id"]),
@@ -344,6 +360,7 @@ class BookingAgent:
             "price": str(done.get("price") or rfq.get("total")),
             "currency": done.get("currency") or rfq.get("currency"),
             "transit_days": days,
+            "ready_date": ready,
             "eta": eta,
             "status": "booked" if method == "portal" else "requested",
             "method": method,

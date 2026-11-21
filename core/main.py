@@ -23,6 +23,7 @@ from core.agents.portal import PortalPriceSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.sourcing_adapter import SourcingPortalPriceSource
+from core.agents.tracking import TrackingAgent
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
 from core.contracts import MailboxClient, Stage
@@ -85,6 +86,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
+        tracker=TrackingAgent(),
     )
 
 
