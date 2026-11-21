@@ -67,6 +67,30 @@ def remember(sender: str, names: list[str]) -> None:
         pass
 
 
+def learn(mails: list[dict]) -> int:
+    """Rebuild the memory from every customer mail already in the mailbox.
+
+    Round 42's customer said "do not offer Zephyr Steppe Cargo (ZS) ... for any of our future
+    inquiries" before this memory existed; without this, their next request would offer it again.
+    """
+    from mail import kit
+    from mail.text import fresh_text
+
+    carriers = set(kit.carriers())
+    changed = 0
+    for m in sorted(mails, key=lambda x: int(x.get("id") or 0)):
+        sender = sender_email(str(m.get("from") or ""))
+        if not sender or sender in carriers or sender.endswith("@hackloop.mail") and sender.startswith(
+            ("wrathofcode", "ratedesk", "tracking")
+        ):
+            continue
+        names = excluded_carriers(fresh_text(str(m.get("body") or "")))
+        if names and not set(names) <= set(recall(sender)):
+            remember(sender, names)
+            changed += 1
+    return changed
+
+
 def recall(sender: str) -> list[str]:
     return _load().get(sender_email(sender), [])
 

@@ -42,3 +42,31 @@ def test_round42_pickup_takes_25_hours_is_read_and_skipped() -> None:
     prices = [PickupPrice(source="t", trucker=t, zone="65", total=Decimal(t), currency="EUR",
                           received_at=NOW, pickup_hours=h) for t, h in offers]
     assert best_offer(prices, "cheapest").total == Decimal("195.10")
+
+
+def test_exclusion_from_an_earlier_mail_is_learned_at_start_and_applied_later(monkeypatch) -> None:
+    import asyncio
+    import json
+    from pathlib import Path
+
+    from core.agents.extractor import RegexRfqExtractor
+    from core.agents.mailbox import parse_mail
+    from core.agents.rules_extractor import RulesFirstExtractor
+    from core.config import load_settings
+    from mail import exclusions, kit
+    from mail.config import settings as mail_settings
+
+    fixtures = Path(__file__).parent / "fixtures"
+    monkeypatch.setattr(kit, "settings", mail_settings.__class__(kit_dir=fixtures / "kit"))
+    r42 = json.loads((fixtures / "mail" / "real_rfq_10831.json").read_text(encoding="utf-8"))
+    # Round 42 arrived before the memory existed: nothing remembered yet.
+    assert exclusions.recall(r42["from"]) == []
+    assert exclusions.learn([r42, {"id": 1, "from": "zephyr-steppe-cargo@hackloop.mail",
+                                    "body": "Please do not use Pampero Air Cargo."}]) == 1
+    assert "Zephyr Steppe Cargo" in exclusions.recall(r42["from"])
+    assert exclusions.recall("zephyr-steppe-cargo@hackloop.mail") == []  # carriers are not customers
+    # The same customer's next request, with no mention of Zephyr, still excludes it.
+    nxt = dict(r42, id=11999, body=r42["body"].split("Please do not offer")[0])
+    settings = load_settings(environ={"FIVEU_API_KEY": "k"})
+    later, _ = asyncio.run(RulesFirstExtractor(RegexRfqExtractor(settings, None)).extract(parse_mail(nxt)))
+    assert "exclude_carrier: Zephyr Steppe Cargo" in later.notes

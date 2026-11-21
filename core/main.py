@@ -169,6 +169,12 @@ async def learn_customer_pickups(client: httpx.AsyncClient, base_url: str) -> in
         if len(batch) < 200 or next_id <= since:
             break
         since = next_id
+    try:
+        from mail.exclusions import learn as learn_exclusions
+
+        log.info("carrier_exclusions_learned", extra={"changed": learn_exclusions(mails)})
+    except Exception:
+        log.exception("carrier_exclusions_learn_failed")
     return learn_pickups(mails)
 
 
