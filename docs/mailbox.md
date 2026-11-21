@@ -1,7 +1,7 @@
 # Mailbox API
 
 Base URL `https://api.start-hack.5u.ai`, header `X-API-Key: <team key>`. Full spec in `docs/openapi.json`.
-Client: `mail/client.py`.
+Client: `core/agents/mailbox.py`.
 
 ## Poll
 
@@ -78,7 +78,7 @@ Match it by the quoted subject in the body (`your mail "Rate request FRA-ORD"`) 
   pdf/xlsx/xls/csv/txt/png/jpg/docx.
 - Limit: 60 mails per minute per key, then 429 with `Retry-After`.
 
-The client retries a send only on 429 or when the connection never opened. A timeout or 5xx after the
+Our client should retry a send only on 429 or when the connection never opened. A timeout or 5xx after the
 request went out is **not** retried, because the mail may already be stored and a second copy would cost
 us the thread.
 

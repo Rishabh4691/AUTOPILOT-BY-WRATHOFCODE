@@ -1,10 +1,5 @@
 # data
 
-Owner: Aryan
-
-Rate sheets from the start kit, portal client (rate IDs, booking, rate limits),
-carrier and trucker bid requests and parsing, pickup zones, tariff ingestion.
-
-Tariffs are stored as structured, versioned prices (valid_from / valid_to).
-Sheets are parsed in code, never with the LLM. The downloaded kit goes in
-`data/kit/` (git-ignored).
+- `tariffs.json`: the 10 start-kit rate sheets as structured, versioned prices (built by `python -m sourcing.kit`).
+- `kit/`: the start kit itself, not in git. Download with `python scripts/fetch_kit.py`.
+- `app.db`: the bot's SQLite database, not in git. The Control Room reads it.

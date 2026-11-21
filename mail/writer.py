@@ -1,11 +1,10 @@
 import os
 import re
-import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from . import gateway, store
-from .client import reply_subject
+from . import gateway
+from .text import fresh_text, reply_subject
 
 AGENT_NAME = os.getenv("AGENT_NAME") or "Lena"
 COMPANY = "WRATHOFCODE Air Freight"
@@ -280,8 +279,6 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
 
 
 def snippet(text: str, limit=500) -> str:
-    from .router import fresh_text
-
     t = re.sub(r"\s+", " ", fresh_text(text or "")).strip()
     return t[:limit]
 
@@ -303,11 +300,9 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         agent=AGENT_NAME,
         company=COMPANY,
     )
-    t0 = time.monotonic()
     try:
         reply = await gateway.chat([{"role": "user", "content": prompt}], http=http)
     except gateway.GatewayError as e:
-        store.log_event("rfq", rfq.get("id"), "write", "fail", f"Gateway down, template used: {e}"[:300], (time.monotonic() - t0) * 1000)
         return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(e))
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
@@ -318,14 +313,4 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         issues = check_final(body, values, lang)
     if issues:
         body = template(lang, values)
-    store.log_event(
-        "rfq",
-        rfq.get("id"),
-        "write",
-        "ok",
-        "Email written by LLM" if not issues else f"LLM draft rejected ({'; '.join(issues)}), template used",
-        reply.ms,
-        reply.cost_usd,
-        data={**tokens, "fallback": bool(issues)},
-    )
     return Email(subject, body, used_llm=True, cost_usd=reply.cost_usd, fallback_reason="; ".join(issues) or None, tokens=tokens)

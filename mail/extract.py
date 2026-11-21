@@ -1,15 +1,12 @@
-import json
 import re
-import time
 from dataclasses import dataclass, field
 from decimal import Decimal
 
 from sourcing.models import Piece, Shipment
 from sourcing.weights import chargeable_weight_kg, gross_weight_kg, sanity_problems
 
-from . import kit, lang, store
-from .client import Mail
-from .router import fresh_text
+from . import kit, lang
+from .text import fresh_text
 from .writer import preference
 
 ORIGINS = {"FRA", "MUC", "DUS", "HAM", "STR", "CGN", "BER", "HAJ", "LEJ", "NUE", "BRE", "DRS", "FMO", "PAD", "SCN", "TXL"}
@@ -28,7 +25,7 @@ CITIES = {
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|paczk\w*|szt\.?|ctns?|skids?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*)?"
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*)?"
     rf"(?P<l>{NUM})\s*(?:x|×|\*)\s*(?P<w>{NUM})\s*(?:x|×|\*)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*)\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
     re.I,
@@ -36,7 +33,7 @@ DIMS = re.compile(
 WEIGHT = re.compile(rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|lbs?|pounds?)\b", re.I)
 TOTAL_HINT = re.compile(r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I)
 FAST = re.compile(r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|urgente?|lo antes posible|más rápido|il più veloce|prima possibile|najszybc\w*|pilne)\b", re.I)
-CHEAP = re.compile(r"\b(cheapest|lowest|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b", re.I)
+CHEAP = re.compile(r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b", re.I)
 PICKUP = re.compile(r"\b(pick ?up|collect(ion)? from|door|abholung|abholen|ab werk|enlèvement|ramassage|recogida|recoger|ritiro|odbiór|odebrać)\b", re.I)
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
 LITHIUM = re.compile(r"UN\s?3480|lithium[- ]ion batter(y|ies) (packed )?alone", re.I)
@@ -53,6 +50,7 @@ class Extracted:
     first_name: str
     language: str
     preference: str
+    preference_stated: bool = False
     missing: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
     gross_kg: float | None = None
@@ -144,29 +142,34 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
     return None, "kg"
 
 
-def find_first_name(mail: Mail, text: str) -> str:
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
+def sender_email(sender: str) -> str:
+    s = (sender or "").strip().lower()
+    return s[s.index("<") + 1 : s.index(">")] if "<" in s and ">" in s else s
+
+
+def find_first_name(sender: str, text: str) -> str:
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     for i, line in enumerate(lines):
         if SIGNOFF.match(line) and i + 1 < len(lines):
             cand = re.split(r"[\s,]", lines[i + 1])[0]
             if re.fullmatch(r"[A-ZÀ-ÝĄĆĘŁŃÓŚŹŻ][a-zà-ÿąćęłńóśźż'-]{1,20}", cand):
                 return cand
-    m = re.search(r"\b(?:regards|thanks|cheers|grüße|merci|saludos|saluti|pozdrawiam)[,.!]?\s+([A-Z][a-zà-ÿ'-]{1,20})\s*$", text, re.I | re.M)
+    m = re.search(r"\b(?:regards|thanks|cheers|grüße|merci|saludos|saluti|pozdrawiam)[,.!]?\s+([A-Z][a-zà-ÿ'-]{1,20})\s*$", text or "", re.I | re.M)
     if m:
         return m.group(1)
-    raw = mail.sender
-    if "<" in raw:
-        name = raw.split("<")[0].strip().strip('"')
+    if "<" in (sender or ""):
+        name = sender.split("<")[0].strip().strip('"')
         if name and "@" not in name:
             return name.split()[0].title()
-    local = mail.sender_email.split("@")[0]
-    part = re.split(r"[._-]", local)[0]
-    return part.title() if part.isalpha() and len(part) > 1 and part not in ("info", "sales", "export", "logistics", "shipping", "procurement") else ""
+    part = re.split(r"[._-]", sender_email(sender).split("@")[0])[0]
+    generic = ("info", "sales", "export", "logistics", "shipping", "procurement", "buyer", "orders")
+    return part.title() if part.isalpha() and len(part) > 1 and part not in generic else ""
 
 
-def extract(mail: Mail, rfq_id: str) -> Extracted:
-    text = f"{mail.subject}\n{fresh_text(mail.body)}"
-    language = lang.detect(fresh_text(mail.body) or mail.subject)
+def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
+    text = f"{subject}\n{fresh_text(body)}"
+    language = lang.detect(fresh_text(body) or subject)
+    stated = bool(FAST.search(text) or CHEAP.search(text))
     pref = "fastest" if FAST.search(text) and not CHEAP.search(text) else preference(None)
     origin, dest = find_route(text)
     pieces = find_pieces(text)
@@ -199,7 +202,8 @@ def extract(mail: Mail, rfq_id: str) -> Extracted:
             problems.append("door pickup asked but no pickup zone found")
     return Extracted(
         shipment=shipment,
-        first_name=find_first_name(mail, mail.body),
+        first_name=find_first_name(sender, body),
+        preference_stated=stated,
         language=language,
         preference=pref,
         missing=missing,
@@ -208,23 +212,3 @@ def extract(mail: Mail, rfq_id: str) -> Extracted:
         chargeable_kg=charge,
         pieces=sum(p.count for p in pieces) or (1 if gross else 0),
     )
-
-
-def save_rfq(mail: Mail, rfq_id: str, x: Extracted) -> None:
-    t0 = time.monotonic()
-    s = x.shipment
-    with store.connect() as db:
-        db.execute(
-            """INSERT INTO rfqs (id, thread_id, customer, subject, received_at, status, preference, origin, destination, chargeable_kg)
-               VALUES (?,?,?,?,?,?,?,?,?,?)
-               ON CONFLICT(id) DO UPDATE SET status=excluded.status, preference=excluded.preference, origin=excluded.origin,
-               destination=excluded.destination, chargeable_kg=excluded.chargeable_kg""",
-            (rfq_id, str(mail.thread_id), mail.sender_email, mail.subject, mail.received_ts(),
-             "EXTRACTED" if s else "NEW", x.preference, s.origin if s else None, s.destination if s else None, x.chargeable_kg),
-        )
-        db.execute("UPDATE mails SET rfq_id=? WHERE id=?", (rfq_id, mail.id))
-        msg = (f"{s.origin}→{s.destination}, {x.pieces} pcs, {x.gross_kg:g} kg gross, {x.chargeable_kg:g} kg chargeable, {x.preference}"
-               if s else f"Missing {', '.join(x.missing)}")
-        store.log_event("rfq", rfq_id, "extract", "start" if s else "fail", msg, (time.monotonic() - t0) * 1000,
-                        data={"missing": x.missing, "problems": x.problems, "language": x.language, "first_name": x.first_name,
-                              "shipment": json.loads(s.model_dump_json()) if s else None}, db=db)
