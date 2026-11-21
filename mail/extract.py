@@ -145,9 +145,9 @@ CITIES = {
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|każd\w*)\s*:?\s*)?)?"
-    rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
-    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*)\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada uno|cada|ciascun\w*|każd\w*)\s*:?\s*)?\(?\s*)?"
+    rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
+    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
     re.I,
 )
 WEIGHT = re.compile(
@@ -181,7 +181,7 @@ CHEAP = re.compile(
     re.I,
 )
 PICKUP = re.compile(
-    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|abholung|abholen|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b",
+    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|hol\w* (?:die|unsere) ware[^.\n]{0,30}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b",
     re.I,
 )
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
@@ -694,12 +694,8 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
         elif known and known[:2] in zones:
             postcode, zone = known, known[:2]
     if door and zone:
-        zone_airport = zones[zone]["airport"]
-        explicit = origin is not None and re.search(
-            rf"\b(?:from|ex|origin\s*:?|departure\s*(?:airport)?\s*:?)\s+{origin}\b", text, re.I
-        )
-        if not explicit:
-            origin = zone_airport
+        # Door pickup always departs from the pickup zone's airport, even if the mail names another.
+        origin = zones[zone]["airport"]
 
     vols = [volume_cbm_of(m) for m in VOLUME.finditer(text)]
     if not vols:
