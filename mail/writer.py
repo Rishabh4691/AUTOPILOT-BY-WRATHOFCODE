@@ -217,10 +217,57 @@ QUESTIONS = {
 }
 
 
+# The same questions in the other languages customers write in. Detection only: for a
+# non-English mail the prompt then asks the model to answer each topic in the customer's
+# language from code-supplied facts (question_slots). English handling is unchanged.
+# Roadmap section 17: question detection was English-only (3/18 in a six-language test).
+QUESTIONS_INTL = {
+    "departure": re.compile(
+        r"frühest\w*\s+(?:mögliche\w*\s+)?(?:abflug|abfahrt|verladung)|abflugdatum|abflugtermin|"
+        r"(?:départ|vol)\s+(?:le\s+)?(?:plus\s+tôt|au\s+plus\s+tôt)|départ\s+au\s+plus\s+tôt|date\s+de\s+départ|"
+        r"salida\s+más\s+temprana|primer\s+vuelo\s+disponible|fecha\s+de\s+salida|"
+        r"partenza\s+più\s+(?:vicina|presto)|prima\s+partenza|data\s+di\s+partenza|"
+        r"najwcześniejsz\w*\s+(?:wylot|termin\s+wylotu)|data\s+wylotu|"
+        r"vroegste\s+vertrek|vertrekdatum|partida\s+mais\s+cedo|data\s+de\s+partida",
+        re.I,
+    ),
+    "arrival": re.compile(
+        r"\bankunft\w*|\bankommen|\beintreffen|\blaufzeit|\btransitzeit|"
+        r"\barrivée|délai\s+de\s+transit|temps\s+de\s+transit|"
+        r"\bllegada|tiempo\s+de\s+tránsito|"
+        r"\barrivo\b|tempo\s+di\s+transito|"
+        r"\bprzylot\w*|czas\s+tranzytu|"
+        r"\baankomst\w*|\btransittijd|\bchegada|tempo\s+de\s+trânsito",
+        re.I,
+    ),
+    "awb": re.compile(
+        r"(?:einzigen|einem|einen)\s+luftfrachtbrief|"
+        r"(?:une\s+seule|une\s+même|même)\s+(?:LTA|lettre\s+de\s+transport\s+aérien)|"
+        r"(?:una\s+sola|única)\s+guía\s+aérea|(?:un'?\s*unica|una\s+sola)\s+lettera\s+di\s+vettura|"
+        r"jedn\w+\s+lotnicz\w+\s+liś\w+\s+przewozow\w*|jedn\w+\s+AWB|"
+        r"één\s+(?:AWB|luchtvrachtbrief)|(?:um\s+único|um\s+só)\s+(?:AWB|conhecimento\s+aéreo)",
+        re.I,
+    ),
+    "dropoff": re.compile(
+        r"anlieferschluss|annahmeschluss|späteste\w*\s+anlieferung|"
+        r"(?:heure|date)\s+limite\s+de\s+(?:dépôt|livraison)|"
+        r"(?:hora|fecha)\s+límite\s+de\s+entrega|orario\s+limite\s+di\s+consegna|termine\s+ultimo\s+di\s+consegna|"
+        r"(?:ostateczny|najpóźniejszy)\s+termin\s+dostarczenia|uiterste\s+aanlevertijd|hora\s+limite\s+de\s+entrega",
+        re.I,
+    ),
+    "pickup": re.compile(
+        r"abholtermin|date\s+d'enlèvement|fecha\s+de\s+recogida|"
+        r"data\s+di\s+ritiro|termin\s+odbioru|ophaaldatum|data\s+de\s+(?:recolha|coleta)",
+        re.I,
+    ),
+}
+
+
 def asked(text: str) -> set[str]:
     """Which direct questions the customer asked, found by rules (no LLM call)."""
     fresh = fresh_text(text or "")
-    return {name for name, pattern in QUESTIONS.items() if pattern.search(fresh)}
+    found = {name for name, pattern in QUESTIONS.items() if pattern.search(fresh)}
+    return found | {name for name, pattern in QUESTIONS_INTL.items() if pattern.search(fresh)}
 
 
 CLOSINGS = (
