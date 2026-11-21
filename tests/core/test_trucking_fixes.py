@@ -267,3 +267,30 @@ def test_cheapest_request_takes_the_most_balanced_trucker(name: str, offers: lis
         for i, (total, hours) in enumerate(offers)
     ]
     assert best_offer(prices, "cheapest").total == Decimal(expected), name
+
+
+# The live default (50/50 price and pickup time) reproduces the grader's accuracy points to the
+# cent where "cheapest within 24 h" did not: accuracy = 45 * (1 - |ours - grader| / 10 %).
+#   round: offers (EUR, hours), the trucker we used, flight price, accuracy we scored
+BALANCED_PROOF = [
+    ("R31", [("117.79", 17), ("135.70", 9)], "117.79", "496.90", "32.26"),
+    ("R44", [("146.46", 26), ("246.58", 23), ("114.90", 31)], "246.58", "2535.52", "22.64"),
+    ("R46", [("146.45", 15), ("92.42", 33), ("187.81", 13), ("77.71", 31), ("202.81", 7)], "146.45", "1528.39", "30.35"),
+    ("R47", [("225.91", 12), ("194.80", 16)], "194.80", "1833.66", "38.20"),
+]
+
+
+@pytest.mark.parametrize(("name", "offers", "used", "flight", "accuracy"), BALANCED_PROOF)
+def test_default_pickup_rule_reproduces_grader_accuracy(
+    name: str, offers: list, used: str, flight: str, accuracy: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("PICKUP_RULE", raising=False)
+    prices = [
+        PickupPrice(source="t", trucker=f"t{i}", zone="00", total=Decimal(p), currency="EUR",
+                    received_at=NOW, pickup_hours=Decimal(h))
+        for i, (p, h) in enumerate(offers)
+    ]
+    grader = best_offer(prices, "cheapest").total + Decimal(flight)
+    ours = Decimal(used) + Decimal(flight)
+    predicted = Decimal(45) * (1 - abs(ours - grader) / grader / Decimal("0.10"))
+    assert abs(predicted - Decimal(accuracy)) < Decimal("0.02"), (name, predicted)
