@@ -174,6 +174,12 @@ class RulesFirstExtractor:
     async def extract(self, mail: Mail) -> tuple[RFQ, LlmUsage | None]:
         extra = ""
         try:
+            from mail.reply_files import remember
+
+            remember(mail.id, f"{mail.subject}\n{mail.body}")
+        except Exception:
+            pass
+        try:
             body = clean_body(mail.body)
             x = rules_extract(mail.subject, body, mail.sender, str(mail.id))
             if (

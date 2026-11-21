@@ -122,7 +122,7 @@ class HttpMailboxClient:
             self._client,
             "POST",
             self._url("/v1/mailbox/messages"),
-            json=mail.model_dump(),
+            json=mail.model_dump(exclude=set() if mail.attachments else {"attachments"}),
             headers=auth_headers(self._settings),
         )
         if 400 <= response.status_code < 500:

@@ -886,7 +886,24 @@ class Orchestrator:
                 log.warning("send_retry", extra={"to": outgoing.to, "error": type(error).__name__})
                 await asyncio.sleep(3)
 
+    def reply_files(self, quote: Quote) -> list[dict]:
+        try:
+            from mail.reply_files import quote_attachments
+
+            facts = {
+                "Reference": f"WOC-{quote.rfq_mail_id}",
+                "Total all-in": f"{quote.total} {quote.currency}",
+                "Airline": quote.option.carrier,
+                "Transit days": str(quote.option.transit_days),
+            }
+            return quote_attachments(quote.rfq_mail_id, quote.subject, quote.body, f"WOC-{quote.rfq_mail_id}", facts)
+        except Exception:
+            log.exception("reply_files_failed")
+            return []
+
     async def send_quote(self, quote: Quote) -> None:
+        from core.agents.mailbox import SendRejected
+
         if self.settings.kill_switch:
             self.hold(quote.rfq_mail_id, "Kill switch is on. Nothing is sent.")
             return
@@ -910,10 +927,21 @@ class Orchestrator:
             return
         quote = reviewed
         outgoing = OutgoingMail(
-            to=quote.to, subject=quote.subject, body=quote.body, in_reply_to=quote.rfq_mail_id
+            to=quote.to,
+            subject=quote.subject,
+            body=quote.body,
+            in_reply_to=quote.rfq_mail_id,
+            attachments=tuple(self.reply_files(quote)),
         )
         try:
-            sent = await self.send_with_retry(outgoing)
+            try:
+                sent = await self.send_with_retry(outgoing)
+            except SendRejected:
+                if not outgoing.attachments:
+                    raise
+                log.warning("reply_files_rejected", extra={"rfq": quote.rfq_mail_id})
+                outgoing = outgoing.model_copy(update={"attachments": ()})
+                sent = await self.send_with_retry(outgoing)
         except Exception as error:
             self.store.mark_outbox_failed(quote.thread_root_id, Stage.QUOTED, type(error).__name__)
             log.exception("send_failed")

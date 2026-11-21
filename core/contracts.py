@@ -122,6 +122,7 @@ class OutgoingMail(Frozen):
     subject: str
     body: str
     in_reply_to: int
+    attachments: tuple[dict[str, str], ...] = ()
 
 
 class Piece(Frozen):
