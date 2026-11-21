@@ -338,6 +338,7 @@ class Orchestrator:
 
     async def dangerous_goods_blocked(self, mail: Mail, rfq: RFQ) -> bool:
         from core.agents.attachments import dangerous_goods, has_dg_documents
+        from mail.text import fresh_text
 
         attached = ""
         if self.attachments is not None and mail.attachments:
@@ -345,7 +346,8 @@ class Orchestrator:
                 attached = await self.attachments.text(mail)
             except Exception:
                 log.exception("attachment_read_failed")
-        declared = dangerous_goods(f"{mail.body}\n{attached}")
+        # Quoted history describes older shipments; only the new mail and its attachments count.
+        declared = dangerous_goods(f"{fresh_text(mail.body)}\n{attached}")
         if declared is None or has_dg_documents(mail):
             return False
         if not self.store.claim_outbox(rfq.thread_root_id, Stage.HELD, rfq.mail_id, self.clock()):

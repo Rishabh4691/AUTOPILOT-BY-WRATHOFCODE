@@ -10,10 +10,17 @@ DG_FIELD = re.compile(
     r"towary niebezpieczne|imdg|iata dgr|adr)\s*[:=]\s*(?P<v>[^\n;]{1,80})",
     re.I,
 )
+BODY_CLASS = re.compile(
+    r"(?<!business )(?<!economy )(?<!first )\b(?:class|klasse|classe|clase|klasa)\s*([1-9](?:\.\d)?)\b"
+    r"(?!\s*(?:%|cm|mm|kg|lbs?|pallets?|pcs|pieces))",
+    re.I,
+)
 NEGATIVE = re.compile(r"^\s*(no|none|n/?a|nein|non|keine?|not applicable|-|0)\b", re.I)
 DG_GOODS = re.compile(
     r"\b(adhesives?|glues?|klebstoff\w*|paints?|lacquers?|lacke?|varnish\w*|solvents?|lösungsmittel|thinners?|"
-    r"aerosols?|spray cans?|perfumes?|fragrances?|parfum\w*|lithium[- ]ion|lithium batter\w*|li-?ion|"
+    r"a[eé]ro[sz]ol\w*|spray ?cans?|spraydosen?|sprühdosen?|bombolett\w*|bombes? a[eé]rosol\w*|"
+    r"adh[eé]si(?:f|fs|vos?)|adesiv[io]|colla|klej\w*|pegamentos?|batterie al litio|bater[ií]as? de litio|litowo\w*|"
+    r"perfumes?|fragrances?|parfum\w*|lithium(?![- ]?free)[\w-]*|litio|li-?ion|colles?|"
     r"flammable|entzündlich|inflammable|corrosive|ätzend|resins?|harze?|printing inks?|druckfarben?|"
     r"kraftstoff|petrol|gasoline|diesel fuel|ethanol|isopropanol|compressed gas|gas cylinders?|"
     r"dry ice|trockeneis|safety matches|fireworks|pesticides?|explosives?|oxidi[sz]ers?|peroxides?)\b",
@@ -45,8 +52,8 @@ def body_classes(text: str) -> list[str]:
     """Hazard classes written in the mail itself, e.g. "Class 3 dangerous goods"."""
     out = []
     for line in (text or "").splitlines():
-        for m in CLASS.finditer(line):
-            if DG_CONTEXT.search(line) and not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
+        for m in BODY_CLASS.finditer(line):
+            if not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
                 out.append(m.group(1))
     return out
 
