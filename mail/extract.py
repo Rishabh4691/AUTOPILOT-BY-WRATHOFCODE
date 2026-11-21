@@ -158,6 +158,78 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
     return None, "kg"
 
 
+LOT_HEAD = re.compile(
+    r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]\s*(?:(\d+)\s*[^\W\d])?", re.I
+)
+LOT_WEIGHT = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|kilograms?|lbs?|pounds?)\b(?!\s*net)", re.I)
+LOT_VOLUME = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:cbm|m3|m³|cubic met(?:re|er)s?)", re.I)
+LOT_DIMS = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m|in|inch(?:es)?)?\b",
+    re.I,
+)
+LOT_EACH = re.compile(r"\b(?:each|per (?:piece|unit|item|carton|case|drum|pallet)|je|pro stück|chacun|cada|ciascuno)\b", re.I)
+LOT_TOGETHER = re.compile(r"\b(?:together|total|in total|insgesamt|zusammen|gesamt)\b", re.I)
+NET_BEFORE = re.compile(r"\bnet(?:to)?\s*(?:weight)?\s*:?\s*$", re.I)
+
+
+def _dec(text: str) -> Decimal:
+    return Decimal(text.replace(",", "."))
+
+
+def _cm(value: Decimal, unit: str | None) -> Decimal:
+    unit = (unit or "cm").lower()
+    if unit == "mm":
+        return value / 10
+    if unit == "m":
+        return value * 100
+    if unit.startswith("in"):
+        return value * Decimal("2.54")
+    return value
+
+
+def parse_lot_line(line: str) -> tuple[Decimal | None, Decimal | None, int] | None:
+    head = LOT_HEAD.search(line)
+    if not head:
+        return None
+    count = int(head.group(1)) if head.group(1) else 1
+    gross = volume = None
+    for segment in re.split(r"[,;]", line[head.start():]):
+        each = bool(LOT_EACH.search(segment)) and not LOT_TOGETHER.search(segment)
+        factor = count if each else 1
+        if gross is None:
+            for m in LOT_WEIGHT.finditer(segment):
+                if NET_BEFORE.search(segment[: m.start()]):
+                    continue
+                kg = _dec(m.group(1))
+                if m.group(2).lower().startswith(("lb", "pound")):
+                    kg = kg * Decimal("0.45359237")
+                gross = kg * factor
+                break
+        if volume is None:
+            vol = LOT_VOLUME.search(segment)
+            if vol:
+                volume = _dec(vol.group(1)) * factor
+            else:
+                dims = LOT_DIMS.search(segment)
+                if dims:
+                    l, w, h = (_cm(_dec(dims.group(i)), dims.group(4)) for i in (1, 2, 3))
+                    per_piece = l * w * h / Decimal(1_000_000)
+                    volume = per_piece * (factor if each or not LOT_TOGETHER.search(segment) and count > 1 else 1)
+    return gross, volume, count
+
+
+def parse_lots(text: str) -> tuple[Decimal, Decimal | None, int] | None:
+    lots = [lot for lot in (parse_lot_line(line) for line in text.splitlines()) if lot is not None]
+    if len(lots) < 2 or any(lot[0] is None for lot in lots):
+        return None
+    gross = sum((lot[0] for lot in lots if lot[0] is not None), Decimal(0))
+    volumes = [lot[1] for lot in lots]
+    volume = sum((v for v in volumes if v is not None), Decimal(0)) if all(v is not None for v in volumes) else None
+    if volume is not None:
+        volume = volume.quantize(Decimal("0.001"))
+    return gross.quantize(Decimal("0.01")), volume, sum(lot[2] for lot in lots)
+
+
 def sender_email(sender: str) -> str:
     s = (sender or "").strip().lower()
     return s[s.index("<") + 1 : s.index(">")] if "<" in s and ">" in s else s
@@ -224,6 +296,9 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     origin, dest = find_route(text)
     pieces = find_pieces(text)
     gross, wunit = find_gross(text, pieces)
+    lots = parse_lots(text)
+    if lots is not None:
+        pieces, gross, wunit = [], lots[0], "kg"
     door = bool(PICKUP.search(text)) and not SELF_DELIVERY.search(text)
     postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
     zones = kit.pickup_zones()
@@ -232,6 +307,8 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
         origin = zones[zone]["airport"]
 
     vols = [num(m.group("v")) for m in VOLUME.finditer(text)]
+    if lots is not None and lots[1] is not None:
+        vols = [lots[1]]
     if len(vols) > 1 and len(LOT.findall(text)) > 1:
         volume = sum(vols, Decimal(0)) if not pieces else None
     else:

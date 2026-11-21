@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from core.agents.directory import load_directory
@@ -37,8 +38,8 @@ async def test_rfq_1639_sums_lots_and_respects_self_delivery() -> None:
     extractor = RulesFirstExtractor(RegexRfqExtractor(settings, None))
     rfq, _ = await extractor.extract(parse_mail(load("real_rfq_1639.json")))
     assert (rfq.origin, rfq.destination) == ("MUC", "LAX")
-    assert str(rfq.gross_kg) == "998"
-    assert rfq.volume_cbm is not None and str(rfq.volume_cbm) == "2.39"
+    assert rfq.gross_kg == Decimal("998")
+    assert rfq.volume_cbm == Decimal("2.39")
     assert rfq.door_pickup is False
     assert rfq.preference.value == "fastest"
 
@@ -53,3 +54,13 @@ async def test_every_recorded_real_rfq_extracts() -> None:
         assert rfq.gross_kg > 0
         assert rfq.currency == "EUR"
         assert not rfq.door_pickup or rfq.pickup_zone is not None
+
+
+async def test_rfq_1978_sums_mixed_lots_and_ignores_net_weight() -> None:
+    settings = load_settings(environ={"FIVEU_API_KEY": "k"})
+    extractor = RulesFirstExtractor(RegexRfqExtractor(settings, None))
+    rfq, _ = await extractor.extract(parse_mail(load("real_rfq_1978.json")))
+    assert (rfq.origin, rfq.destination) == ("FRA", "LOS")
+    assert rfq.gross_kg == Decimal("1952")
+    assert rfq.volume_cbm == Decimal("4.677")
+    assert rfq.door_pickup and rfq.pickup_zone == "36"
