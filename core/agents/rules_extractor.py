@@ -44,6 +44,8 @@ def to_rfq(mail: Mail, x) -> RFQ:
         volume_cbm=s.volume_cbm,
         door_pickup=s.door_pickup,
         pickup_zone=s.pickup_zone if s.door_pickup else None,
+        pickup_postcode=s.pickup_postcode if s.door_pickup else None,
+        currency=s.quote_currency,
         preference=Preference(x.preference),
         preference_assumed=not x.preference_stated,
         ready_date=s.ready_date,
