@@ -173,7 +173,7 @@ TOTAL_HINT = re.compile(
     r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I
 )
 FAST = re.compile(
-    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|urgente?|lo antes posible|más rápido|il più veloce|prima possibile|najszybc\w*|pilne)\b",
+    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|pilne|pilnie|time[- ]critical|soonest)\b",
     re.I,
 )
 CHEAP = re.compile(
@@ -209,7 +209,7 @@ COUNT_ONLY = re.compile(
     r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
     re.I,
 )
-READY_KW = r"(?:ready|pick-?up|\w*bereit|disponible|list[oa]s?|pront[oa]|gotow\w*|prêt\w*)"
+READY_KW = r"(?:ready|pick-?up|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*)"
 READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})\.(\d{1,2})\.(\d{4}))"
 READY = re.compile(rf"\b{READY_KW}\D{{0,40}}?{READY_DATE}", re.I)
 READY_AFTER = re.compile(rf"{READY_DATE}[^\d\n]{{0,25}}?\b{READY_KW}", re.I)
@@ -219,7 +219,8 @@ SELF_DROP_DATE = re.compile(
     re.I,
 )
 CURRENCY = re.compile(
-    r"\b(?:in|price in|quote in|prices? in|all-in (?:price )?in|currency:?|währung:?|en|devise:?)\s*(USD|EUR|GBP|CHF|PLN|US ?dollars?|euros?|dollars?)\b",
+    r"\b(?:in|price in|quote in|prices? in|all-in (?:price )?in|currency:?|währung:?|en|w|devise:?|valuta:?|moneda:?|waluta:?)\s*(USD|EUR|GBP|CHF|PLN|US ?dollars?|euros?|dollars?|d[oó]lar(?:es|s)?|"
+    r"francs? suisses?|franchi svizzeri|schweizer franken|francos suizos|swiss francs?)\b",
     re.I,
 )
 UNIT_FIRST_WEIGHT = re.compile(
@@ -303,6 +304,9 @@ def find_route(text: str) -> tuple[str | None, str | None]:
         seq += [code for _, code in found]
     origin = labelled.get("o") or next((c for c in seq if c in ORIGINS), None)
     dest = labelled.get("d") or next((c for c in seq if c != origin and c not in ORIGINS), None)
+    if dest == origin:
+        dest = None
+    dest = dest or next((c for c in seq if c != origin and c not in ORIGINS), None)
     dest = dest or next((c for c in seq if c != origin), None)
     return origin, dest
 
@@ -446,14 +450,14 @@ def find_currency(text: str) -> str | None:
     m = CURRENCY.search(text)
     if not m:
         return None
-    v = m.group(1).upper().replace(" ", "")
-    return (
-        "USD"
-        if "DOLLAR" in v or v in ("USD", "USDOLLAR", "USDOLLARS")
-        else "EUR"
-        if "EURO" in v
-        else v[:3]
-    )
+    v = m.group(1).upper().replace(" ", "").replace("Ó", "O")
+    if "DOLAR" in v or "DOLLAR" in v or v.startswith("USD"):
+        return "USD"
+    if "EURO" in v:
+        return "EUR"
+    if "FRAN" in v:
+        return "CHF"
+    return v[:3]
 
 
 def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:

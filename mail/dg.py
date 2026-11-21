@@ -10,6 +10,11 @@ DG_FIELD = re.compile(
     r"towary niebezpieczne|imdg|iata dgr|adr)\s*[:=]\s*(?P<v>[^\n;]{1,80})",
     re.I,
 )
+BODY_CLASS = re.compile(
+    r"(?<!business )(?<!economy )(?<!first )\b(?:class|klasse|classe|clase|klasa)\s*([1-9](?:\.\d)?)\b"
+    r"(?!\s*(?:%|cm|mm|kg|lbs?|pallets?|pcs|pieces))",
+    re.I,
+)
 NEGATIVE = re.compile(r"^\s*(no|none|n/?a|nein|non|keine?|not applicable|-|0)\b", re.I)
 DG_GOODS = re.compile(
     r"\b(adhesives?|glues?|klebstoff\w*|paints?|lacquers?|lacke?|varnish\w*|solvents?|lösungsmittel|thinners?|"
@@ -140,7 +145,11 @@ def check(body: str, attachments: list[tuple[str, str]]) -> DgCheck:
             if not NEGATIVE.match(value):
                 reasons.append(f"'{m.group(1)}: {value[:40]}' in {where}")
                 classes += CLASS.findall(value)
-        if where != "mail":
+        if where == "mail":
+            for m in BODY_CLASS.finditer(text):
+                classes.append(m.group(1))
+                reasons.append(f"class {m.group(1)} in {where}")
+        else:
             classes += CLASS.findall(text)
             if DOCS.search(text[:400]):
                 docs = True
