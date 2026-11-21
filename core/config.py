@@ -37,6 +37,18 @@ def _int(value: str | None, default: int) -> int:
     return int(value)
 
 
+def _float(value: str | None, default: float) -> float:
+    if value is None or value.strip() == "":
+        return default
+    return float(value)
+
+
+def _decimal(value: str | None, default: Decimal) -> Decimal:
+    if value is None or value.strip() == "":
+        return default
+    return Decimal(value.strip())
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str = field(repr=False)
@@ -56,6 +68,14 @@ class Settings:
     rfq_lifetime_s: int = 360
     price_weight: Decimal = Decimal("0.5")
     transit_weight: Decimal = Decimal("0.5")
+    volume_kg_per_cbm: Decimal = Decimal("167")
+    llm_fallback_model: str = "gpt-4.1-mini"
+    llm_max_output_tokens: int = 250
+    llm_timeout_s: float = 12.0
+    send_at_s: float = 120.0
+    wait_until_s: float = 240.0
+    hard_stop_s: float = 315.0
+    body_char_limit: int = 4000
 
 
 def load_settings(root: Path = ROOT, environ: Mapping[str, str] | None = None) -> Settings:
@@ -74,11 +94,17 @@ def load_settings(root: Path = ROOT, environ: Mapping[str, str] | None = None) -
         tracking_address=env.get("TRACKING_ADDRESS", "tracking@hackloop.mail").strip().lower(),
         dry_run=_flag(env.get("DRY_RUN"), default=True),
         kill_switch=_flag(env.get("KILL_SWITCH"), default=False),
-        llm_model=env.get("LLM_MODEL", "").strip(),
+        llm_model=env.get("LLM_MODEL", "").strip() or "gpt-5-nano",
         poll_interval_s=float(env.get("POLL_INTERVAL_SECONDS") or "2"),
         max_tokens_per_rfq=_int(env.get("MAX_TOKENS_PER_RFQ"), 3000),
         db_path=root / (env.get("DB_PATH") or "data/app.db"),
         kit_dir=root / (env.get("KIT_DIR") or "data/kit"),
+        price_weight=_decimal(env.get("PRICE_WEIGHT"), Decimal("0.5")),
+        transit_weight=_decimal(env.get("TRANSIT_WEIGHT"), Decimal("0.5")),
+        volume_kg_per_cbm=_decimal(env.get("VOLUME_KG_PER_CBM"), Decimal("167")),
+        llm_fallback_model=env.get("LLM_FALLBACK_MODEL", "").strip() or "gpt-4.1-mini",
+        llm_max_output_tokens=_int(env.get("LLM_MAX_OUTPUT_TOKENS"), 250),
+        llm_timeout_s=_float(env.get("LLM_TIMEOUT_SECONDS"), 12.0),
     )
 
 
