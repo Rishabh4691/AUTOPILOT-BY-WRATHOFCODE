@@ -909,7 +909,9 @@ def without_injections(text: str) -> str:
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
-    body = without_injections((body or "").replace("’", "'").replace("‘", "'"))
+    from .structured import expand  # JSON / XML / CSV / table requests (roadmap section 16)
+
+    body = without_injections(expand((body or "").replace("’", "'").replace("‘", "'")))
     # French/Swiss thousands use narrow or no-break spaces ("1\u202f225 kg" was read as 225 kg).
     body = body.replace("\u202f", " ").replace("\u00a0", " ").replace("\u2009", " ")
     subject = (subject or "").replace("’", "'")
