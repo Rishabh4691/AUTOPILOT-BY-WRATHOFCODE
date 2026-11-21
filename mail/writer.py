@@ -585,6 +585,12 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
     alt = alternatives(body.replace(values.get("CARRIER", ""), ""), lang)
     if alt:
         out.append(f"offers an alternative: {sorted(set(a.lower() for a in alt))}")
+    if lang == "en":
+        if re.search(r"[^\n ]  +[^\n ]", body) or re.search(r"\.\s*\.", body.replace("...", "")):
+            out.append("broken spacing or punctuation")
+        total = values.get("TOTAL", "")
+        if total and re.search(re.escape(total) + r"\s*EUR\b", body):
+            out.append("currency written twice")
     return out
 
 
