@@ -218,6 +218,7 @@ SELF_DROP_DATE = re.compile(
     rf"entregaremos|consegneremo|dostarczymy)[^.\d]{{0,60}}?{READY_DATE}",
     re.I,
 )
+READY_SAME_SENTENCE = re.compile(r"\b(?:ready|abholbereit|bereit)\b[^.!?\n]{0,90}?\b(\d{4})-(\d{2})-(\d{2})\b", re.I)
 CURRENCY = re.compile(
     r"\b(?:in|price in|quote in|prices? in|all-in (?:price )?in|currency:?|währung:?|en|w|devise:?|valuta:?|moneda:?|waluta:?)\s*(USD|EUR|GBP|CHF|PLN|US ?dollars?|euros?|dollars?|d[oó]lar(?:es|s)?|"
     r"francs? suisses?|franchi svizzeri|schweizer franken|francos suizos|swiss francs?)\b",
@@ -567,7 +568,14 @@ def find_ready(text: str) -> date | None:
                 return date(int(n.group(6)), _month(n.group(4)) or 0, int(n.group(5)))
         except ValueError:
             return None
-        return None
+        # "ready for pickup at our site in 61018 (Bad Homburg), Germany, on 2026-11-25": a postcode sits in between
+        late = READY_SAME_SENTENCE.search(text or "")
+        if not late:
+            return None
+        try:
+            return date(int(late.group(1)), int(late.group(2)), int(late.group(3)))
+        except ValueError:
+            return None
     try:
         if m.group(1):
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
@@ -708,6 +716,9 @@ def zone_from_signature(text: str, zones: dict) -> str | None:
         for alias in AREA_ALIASES.get(info["area"], ()):
             if re.search(rf"\b{re.escape(_fold(alias))}\b", tail):
                 return zone
+    for city, zone in NEAREST_ZONE.items():
+        if zone in zones and re.search(rf"\b{re.escape(_fold(city))}\b", tail):
+            return zone
     return None
 
 
@@ -768,6 +779,16 @@ def find_postcode(text: str, zones: dict) -> str | None:
         if m.group(1) in found
     ]
     return next((p for p in near + found if p[:2] in zones), found[0] if found else None)
+
+
+NEAREST_ZONE = {
+    "nuremberg": "93", "nürnberg": "93", "nuernberg": "93", "erlangen": "93", "fürth": "93",
+    "fuerth": "93", "bamberg": "93", "würzburg": "63", "wuerzburg": "63", "ulm": "73",
+    "karlsruhe": "70", "freiburg": "72", "mannheim": "64", "heidelberg": "64", "kassel": "35",
+    "hannover": "28", "hanover": "28", "lübeck": "24", "luebeck": "24", "münster": "44",
+    "muenster": "44", "bielefeld": "44", "aachen": "50", "koblenz": "53", "trier": "53",
+    "saarbrücken": "55", "saarbruecken": "55", "augsburg": "86", "rosenheim": "81",
+}
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:

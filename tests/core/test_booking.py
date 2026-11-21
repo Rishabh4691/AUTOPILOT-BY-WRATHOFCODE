@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -240,3 +241,43 @@ def test_more_ways_to_say_yes():
         "Auftrag erteilt, freigegeben.",
     ]:
         assert is_acceptance(text), text
+
+
+CONFIRMED = {
+    "booking_reference": "BK-AB12CD34",
+    "team_reference": "WOC-276",
+    "carrier": "Meridian Freightways",
+    "origin": "CGN",
+    "destination": "ORD",
+    "transit_days": 2,
+    "eta": "2026-12-04",
+}
+
+
+def test_confirmation_uses_our_reference_price_format_and_short_dates():
+    from core.agents.booking import confirmation_body
+
+    rfq = {"total": "3228.87", "currency": "EUR"}
+    body = confirmation_body(CONFIRMED, rfq, "en", "Sara", "Lena", "WRATHOFCODE Air Freight")
+    assert body.startswith("Hi Sara,\n\nGood news")
+    assert "our reference WOC-276" in body and "your reference" not in body.lower()
+    assert "Fri 4 Dec" in body and "2026-12-04" not in body
+    assert "EUR 3,228.87" in body and "2 days in transit" in body
+    assert not re.search(r"[.!?]\s+[a-z]", body)
+    restarted = confirmation_body({**CONFIRMED, "transit_days": 0}, rfq, "en", "", "Lena", "X")
+    assert "0 days" not in restarted and restarted.startswith("Hi there,")
+    polish = confirmation_body(CONFIRMED, rfq, "pl", "", "Lena", "X")
+    assert "Państwa" not in polish and "nasz numer" in polish
+
+
+def test_booking_reuses_the_quoted_arrival():
+    from datetime import date
+
+    from core.agents.booking import booking_eta
+    from mail.writer import arrival_date
+
+    assert booking_eta({"arrival": "2026-12-01", "transit_days": 0}) == "2026-12-01"
+    today = date(2026, 11, 21)
+    quoted = arrival_date("2026-11-28", 2, today).isoformat()
+    recomputed = booking_eta({"ready_date": "2026-11-28", "transit_days": 2}, today)
+    assert recomputed == quoted == "2026-12-01"

@@ -150,8 +150,12 @@ def pickup_rule() -> str:
     return (os.getenv("PICKUP_RULE") or "fast_cheapest").strip().lower()
 
 
-def best_offer(prices: list[PickupPrice]) -> PickupPrice:
+def best_offer(prices: list[PickupPrice], preference: str = "cheapest") -> PickupPrice:
     pool = [p for p in prices if p.currency == "EUR"] or prices
+    if preference == "fastest":
+        timed = [p for p in pool if p.pickup_hours is not None]
+        if timed:
+            return min(timed, key=lambda p: (p.pickup_hours, p.total))
     if pickup_rule() == "fast_cheapest":
         quick = [p for p in pool if p.pickup_hours is not None and p.pickup_hours <= MAX_PICKUP_HOURS]
         return min(quick or pool, key=lambda p: p.total)
@@ -377,4 +381,5 @@ class EmailTruckerPickupSource:
             waited < PICKUP_GRACE_S or since_rfq < PICKUP_WAIT_S
         ):
             return None
-        return best_offer(prices)
+        preference = getattr(rfq, "preference", "cheapest")
+        return best_offer(prices, str(getattr(preference, "value", preference)))

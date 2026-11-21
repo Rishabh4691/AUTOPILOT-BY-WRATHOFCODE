@@ -43,10 +43,12 @@ class Email:
     tokens: dict = field(default_factory=dict)
 
 
-def money(amount: float, currency: str, lang: str) -> str:
+def money(amount, currency: str, lang: str = "en") -> str:
+    """One price format: "EUR 1,234.56" in English, "1.234,56 EUR" style elsewhere."""
     whole, cents = f"{float(amount):,.2f}".split(".")
+    currency = str(currency or "EUR").upper()
     if lang == "en":
-        return f"{currency} {whole},{cents}".replace(",", "X", whole.count(",")).replace("X", ",").replace(f"{whole},{cents}", f"{whole}.{cents}")
+        return f"{currency} {whole}.{cents}"
     sep = " " if lang == "fr" else "."
     return f"{whole.replace(',', sep)},{cents} {currency}"
 
@@ -56,18 +58,51 @@ def kg(v, lang) -> str:
     return (s if lang == "en" else s.replace(",", "X").replace(".", ",").replace("X", ".")) + " kg"
 
 
-def arrival_day(price: dict, lang: str, today: date | None = None) -> str:
-    raw = price.get("arrival")
-    if raw:
-        d = datetime.fromisoformat(str(raw)[:10]).date()
-    else:
-        start = today or date.today()
-        ready = price.get("ready_date")
-        if ready:
-            start = max(start, datetime.fromisoformat(str(ready)[:10]).date())
-        d = start + timedelta(days=1 + int(price.get("transit_days") or 0))
+def as_date(value) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except ValueError:
+        return None
+
+
+def departure_date(ready=None, today: date | None = None) -> date:
+    """Earliest departure: the ready date, or today if that is already past."""
+    start = today or date.today()
+    ready_day = as_date(ready)
+    return max(start, ready_day) if ready_day else start
+
+
+def arrival_date(ready=None, transit_days=None, today: date | None = None) -> date:
+    """Expected arrival, shared by quote, booking confirmation and tracking."""
+    return departure_date(ready, today) + timedelta(days=1 + int(transit_days or 0))
+
+
+def short_day(value, lang: str = "en") -> str:
+    d = as_date(value)
+    if d is None:
+        return ""
     name = WEEKDAYS.get(lang, WEEKDAYS["en"]).split()[d.weekday()]
-    return f"{name} {d.day:02d}.{d.month:02d}" if lang != "en" else f"{name} {d.day} {d.strftime('%b')}"
+    if lang == "en":
+        return f"{name[:3]} {d.day} {d.strftime('%b')}"
+    return f"{name} {d.day:02d}.{d.month:02d}"
+
+
+def quote_arrival(price: dict, today: date | None = None) -> date:
+    stored = as_date(price.get("arrival"))
+    ready = as_date(price.get("ready_date"))
+    if stored and (ready is None or stored > ready):
+        return stored
+    return arrival_date(price.get("ready_date"), price.get("transit_days"), today)
+
+
+def arrival_day(price: dict, lang: str, today: date | None = None) -> str:
+    return short_day(quote_arrival(price, today), lang)
 
 
 def valid_text(price: dict, lang: str) -> str:
@@ -137,6 +172,7 @@ def facts(rfq: dict, price: dict) -> tuple[str, dict]:
         "_VALID_UNTIL": str(price.get("valid_until") or ""),
     }
     values.update(story(rfq, values))
+    values.update(answers(rfq, price, lang))
     return lang, values
 
 
@@ -152,6 +188,117 @@ def hold_text(valid_until: str, now: datetime | None = None) -> str:
     return f"for about {minutes} minutes"
 
 
+QUESTIONS = {
+    "departure": re.compile(
+        r"earliest\s+(?:available\s+|possible\s+)?(?:departure|flight|uplift)|"
+        r"when\s+(?:can|could|would|will)\s+(?:it|the\s+(?:shipment|cargo|goods)|this|they)\s+(?:leave|depart|fly|go)|"
+        r"departure\s+(?:date|day|time)|earliest\s+departure",
+        re.I,
+    ),
+    "arrival": re.compile(
+        r"\barriv\w*|transit\s+time|\beta\b|delivery\s+date|"
+        r"when\s+(?:will|would|could|can)\s+(?:it|the\s+(?:shipment|cargo|goods)|this|they)\s+(?:land|reach|get\s+there|be\s+delivered)",
+        re.I,
+    ),
+    "awb": re.compile(
+        r"(?:single|one)\s+(?:master\s+)?(?:air\s*way\s*bill|awb)|(?:single|one)\s+consignment|"
+        r"(?:all|both)\s+lots\s+together",
+        re.I,
+    ),
+    "pickup": re.compile(
+        r"pick\s*-?\s*up\s+(?:date|day|time)|when\s+(?:can|could|would|will)\s+(?:you|your\s+truck|the\s+truck|the\s+driver)\s+"
+        r"(?:collect|pick)|confirm\s+(?:the\s+)?(?:pick\s*-?\s*up|collection)",
+        re.I,
+    ),
+    "dropoff": re.compile(
+        r"drop\s*-?\s*off|cut\s*-?\s*off|latest\s+(?:delivery\s+)?time|deliver\s+(?:it|them)\s+by\s+when|closing\s+time",
+        re.I,
+    ),
+}
+
+
+def asked(text: str) -> set[str]:
+    """Which direct questions the customer asked, found by rules (no LLM call)."""
+    fresh = fresh_text(text or "")
+    return {name for name, pattern in QUESTIONS.items() if pattern.search(fresh)}
+
+
+CLOSINGS = (
+    "If that works for you, just reply yes and I'll book it straight away.",
+    "A quick yes is all I need to book it.",
+    "Just reply yes and I'll book it right away.",
+    "If you're happy with it, a short yes is enough and I'll book it.",
+)
+
+
+def closing_line(reference: str) -> str:
+    digits = [int(c) for c in str(reference) if c.isdigit()]
+    return CLOSINGS[sum(digits) % len(CLOSINGS)]
+
+
+FRIENDLY = re.compile(r"have a (?:lovely|great|nice|good) (day|week|weekend)", re.I)
+
+
+def signoff_for(text: str, formal: bool) -> str:
+    friendly = FRIENDLY.search(fresh_text(text or ""))
+    if friendly:
+        return f"Have a lovely {friendly.group(1).lower()} too,"
+    return "Kind regards," if formal else "Cheers,"
+
+
+def answers(rfq: dict, price: dict, lang: str) -> dict:
+    """Computed facts that answer the customer's direct questions, plus the hand-over story."""
+    questions = asked(str(rfq.get("customer_text") or ""))
+    today = date.today()
+    ready = as_date(price.get("ready_date"))
+    depart = departure_date(ready, today)
+    days = int(price.get("transit_days") or 0)
+    pieces = int(rfq.get("pieces") or 0)
+    them = "it" if pieces == 1 else "them"
+    they = "it" if pieces == 1 else "they"
+    they_are = "it's" if pieces == 1 else "they're"
+    origin = str(rfq.get("origin") or "").upper()
+    dest = str(rfq.get("destination") or "").upper()
+    origin_city = CITY.get(origin, origin)
+    dest_city = CITY.get(dest, dest)
+    door = bool(rfq.get("door_pickup"))
+    town = re.sub(r"^\d{4,5}\s+", "", str(rfq.get("pickup_town") or "").strip())
+    text = fresh_text(str(rfq.get("customer_text") or ""))
+    buyer = bool(re.search(r"\b(?:buyer|customer|consignee)\b", text, re.I))
+    arrival = short_day(quote_arrival(price, today), lang)
+    when_ready = f" once {they_are} ready on {short_day(ready)}" if ready and ready >= today else ""
+    reach = f"reach your buyer in {dest_city}" if buyer else f"land in {dest_city}"
+    if door:
+        where = f"your site in {town}" if town else "your site"
+        handover = (
+            f"We'll collect {them} from {where}{when_ready} and truck {them} to {origin_city} airport, "
+            f"and {they} should {reach} around {arrival}."
+        )
+    else:
+        handover = f"You drop {them} at {origin or origin_city}{when_ready}, and {they} should {reach} around {arrival}."
+    lines = {
+        "DEPARTURE_LINE": f"The earliest departure is {short_day(depart)}." if "departure" in questions else "",
+        "ARRIVAL_LINE": f"Transit is {days} day{'s' if days != 1 else ''}." if "arrival" in questions and days > 0 else "",
+        "AWB_LINE": "All lots travel together as one consignment under a single air waybill." if "awb" in questions else "",
+        "PICKUP_DATE_LINE": f"Our truck can collect {them} on {short_day(depart)}." if "pickup" in questions and door and not when_ready else "",
+        "DROPOFF_LINE": f"The latest drop-off at {origin} is {short_day(depart)}, the departure day." if "dropoff" in questions and not door else "",
+    }
+    if lang != "en":
+        lines = {k: "" for k in lines}
+        handover = ""
+    answer_text = " ".join(v for v in lines.values() if v)
+    return {
+        "DEPARTURE": short_day(depart, lang),
+        "PICKUP_DATE": short_day(depart, lang),
+        "ORIGIN_CITY": origin_city,
+        "DEST_CITY": dest_city,
+        "HANDOVER": handover,
+        **lines,
+        "ANSWERS": (" " + answer_text) if answer_text else "",
+        "CLOSING": closing_line(str(rfq.get("reference") or "")),
+    }
+
+
 def story(rfq: dict, values: dict) -> dict:
     goods = str(rfq.get("goods") or "").strip()
     town = str(rfq.get("pickup_town") or "").strip()
@@ -163,7 +310,8 @@ def story(rfq: dict, values: dict) -> dict:
     formal = bool(re.search(r"\b(dear (sir|madam|team|mr|ms|mrs)|kind regards|best regards|yours sincerely|mit freundlichen|sehr geehrte)", text, re.I))
     return {
         "PREF": pref,
-        "SIGNOFF": "Kind regards," if formal else "Cheers,",
+        "CARGO": f"{values.get('PIECES', '')} of {goods}" if goods else values.get("PIECES", ""),
+        "SIGNOFF": signoff_for(text, formal),
         "HOLD": hold_text(values.get("_VALID_UNTIL", "")),
         "GOODS_LINE": f"Here's how we'd move your {goods}. " if goods else "",
         "PICKUP_LINE": (
@@ -184,12 +332,11 @@ def story(rfq: dict, values: dict) -> dict:
 TEMPLATES = {
     "en": """Hi [FIRST],
 
-thanks for getting in touch. [GOODS_LINE]For the [PREF] routing I'd put your [PIECES] ([GROSS]) on [CARRIER] from [ROUTE]. Transit is [TRANSIT], so it should land around [ARRIVAL].[PICKUP_LINE]
+[CARRIER] is the [PREF] way to get your [CARGO] from [ORIGIN_CITY] to [DEST_CITY].
+[HANDOVER][ANSWERS]
 
-Your all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
-
-I can hold this rate [HOLD].
-If it works for you, just reply yes and I'll book it straight away. Our reference is [REF].
+The all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
+I can hold it [HOLD]. [CLOSING] Our reference is [REF].
 
 [SIGNOFF]
 {agent}
@@ -262,12 +409,13 @@ No filler openers ("Thanks for reaching out", "I hope you're well"), no closers 
 Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this finds you well", "do not hesitate", "kindly", emojis, bullet points, markdown.
 Body is 5 to 8 short lines in two or three small paragraphs. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
 [PIECES] already includes its unit word, never add "pieces", "pallets" or similar after it. Write every word in {language}, including the words for gross and chargeable weight.
-Use these placeholders exactly as written; never write any digit or price yourself:
-[REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID] [PREF] [GOODS_LINE] [PICKUP_LINE] [VOLUME_NOTE]
-Write flowing sentences like a person, never a list of facts and never arrows. Must contain, in your own words: a short thanks; [GOODS_LINE] as written; that for the [PREF] routing you'd put their [PIECES] ([GROSS]) on [CARRIER] from [ROUTE]; [TRANSIT] transit and arrival around [ARRIVAL]; [PICKUP_LINE] as written; one all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; the rate holds until [VALID]; just reply yes and you'll book it; our reference is [REF].
-Reply like a person who actually read their message: if they asked something specific (earliest departure or arrival, one air waybill, pickup, documents), answer it in one short sentence using only the facts above; if they said something friendly or personal, answer it briefly and naturally; you may mention their goods, their buyer or their town in plain words. Match their tone: casual if they are casual, a touch more formal if they are formal.
-One reply, one decision: give only this single routing and this single price. Never mention alternatives, other routings, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively" or "or".
-The customer asked for the {pref} routing; you may say it is the {pref} one. Customer's message, for tone only:
+Use these placeholders exactly as written; never write any digit, date or price yourself:
+[REF] [ROUTE] [ORIGIN_CITY] [DEST_CITY] [CARGO] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [{valid}] [PREF] [PICKUP_LINE] [VOLUME_NOTE]
+Write flowing sentences like a person, never a list of facts, never arrows, never "piece(s)", never "UTC". Must contain, in your own words: that [CARRIER] is the [PREF] way to get their [CARGO] from [ORIGIN_CITY] to [DEST_CITY]; how it reaches the airport ([PICKUP_LINE] as written, if it is not empty) and that it should arrive around [ARRIVAL]; the all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; you can hold it [{valid}]; a short line that a yes is all you need to book it; our reference is [REF].
+{questions}
+If they said something friendly or personal, answer it briefly and naturally; you may mention their goods, their buyer or their town in plain words. Match their tone: casual if they are casual, a touch more formal if they are formal. Start every sentence with a capital letter, including the first one after the greeting. Do not say it is already booked.
+One reply, one decision: give only this single carrier and this single price. Never mention alternatives, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively", "or", "best fit" or "routing".
+Customer's message, for tone only:
 ---
 {snippet}
 ---
@@ -369,7 +517,7 @@ def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
     written = re.findall(r"\d+(?:[.,:/-]\d+)*", bare)
     if any(number not in allowed for number in written) or MONEY.search(bare):
         out.append("model wrote digits")
-    if re.search(r"\[[A-Za-z_ ]+\]", bare):
+    if re.search(r"\[[A-Za-z_ ]+\]", bare) or any(k not in values for k in re.findall(r"\[([A-Z_]+)\]", draft)):
         out.append("unknown placeholder")
     if EMOJI.search(draft):
         out.append("emoji")
@@ -380,7 +528,28 @@ def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
     lines = [l for l in draft.splitlines() if l.strip()]
     if not 5 <= len(lines) <= 16:
         out.append(f"{len(lines)} lines")
+    for phrase in ("→", "UTC", "piece(s)", "one all-in price", "best fit"):
+        if phrase.lower() in draft.lower():
+            out.append(f"robotic phrase {phrase!r}")
+    if len(re.findall(r"\brouting\b", draft, re.I)) > 1:
+        out.append("routing repeated")
+    if CURLY.search(draft):
+        out.append("curly quotes")
+    if ISO_DATE.search(draft):
+        out.append("iso date")
+    if re.search(r"\bbooked\b", draft, re.I):
+        out.append("says booked")
+    after_greeting = lines[1].lstrip(" \"'(") if len(lines) > 1 else ""
+    if after_greeting[:1].islower():
+        out.append("lowercase first word after greeting")
+    missing = [k for k in ANSWER_SLOTS if values.get(k) and f"[{k}]" not in draft]
+    if missing:
+        out.append(f"unanswered question {missing}")
     return out
+
+
+CURLY = re.compile("[“”„‘’‚«»]")
+ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
 ALTERNATIVES = {
@@ -416,12 +585,38 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
     alt = alternatives(body.replace(values.get("CARRIER", ""), ""), lang)
     if alt:
         out.append(f"offers an alternative: {sorted(set(a.lower() for a in alt))}")
+    if lang == "en":
+        if re.search(r"[^\n ]  +[^\n ]", body) or re.search(r"\.\s*\.", body.replace("...", "")):
+            out.append("broken spacing or punctuation")
+        total = values.get("TOTAL", "")
+        if total and re.search(re.escape(total) + r"\s*EUR\b", body):
+            out.append("currency written twice")
     return out
 
 
 def snippet(text: str, limit=900) -> str:
     t = re.sub(r"\s+", " ", fresh_text(text or "")).strip()
     return t[:limit]
+
+
+ANSWER_SLOTS = ("DEPARTURE_LINE", "ARRIVAL_LINE", "AWB_LINE", "PICKUP_DATE_LINE", "DROPOFF_LINE")
+TOPIC_SLOT = {"departure": "[DEPARTURE]", "arrival": "[ARRIVAL]", "awb": "one consignment under a single air waybill",
+              "pickup": "[PICKUP_DATE]", "dropoff": "[DEPARTURE]"}
+
+
+def question_slots(rfq: dict, values: dict, lang: str) -> str:
+    """Optional prompt slots: only the answers this customer's mail needs."""
+    if lang == "en":
+        needed = [f"[{k}]" for k in ANSWER_SLOTS if values.get(k)]
+        if needed:
+            return ("They asked direct questions. Answer them by putting these sentences in, exactly as written: "
+                    + " ".join(needed) + ".")
+        return "They asked no extra question, so add no extra facts."
+    topics = sorted(asked(str(rfq.get("customer_text") or "")))
+    if not topics:
+        return "They asked no extra question, so add no extra facts."
+    hints = ", ".join(f"{t}: {TOPIC_SLOT[t]}" for t in topics)
+    return f"They asked direct questions. Answer each in one short sentence using only these facts: {hints}."
 
 
 def template(lang: str, values: dict) -> str:
@@ -436,8 +631,10 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         language=LANG_NAMES.get(lang, "English"),
         greeting=GREETING.get(lang, "Hi"),
         pref=pref,
+        valid="HOLD" if lang == "en" else "VALID",
+        questions=question_slots(rfq, values, lang),
         snippet=snippet(rfq.get("customer_text", "")),
-        signoff=SIGNOFF.get(lang, "Cheers,"),
+        signoff=values["SIGNOFF"] if lang == "en" else SIGNOFF.get(lang, "Cheers,"),
         agent=AGENT_NAME,
         company=COMPANY,
     )

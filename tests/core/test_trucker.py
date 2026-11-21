@@ -338,3 +338,29 @@ def test_cheapest_within_30_hours_rounds_14_and_18() -> None:
     )
     assert best_offer(r18).trucker == "Elbkante"
     assert parse_hours("We can collect within 30 hours.") == Decimal("30")
+
+
+def test_fastest_request_takes_the_fastest_trucker_round_25() -> None:
+    from core.agents.trucker import best_offer
+    from core.contracts import PickupPrice
+
+    now = datetime(2026, 11, 21, 17, 27, tzinfo=UTC)
+    offers = [
+        PickupPrice(
+            source="e",
+            trucker=n,
+            zone="70",
+            total=Decimal(p),
+            currency="EUR",
+            received_at=now,
+            pickup_hours=Decimal(h),
+        )
+        for n, p, h in [
+            ("Isarwelle", "134.40", 21),
+            ("Rheinufer", "94.08", 28),
+            ("Nordlicht", "203.04", 14),
+            ("Spessart", "225.04", 9),
+        ]
+    ]
+    assert best_offer(offers, "fastest").trucker == "Spessart"
+    assert best_offer(offers, "cheapest").trucker == "Rheinufer"

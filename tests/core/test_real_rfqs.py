@@ -97,3 +97,15 @@ def test_rfq_3638_without_address_uses_signature_city(tmp_path: Path, monkeypatc
     assert result.shipment is not None
     assert result.shipment.origin == "MUC"
     assert result.shipment.pickup_zone == "93"
+
+
+def test_rfq_4930_signature_city_without_zone_maps_to_nearest_zone(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import mail.extract as extract_module
+
+    monkeypatch.setattr(extract_module, "MEMORY_PATH", tmp_path / "customers.json")
+    raw = load("real_rfq_4930.json")
+    result = extract_module.extract(str(raw["subject"]), str(raw["body"]), str(raw["from"]), "4930")
+    assert result.shipment is not None
+    assert result.shipment.origin == "MUC"

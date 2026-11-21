@@ -6,10 +6,12 @@ import sqlite3
 from datetime import date, timedelta
 from typing import Any
 
+from core.agents.human_writer import carrier_name
 from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
+from mail.extract import find_first_name
 from mail.text import fresh_text, reply_subject
-from mail.writer import capitalize_sentences, place
+from mail.writer import capitalize_sentences, money, place, short_day
 
 log = logging.getLogger("core.tracking")
 
@@ -32,17 +34,21 @@ STATUS = {
     },
 }
 ANSWER = {
-    "en": "Hi,\n\nhere's the latest on {who}.\n"
-    "Status: {status}.\n"
-    "Booking reference {ref}, our reference {team}, route {route}.\n"
-    "Planned departure {depart}, expected arrival {eta}.\n\n"
+    "en": "Hi{first},\n\nhere's the latest on our reference {team} (airline booking {ref}).\n"
+    "{status}\n"
+    "{carrier} flies it from {route}{depart}, arriving around {eta}.{price}\n\n"
     "Cheers,\n{agent}\n{company}",
-    "de": "Hallo,\n\nhier der aktuelle Stand zu {who}.\n"
-    "Status: {status}.\n"
-    "Buchungsnummer {ref}, unsere Referenz {team}, Strecke {route}.\n"
-    "Geplanter Abflug {depart}, erwartete Ankunft {eta}.\n\n"
+    "de": "Hallo{first},\n\nhier der aktuelle Stand zu unserer Referenz {team} (Buchungsnummer {ref}).\n"
+    "{status}\n"
+    "{carrier} fliegt die Sendung von {route}{depart}, Ankunft etwa {eta}.{price}\n\n"
     "Viele Grüße\n{agent}\n{company}",
 }
+AIRLINE_SAID = {
+    "en": "Latest status from {carrier}: {said}",
+    "de": "Letzter Status von {carrier}: {said}",
+}
+DEPART = {"en": ", leaving {day}", "de": ", Abflug {day}"}
+PRICE = {"en": " The all-in price is {price}.", "de": " Der All-in-Preis ist {price}."}
 
 
 def bookings(store: Any) -> list[dict]:
@@ -114,8 +120,27 @@ def match(question: str, rows: list[dict]) -> dict | None:
 def day(value: str | None, language: str) -> str:
     if not value:
         return "to be confirmed" if language == "en" else "folgt"
-    d = date.fromisoformat(value[:10])
-    return d.strftime("%a %d %b %Y") if language == "en" else d.strftime("%d.%m.%Y")
+    return short_day(value, language)
+
+
+def departure_of(booking: dict) -> str | None:
+    """Departure consistent with the quoted arrival (arrival = departure + 1 + transit)."""
+    transit = int(booking.get("transit_days") or 0)
+    eta = booking.get("eta")
+    if eta and transit > 0:
+        return (date.fromisoformat(str(eta)[:10]) - timedelta(days=1 + transit)).isoformat()
+    ready = booking.get("ready_date")
+    return str(ready)[:10] if ready else None
+
+
+def _upper(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+def asker_name(body: str) -> str:
+    """First name of the person asking, only when their mail signs with one."""
+    name = find_first_name("", fresh_text(body or ""))
+    return name if name and name[:1].isupper() and name.isalpha() else ""
 
 
 class TrackingAgent:
@@ -123,37 +148,41 @@ class TrackingAgent:
         self.agent_name = agent_name
         self.company = company
 
-    def answer(self, booking: dict, language: str) -> str:
+    def answer(self, booking: dict, language: str, first: str = "") -> str:
         language = language if language in ANSWER else "en"
         status_key = booking.get("status") if booking.get("status") in STATUS else "booked"
-        airline_said = (booking.get("note") or "").strip().rstrip(".")
-        carrier = booking.get("carrier") or "the airline"
-        status_text = (
-            f"{airline_said} ({carrier} confirmed it)"
-            if airline_said and language == "en"
-            else f"{airline_said} (von {carrier} bestätigt)"
-            if airline_said
-            else STATUS[status_key][language].format(carrier=carrier)
+        airline_said = (booking.get("note") or "").strip()
+        carrier = carrier_name(booking.get("carrier") or "") or "the airline"
+        if airline_said:
+            if airline_said[-1] not in ".!?":
+                airline_said += "."
+            status_text = AIRLINE_SAID[language].format(carrier=carrier, said=airline_said)
+        else:
+            status_text = _upper(STATUS[status_key][language].format(carrier=carrier)) + "."
+        depart = departure_of(booking)
+        price = booking.get("price")
+        joiner = " to " if language == "en" else " nach "
+        return capitalize_sentences(
+            ANSWER[language].format(
+                first=f" {first}" if first else "",
+                status=status_text,
+                ref=booking.get("booking_reference") or "pending",
+                team=booking.get("team_reference"),
+                carrier=carrier,
+                route=place(str(booking.get("origin")))
+                + joiner
+                + place(str(booking.get("destination"))),
+                depart=DEPART[language].format(day=day(depart, language)) if depart else "",
+                eta=day(booking.get("eta"), language),
+                price=PRICE[language].format(
+                    price=money(price, booking.get("currency") or "EUR", language)
+                )
+                if price and price != "None"
+                else "",
+                agent=self.agent_name,
+                company=self.company,
+            )
         )
-        transit = int(booking.get("transit_days") or 0)
-        eta = booking.get("eta")
-        depart = None
-        if eta:
-            depart = (date.fromisoformat(eta[:10]) - timedelta(days=transit)).isoformat()
-        customer = (booking.get("customer") or "").split("@")[0].replace("-", " ").title()
-        return capitalize_sentences(ANSWER[language].format(
-            who=f"the shipment for {customer}"
-            if language == "en"
-            else f"der Sendung für {customer}",
-            status=status_text,
-            ref=booking.get("booking_reference") or "pending",
-            team=booking.get("team_reference"),
-            route=f"{place(str(booking.get('origin')))} to {place(str(booking.get('destination')))}",
-            depart=day(depart, language),
-            eta=day(eta, language),
-            agent=self.agent_name,
-            company=self.company,
-        ))
 
     async def handle(self, orch: Any, mail: Mail) -> None:
         question = f"{mail.subject}\n{fresh_text(mail.body)}"
@@ -170,7 +199,7 @@ class TrackingAgent:
         if not orch.store.claim_outbox(mail.thread_root_id, Stage.TRACKING, mail.id, orch.clock()):
             return
         language = lang.detect(fresh_text(mail.body) or mail.subject)
-        body = self.answer(booking, language)
+        body = self.answer(booking, language, asker_name(mail.body))
         try:
             sent = await orch.mailbox.send(
                 OutgoingMail(

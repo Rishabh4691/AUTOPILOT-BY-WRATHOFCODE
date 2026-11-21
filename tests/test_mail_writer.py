@@ -32,7 +32,7 @@ PRICE = {
 
 GOOD = """Hi [FIRST],
 
-thanks for sending this over, it's under reference [REF].
+Thanks for sending this over, it's under reference [REF].
 For [ROUTE] with [PIECES], [GROSS] gross and [CHARGEABLE] chargeable, I'd go with [CARRIER].
 That's [TRANSIT] in transit, landing around [ARRIVAL].
 All-in you're looking at [TOTAL], which covers [INCLUDED].
@@ -185,9 +185,13 @@ async def test_duplicate_unit_and_blank_lines_are_cleaned():
 
 
 async def test_dashes_and_curly_quotes_never_reach_the_customer():
-    draft = GOOD.replace("thanks for sending this over,", "thanks for sending this over —").replace("we'll", "we’ll")
-    e = await write_quote_email(RFQ, PRICE, http=gw(draft))
+    dashed = GOOD.replace("Thanks for sending this over,", "Thanks for sending this over —")
+    e = await write_quote_email(RFQ, PRICE, http=gw(dashed))
     assert e.fallback_reason is None
+    assert not re.search("[—–“”‘’„]", e.body)
+    curly = GOOD.replace("we'll", "we’ll")
+    e = await write_quote_email(RFQ, PRICE, http=gw(curly))
+    assert e.fallback_reason and "curly" in e.fallback_reason
     assert not re.search("[—–“”‘’„]", e.body)
 
 
@@ -237,3 +241,118 @@ def test_known_names_are_cased_exactly():
     text = fill("Hi [FIRST],\n\nwe fly from frankfurt to DELHI with borealis freight airways. Total [TOTAL]. Ref [REF].", values)
     assert "Frankfurt" in text and "Delhi" in text and "Borealis Freight Airways" in text
     assert "\n\nWe fly" in text
+
+
+def test_direct_questions_are_found_by_rules():
+    from mail.writer import asked
+
+    assert asked("Could you confirm the earliest available departure and arrival?") == {"departure", "arrival"}
+    assert asked("Please send both lots together as one consignment under a single air waybill.") == {"awb"}
+    assert asked("Could you also let me know the latest drop-off time at STR?") == {"dropoff"}
+    assert asked("When can your truck collect it?") == {"pickup"}
+    assert asked("Hi, 3 pallets to New York, cheapest please. Ready for pickup on 2026-11-28.") == set()
+
+
+def test_answers_use_computed_dates_and_only_what_was_asked(monkeypatch):
+    from datetime import date as real_date
+
+    class FixedDate(real_date):
+        @classmethod
+        def today(cls):
+            return real_date(2026, 11, 21)
+
+    monkeypatch.setattr(writer, "date", FixedDate)
+    text = ("Please send both lots as one consignment under a single air waybill and confirm "
+            "the earliest available departure and arrival.")
+    rfq = {**RFQ, "customer_text": text}
+    _, values = facts(rfq, {**PRICE, "ready_date": "2026-11-28", "transit_days": 2})
+    assert values["DEPARTURE"] == "Sat 28 Nov"
+    assert values["DEPARTURE_LINE"] == "The earliest departure is Sat 28 Nov."
+    assert values["AWB_LINE"] == "All lots travel together as one consignment under a single air waybill."
+    assert values["ARRIVAL_LINE"] == "Transit is 2 days."
+    assert values["DROPOFF_LINE"] == "" and values["PICKUP_DATE_LINE"] == ""
+    body = template("en", values)
+    assert "around Tue 1 Dec" in body and "ready on Sat 28 Nov" in body
+    assert "single air waybill" in body and "earliest departure is Sat 28 Nov" in body
+    assert not re.search(r"\d{4}-\d{2}-\d{2}", body)
+    plain = template("en", facts(RFQ, {**PRICE, "ready_date": "2026-11-28"})[1])
+    assert "air waybill" not in plain and "earliest departure" not in plain
+
+
+def test_arrival_is_never_before_ready_date_and_past_ready_uses_today():
+    from datetime import date
+
+    from mail.writer import arrival_date, departure_date, quote_arrival
+
+    today = date(2026, 11, 21)
+    assert departure_date("2026-11-19", today) == today
+    assert arrival_date("2026-11-19", 2, today) == date(2026, 11, 24)
+    assert arrival_date("2026-11-28", 2, today) == date(2026, 12, 1)
+    assert arrival_date(None, None, today) == date(2026, 11, 22)
+    stale = {"arrival": "2026-11-20", "ready_date": "2026-11-28", "transit_days": 2}
+    assert quote_arrival(stale, today) == date(2026, 12, 1)
+
+
+def test_one_price_format_everywhere():
+    from mail.writer import money
+
+    assert money(1234.56, "EUR") == "EUR 1,234.56"
+    assert money(324.36, "eur") == "EUR 324.36"
+    assert money(1234567.8, "USD", "en") == "USD 1,234,567.80"
+
+
+@pytest.mark.parametrize("bad", [
+    "We fly MUC → JFK.",
+    "The rate holds until 16:15 UTC.",
+    "That is 3 piece(s).",
+    "Here is one all-in price.",
+    "This is the best fit for you.",
+    "The cheapest routing is the routing we like.",
+    "It is “great”.",
+    "Ready on 2026-11-28.",
+    "It is booked.",
+])
+def test_robotic_drafts_fall_back(bad):
+    from mail.writer import problems
+
+    _, values = facts(RFQ, PRICE)
+    assert problems(GOOD.replace("Speak soon.", bad), values, RFQ["customer_text"])
+
+
+def test_lowercase_first_word_after_greeting_falls_back():
+    from mail.writer import problems
+
+    _, values = facts(RFQ, PRICE)
+    draft = GOOD.replace("Thanks for sending", "thanks for sending")
+    assert "lowercase first word after greeting" in problems(draft, values)
+    assert not problems(GOOD, values)
+
+
+async def test_draft_must_carry_the_needed_answers_and_uses_one_call():
+    rfq = {**RFQ, "customer_text": "Please ship it under a single air waybill."}
+    calls = []
+    e = await write_quote_email(rfq, PRICE, http=gw(GOOD, calls=calls))
+    assert len(calls) == 1
+    assert e.fallback_reason and "unanswered" in e.fallback_reason
+    assert "single air waybill" in e.body
+    prompt = calls[0].content.decode()
+    assert "[AWB_LINE]" in prompt and "[DEPARTURE_LINE]" not in prompt
+    ok = await write_quote_email(rfq, PRICE, http=gw(GOOD.replace("Speak soon.", "[AWB_LINE]")))
+    assert ok.fallback_reason is None and "single air waybill" in ok.body
+
+
+def test_closing_line_varies_by_reference_but_is_stable():
+    from mail.writer import CLOSINGS, closing_line
+
+    assert {closing_line(f"WOC-{n}") for n in range(20)} == set(CLOSINGS)
+    assert closing_line("WOC-1234") == closing_line("WOC-1234")
+    for ref in ("WOC-1", "WOC-2", "WOC-3", "WOC-4"):
+        values = facts({**RFQ, "reference": ref}, PRICE)[1]
+        body = template("en", values)
+        assert closing_line(ref) in body and f"Our reference is {ref}." in body
+        assert not check_final(body, values)
+
+
+def test_friendly_customer_gets_a_matching_signoff():
+    rfq = {**RFQ, "customer_text": "Thanks a lot and have a lovely day!\nPetra"}
+    assert "Have a lovely day too,\n" in template("en", facts(rfq, PRICE)[1])

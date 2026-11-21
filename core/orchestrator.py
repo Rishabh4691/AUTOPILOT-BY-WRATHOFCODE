@@ -41,6 +41,7 @@ from core.contracts import (
 from core.pricing.selection import select
 from core.store import Store
 from core.timing import TimingPolicy, decide, is_stale
+from mail.writer import arrival_date
 
 log = logging.getLogger("core.orchestrator")
 
@@ -570,6 +571,8 @@ class Orchestrator:
                     "valid_until": None
                     if option.valid_until is None
                     else option.valid_until.isoformat(),
+                    "ready_date": None if rfq.ready_date is None else rfq.ready_date.isoformat(),
+                    "arrival": arrival_date(rfq.ready_date, option.transit_days).isoformat(),
                 }
             ),
         )

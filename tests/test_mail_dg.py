@@ -63,3 +63,51 @@ def test_scanned_packing_list_is_read(tmp_path):
 
     text = attachment_text("scan.png", buf.read_bytes())
     assert check("see attached", [("scan.png", text)]).dangerous
+
+
+import httpx  # noqa: E402
+import pytest  # noqa: E402
+
+from mail.dg import write_docs_request  # noqa: E402
+
+GOOD_DOCS = """Hi [FIRST],
+
+thanks for the details on [REF]. Your packing list shows UN1133, class 3, so this flies as dangerous goods.
+Could you send the Shipper's Declaration for Dangerous Goods and the safety data sheet (SDS)?
+Please include UN number, proper shipping name, class, packing group and net quantity per package.
+As soon as I have them you'll get one all-in price.
+
+Cheers,
+Lena
+WRATHOFCODE Air Freight"""
+
+
+def gw(text=None, status=200):
+    def handler(req):
+        if status != 200:
+            return httpx.Response(status)
+        return httpx.Response(200, json={"model": "m", "choices": [{"message": {"content": text}}],
+                                         "usage": {"prompt_tokens": 300, "completion_tokens": 120}})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+UN1133 = check("adhesives", [("pl.xlsx", "Dangerous goods: UN1133, Class 3")])
+
+
+async def test_docs_request_uses_one_llm_call():
+    body, cost, used, why = await write_docs_request(UN1133, "en", "Klaus", "WOC-2268", "Lena", "WRATHOFCODE Air Freight", http=gw(GOOD_DOCS))
+    assert used and cost > 0 and why is None
+    assert body.startswith("Hi Klaus,") and "WOC-2268" in body and "UN1133" in body
+
+
+@pytest.mark.parametrize("bad", [GOOD_DOCS.replace("UN1133, ", ""), GOOD_DOCS.replace("one all-in price", "EUR 900")])
+async def test_bad_docs_draft_falls_back_but_still_counts_the_call(bad):
+    body, cost, used, why = await write_docs_request(UN1133, "en", "Klaus", "WOC-2268", "Lena", "WRATHOFCODE Air Freight", http=gw(bad))
+    assert used and cost > 0 and why
+    assert "UN1133" in body and "EUR" not in body
+
+
+async def test_gateway_down_sends_template():
+    body, cost, used, why = await write_docs_request(UN1133, "en", "Klaus", "WOC-2268", "Lena", "WRATHOFCODE Air Freight", http=gw(status=503))
+    assert not used and cost == 0 and "Shipper's Declaration" in body

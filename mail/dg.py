@@ -206,3 +206,72 @@ def docs_request(result: DgCheck, lang: str, first: str, ref: str, agent: str, c
         company=company,
     )
     return re.sub(r" +,", ",", body)
+
+
+DOCS_PROMPT = """You write one short email for an air freight forwarder, in {language}.
+Voice: an experienced freight agent, warm and direct, short sentences mixed with longer ones. Plain words.
+Situation: before we can price the shipment we need the dangerous goods paperwork. Reason: {why}
+Write 4 to 7 short lines after the greeting:
+- thank them briefly and mention our reference [REF]
+- say in your own words why we need the paperwork (the reason above)
+- ask for the Shipper's Declaration for Dangerous Goods and the safety data sheet (SDS), with UN number, proper shipping name, class, packing group and net quantity per package
+- say we send one all-in price as soon as we have them
+Rules: no price, no amounts, no currency, no options, no dashes, straight quotes, no emojis, no "I hope", no "feel free", no "let me know if".
+Use [REF] exactly as written. Start with "{greeting} [FIRST]," then a blank line. End with exactly:
+{signoff}
+{agent}
+{company}"""
+
+GREETING = {"en": "Hi", "de": "Hallo", "fr": "Bonjour", "es": "Hola", "it": "Ciao", "pl": "Dzień dobry"}
+SIGNOFF = {"en": "Cheers,", "de": "Viele Grüße", "fr": "Bien à vous,", "es": "Un saludo,", "it": "Un saluto,", "pl": "Pozdrawiam,"}
+LANG_NAMES = {"en": "English", "de": "German", "fr": "French", "es": "Spanish", "it": "Italian", "pl": "Polish"}
+DOC_WORDS = re.compile(r"declaration|gefahrgut|déclaration|declaración|dichiarazione|deklaracj|dgd", re.I)
+SDS_WORDS = re.compile(r"\b(sds|msds|safety data|sicherheitsdatenblatt|fiche de données|ficha de datos|scheda di sicurezza|karta charakterystyki)", re.I)
+MONEY_WORDS = re.compile(r"\b(EUR|USD|GBP|CHF|PLN)\b|[€$£]", re.I)
+
+
+def draft_problems(draft: str, result: DgCheck) -> list[str]:
+    out = []
+    if "[REF]" not in draft:
+        out.append("no [REF]")
+    for un in result.un_numbers:
+        if f"UN{un}" not in draft.replace(" ", ""):
+            out.append(f"missing UN{un}")
+    if not DOC_WORDS.search(draft):
+        out.append("no declaration")
+    if not SDS_WORDS.search(draft):
+        out.append("no safety data sheet")
+    if MONEY_WORDS.search(draft):
+        out.append("mentions money")
+    if re.search("[\U0001F300-\U0001FAFF☀-➿]", draft):
+        out.append("emoji")
+    if not 4 <= len([line for line in draft.splitlines() if line.strip()]) <= 14:
+        out.append("length")
+    return out
+
+
+async def write_docs_request(result: DgCheck, lang: str, first: str, ref: str, agent: str, company: str, http=None):
+    from . import gateway
+    from .writer import fix_greeting, tidy
+
+    lang = lang if lang in LANG_NAMES else "en"
+    fallback = docs_request(result, lang, first, ref, agent, company)
+    prompt = DOCS_PROMPT.format(
+        language=LANG_NAMES[lang],
+        why=why_text(result, "en"),
+        greeting=GREETING[lang],
+        signoff=SIGNOFF[lang],
+        agent=agent,
+        company=company,
+    )
+    try:
+        reply = await gateway.chat([{"role": "user", "content": prompt}], max_tokens=350, http=http)
+    except gateway.GatewayError as error:
+        return fallback, 0.0, False, f"gateway: {error}"
+    draft = fix_greeting(reply.text.strip().strip("`").strip(), lang)
+    issues = draft_problems(draft, result)
+    if issues:
+        return fallback, reply.cost_usd, True, "; ".join(issues)
+    body = draft.replace("[REF]", ref).replace("[FIRST]", first or ("there" if lang == "en" else ""))
+    body = "\n".join(line.rstrip() for line in tidy(re.sub(r" +,", ",", body)).splitlines())
+    return re.sub(r"\n{3,}", "\n\n", body).strip(), reply.cost_usd, True, None
