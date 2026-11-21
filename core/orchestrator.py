@@ -80,6 +80,19 @@ def review_facts(
     }
 
 
+def dg_request_body(rfq: RFQ, declared: str) -> str:
+    return (
+        f"Hello,\n\nthank you for your request from {rfq.origin} to {rfq.destination}. "
+        f"Your documents show dangerous goods ({declared}), so before we can quote and book "
+        "the airline needs a few documents from you:\n\n"
+        "- the Shipper's Declaration for Dangerous Goods\n"
+        "- the safety data sheet (MSDS) for the product\n"
+        "- the UN number, class and packing group as packed\n\n"
+        "As soon as we have them we will send you an all-in price straight away.\n\n"
+        f"Best regards,\nLena\nWRATHOFCODE Air Freight"
+    )
+
+
 def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
     if source == target:
         return amount
@@ -136,6 +149,7 @@ class Orchestrator:
     tracker: Any = None
     dg: Any = None
     tariffs: Any = None
+    attachments: Any = None
     review_dir: Path | None = None
     review_deadline_s: float = 110.0
     review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
@@ -310,9 +324,47 @@ class Orchestrator:
                     return
             except Exception:
                 log.exception("dg_check_failed", extra={"rfq": mail.id})
+        elif await self.dangerous_goods_blocked(mail, rfq):
+            return
         quote = await self.source_and_price(rfq)
         if quote is not None:
             await self.outbox.put(quote)
+
+    async def dangerous_goods_blocked(self, mail: Mail, rfq: RFQ) -> bool:
+        from core.agents.attachments import dangerous_goods, has_dg_documents
+
+        attached = ""
+        if self.attachments is not None and mail.attachments:
+            try:
+                attached = await self.attachments.text(mail)
+            except Exception:
+                log.exception("attachment_read_failed")
+        declared = dangerous_goods(f"{mail.body}\n{attached}")
+        if declared is None or has_dg_documents(mail):
+            return False
+        if not self.store.claim_outbox(rfq.thread_root_id, Stage.HELD, rfq.mail_id, self.clock()):
+            return True
+        body = dg_request_body(rfq, declared)
+        outgoing = OutgoingMail(
+            to=rfq.customer, subject=reply_subject(rfq.subject), body=body, in_reply_to=rfq.mail_id
+        )
+        try:
+            sent = await self.mailbox.send(outgoing)
+        except Exception as error:
+            self.store.mark_outbox_failed(rfq.thread_root_id, Stage.HELD, type(error).__name__)
+            self.hold(rfq.mail_id, f"Dangerous goods ({declared}); asking for documents failed.")
+            return True
+        self.store.mark_outbox_sent(rfq.thread_root_id, Stage.HELD, sent.id)
+        self.store.update_rfq(str(rfq.mail_id), status=Stage.HELD.value, email_body=body)
+        self.emit(
+            Agent.RFQ,
+            "dangerous_goods",
+            EventStatus.HOLD,
+            f"Request {rfq.mail_id} declares dangerous goods ({declared}) without documents. "
+            "Asked the customer for the shipper's declaration and safety data sheet.",
+            rfq.mail_id,
+        )
+        return True
 
     def record_usage(self, rfq_id: int, step: str, usage: LlmUsage | None) -> Decimal:
         if usage is None:

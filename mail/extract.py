@@ -479,7 +479,7 @@ def find_first_name(sender: str, text: str) -> str:
     )
     if m and _person(m.group(1)):
         return m.group(1)
-    for line in reversed(lines[-4:]):
+    for line in lines[-4:]:
         name = _person(line)
         if name:
             return name
@@ -509,8 +509,13 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
     zones = kit.pickup_zones()
     zone = postcode[:2] if postcode and postcode[:2] in zones else None
-    if door and origin is None and zone:
-        origin = zones[zone]["airport"]
+    if door and zone:
+        zone_airport = zones[zone]["airport"]
+        explicit = origin is not None and re.search(
+            rf"\b(?:from|ex|origin\s*:?|departure\s*(?:airport)?\s*:?)\s+{origin}\b", text, re.I
+        )
+        if not explicit:
+            origin = zone_airport
 
     vols = [volume_cbm_of(m) for m in VOLUME.finditer(text)]
     if not vols:
