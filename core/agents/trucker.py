@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 import re
 import time
@@ -138,11 +139,19 @@ def parse_hours(text: str) -> Decimal | None:
         return None
     value = Decimal(match.group(1).replace(",", "."))
     unit = match.group(2).lower()
-    return value * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else value
+    return (
+        value * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else value
+    )
+
+
+def pickup_rule() -> str:
+    return (os.getenv("PICKUP_RULE") or "cheapest").strip().lower()
 
 
 def best_offer(prices: list[PickupPrice]) -> PickupPrice:
     pool = [p for p in prices if p.currency == "EUR"] or prices
+    if pickup_rule() != "balanced":
+        return min(pool, key=lambda p: p.total)
     timed = [p for p in pool if p.pickup_hours is not None and p.pickup_hours > 0]
     if len(timed) != len(pool) or not timed:
         return min(pool, key=lambda p: p.total)
@@ -151,8 +160,7 @@ def best_offer(prices: list[PickupPrice]) -> PickupPrice:
     return min(
         timed,
         key=lambda p: (
-            PRICE_WEIGHT * p.total / cheapest
-            + TIME_WEIGHT * (p.pickup_hours or fastest) / fastest,
+            PRICE_WEIGHT * p.total / cheapest + TIME_WEIGHT * (p.pickup_hours or fastest) / fastest,
             p.total,
         ),
     )

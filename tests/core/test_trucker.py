@@ -240,8 +240,12 @@ async def test_waits_for_slower_truckers_until_100_seconds() -> None:
     assert price is not None and price.total == Decimal("85.00")
 
 
-def test_pickup_uses_50_50_price_and_time_balance_round_14() -> None:
+def test_pickup_uses_50_50_price_and_time_balance_round_14(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from core.agents.trucker import best_offer, parse_hours
+
+    monkeypatch.setenv("PICKUP_RULE", "balanced")
     from core.contracts import PickupPrice
 
     now = datetime(2026, 11, 21, 16, 20, tzinfo=UTC)
@@ -268,3 +272,28 @@ def test_pickup_uses_50_50_price_and_time_balance_round_14() -> None:
         best_offer([o.model_copy(update={"pickup_hours": None}) for o in offers]).trucker
         == "Spessart"
     )
+
+
+def test_default_pickup_rule_is_cheapest_round_15() -> None:
+    from core.agents.trucker import best_offer
+    from core.contracts import PickupPrice
+
+    now = datetime(2026, 11, 21, 16, 28, tzinfo=UTC)
+    offers = [
+        PickupPrice(
+            source="e",
+            trucker=n,
+            zone="93",
+            total=Decimal(t),
+            currency="EUR",
+            received_at=now,
+            pickup_hours=Decimal(h),
+        )
+        for n, t, h in [
+            ("Isarwelle", "107.20", 33),
+            ("Neckarstrom", "198.08", 5),
+            ("Elbkante", "90.60", 30),
+            ("Flinkwagen", "241.96", 6),
+        ]
+    ]
+    assert best_offer(offers).trucker == "Elbkante"
