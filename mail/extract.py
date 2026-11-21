@@ -193,6 +193,7 @@ class Extracted:
     gross_kg: float | None = None
     chargeable_kg: float | None = None
     pieces: int = 0
+    tallest_cm: float | None = None
 
 
 def num(s: str) -> Decimal:
@@ -312,6 +313,22 @@ def _dims_cbm(m) -> Decimal:
     return (
         num(m.group("l")) * f * num(m.group("w")) * f * num(m.group("h")) * f / Decimal("1000000")
     )
+
+
+MAX_HEIGHT: dict[str, Decimal] = {}
+
+
+def tallest_cm(text: str) -> Decimal | None:
+    best = None
+    for m in LOT_DIMS.finditer(text):
+        unit = (m.group("u") or "cm").lower()
+        f = {"mm": Decimal("0.1"), "m": Decimal("100"), "in": Decimal("2.54"), "inch": Decimal("2.54"), "inches": Decimal("2.54")}.get(unit, Decimal("1"))
+        h = num(m.group("h")) * f
+        best = h if best is None or h > best else best
+    for m in re.finditer(rf"height\s*(?:\(cm\))?\s*[:=]?\s*(?P<v>{NUM})\s*(?:cm)?", text, re.I):
+        h = num(m.group("v"))
+        best = h if best is None or h > best else best
+    return best
 
 
 def parse_lots(text: str) -> tuple[int, Decimal, Decimal] | None:
@@ -560,4 +577,5 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
         gross_kg=gross_kg,
         chargeable_kg=charge,
         pieces=counted or (1 if gross else 0),
+        tallest_cm=float(tallest_cm(text)) if tallest_cm(text) is not None else None,
     )

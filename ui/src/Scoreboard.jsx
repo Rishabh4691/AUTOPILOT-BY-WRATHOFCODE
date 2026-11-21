@@ -101,6 +101,39 @@ export default function Scoreboard() {
           </table>
         </section>
 
+        <section className="overflow-x-auto rounded-xl border border-line bg-panel lg:col-span-3 lg:order-last">
+          <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
+            <h3 className="text-sm font-semibold text-white">Bookings</h3>
+            <span className="text-xs text-muted">{(d.bookings ?? []).length} booked · each can get a tracking question worth +10</span>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[11px] uppercase tracking-wider text-muted">
+              <tr className="border-b border-line">
+                <th className="px-4 py-2 font-medium">Booked</th>
+                <th className="px-4 py-2 font-medium">Reference</th>
+                <th className="px-4 py-2 font-medium">Airline</th>
+                <th className="px-4 py-2 font-medium">Lane</th>
+                <th className="px-4 py-2 text-right font-medium">Weight</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(d.bookings ?? []).map((b) => (
+                <tr key={b.booking_reference ?? b.booked_at} className="border-b border-line/60 last:border-0">
+                  <td className="px-4 py-2 font-mono text-xs">{ts(b.booked_at)}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{b.booking_reference ?? '—'}</td>
+                  <td className="px-4 py-2">{b.airline}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{b.origin} → {b.destination}</td>
+                  <td className="px-4 py-2 text-right font-mono text-xs">{b.weight_kg ?? '—'} kg</td>
+                  <td className="px-4 py-2 text-xs">
+                    <span className={b.status === 'confirmed' ? 'text-emerald-300' : 'text-amber-300'}>{b.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
         <section className="rounded-xl border border-line bg-panel">
           <h3 className="border-b border-line px-4 py-3 text-sm font-semibold text-white">Leaderboard</h3>
           <ol>

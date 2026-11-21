@@ -150,9 +150,17 @@ export default function App() {
       {tab === 'board' ? (
         <Scoreboard />
       ) : tab === 'agents' ? (
+        <>
+        {agents.every((a) => !a.tasks_done) && (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            No bot activity in this database. The bot writes to <code className="font-mono">data/app.db</code> on the laptop that runs it.
+            Run the API there, or start this UI with <code className="font-mono">API_TARGET=http://&lt;bot-laptop-ip&gt;:8000 npm run dev</code>.
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {agents.map((a) => <AgentCard key={a.agent} a={a} now={now} onOpen={show} />)}
         </div>
+        </>
       ) : (
         <RfqList rfqs={rfqs} now={now} selected={open} onOpen={setOpen} />
       )}

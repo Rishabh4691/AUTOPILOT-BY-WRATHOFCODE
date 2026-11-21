@@ -103,6 +103,13 @@ Replay one sample without sending: `PYTHONPATH=. python scripts/replay_dry.py te
 
 Before every push: `./scripts/scan_secrets.sh`. Turn on the hook once per clone with `git config core.hooksPath .githooks` and git will refuse any push that fails the scan. Files uploaded on the GitHub website skip this check, so never upload `.env`-style files there.
 
+### See the live bot from another laptop
+
+The bot's database is on the laptop that runs it. On that laptop:
+`uvicorn api.main:app --host 0.0.0.0 --port 8000`. On yours:
+`cd ui && API_TARGET=http://<bot-laptop-ip>:8000 npm run dev`.
+The Live scoreboard tab works anywhere, it reads 5U's board directly.
+
 ### Control room API
 
 | Endpoint | What it returns |

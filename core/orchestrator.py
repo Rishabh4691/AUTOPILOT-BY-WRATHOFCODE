@@ -11,6 +11,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from core.agents.limits import FREIGHTER_ONLY_CM, tallest
+from core.agents.limits import usable as fit_limits
 from core.config import Settings
 from core.contracts import (
     RFQ,
@@ -452,6 +454,18 @@ class Orchestrator:
     async def build_quote(
         self, rfq: RFQ, options: list[PriceOption], pickup: PickupPrice | None
     ) -> Quote | None:
+        options, dropped = fit_limits(options, rfq)
+        for reason in dropped:
+            self.emit(Agent.RFQ, "limits", EventStatus.INFO, f"Skipped {reason}.", rfq.mail_id)
+        high = tallest(rfq)
+        if high is not None and high > FREIGHTER_ONLY_CM:
+            self.emit(
+                Agent.RFQ,
+                "oversize",
+                EventStatus.WARN,
+                f"Request {rfq.mail_id} has a {high} cm piece: freighter only, check the airline.",
+                rfq.mail_id,
+            )
         usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)
         self.review_context[rfq.mail_id] = review_facts(rfq, usable, pickup)
