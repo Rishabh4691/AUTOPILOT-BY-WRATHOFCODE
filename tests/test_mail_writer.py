@@ -266,14 +266,15 @@ def test_answers_use_computed_dates_and_only_what_was_asked(monkeypatch):
             "the earliest available departure and arrival.")
     rfq = {**RFQ, "customer_text": text}
     _, values = facts(rfq, {**PRICE, "ready_date": "2026-11-28", "transit_days": 2})
-    assert values["DEPARTURE"] == "Sat 28 Nov"
-    assert values["DEPARTURE_LINE"] == "The earliest departure is Sat 28 Nov."
+    # ready Sat 28 Nov, flies Sun 29 Nov, 2 days transit, lands Tue 1 Dec: the dates add up
+    assert values["DEPARTURE"] == "Sun 29 Nov"
+    assert values["DEPARTURE_LINE"] == "The earliest departure is Sun 29 Nov."
     assert values["AWB_LINE"] == "All lots travel together as one consignment under a single air waybill."
     assert values["ARRIVAL_LINE"] == "Transit is 2 days."
     assert values["DROPOFF_LINE"] == "" and values["PICKUP_DATE_LINE"] == ""
     body = template("en", values)
     assert "around Tue 1 Dec" in body and "ready on Sat 28 Nov" in body
-    assert "single air waybill" in body and "earliest departure is Sat 28 Nov" in body
+    assert "single air waybill" in body and "earliest departure is Sun 29 Nov" in body
     assert not re.search(r"\d{4}-\d{2}-\d{2}", body)
     plain = template("en", facts(RFQ, {**PRICE, "ready_date": "2026-11-28"})[1])
     assert "air waybill" not in plain and "earliest departure" not in plain
