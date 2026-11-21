@@ -1,6 +1,8 @@
 """Fake RFQs from the fuzz rounds. Each one failed before its fix."""
 
 import json
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -9,7 +11,9 @@ from core.agents.attachments import dangerous_goods
 from core.agents.extractor import RegexRfqExtractor
 from core.agents.mailbox import parse_mail
 from core.agents.rules_extractor import RulesFirstExtractor
+from core.agents.sheets import SheetPriceSource
 from core.config import load_settings
+from core.contracts import RFQ, Preference
 from core.pricing.weight import chargeable_kg
 from mail.dg import check
 from mail.text import fresh_text
@@ -154,3 +158,33 @@ async def test_fuzz_rfq(mail_id: int) -> None:
             assert got[key] == pytest.approx(want, abs=0.01), key
         else:
             assert got[key] == want, key
+
+
+def _rfq(ready: date, door: bool) -> RFQ:
+    return RFQ(
+        mail_id=1,
+        thread_root_id=1,
+        customer="test-30@hackloop.mail",
+        subject="Air freight quote to JFK",
+        origin="FRA",
+        destination="JFK",
+        pieces=(),
+        gross_kg=Decimal("500"),
+        volume_cbm=Decimal("1"),
+        door_pickup=door,
+        pickup_zone="60" if door else None,
+        preference=Preference.CHEAPEST,
+        preference_assumed=True,
+        ready_date=ready,
+        received_at=datetime(2026, 11, 21, tzinfo=UTC),
+    )
+
+
+async def test_sheet_not_used_when_door_pickup_departs_after_validity() -> None:
+    kit = Path(__file__).resolve().parents[2] / "data" / "tariffs.json"
+    if not kit.exists():
+        pytest.skip("no rate sheets")
+    sheets = SheetPriceSource()
+    assert await sheets.quote(_rfq(date(2026, 11, 30), door=False))
+    assert await sheets.quote(_rfq(date(2026, 11, 30), door=True)) == []
+    assert await sheets.quote(_rfq(date(2026, 12, 2), door=False)) == []

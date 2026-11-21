@@ -97,11 +97,11 @@ class SheetPriceSource:
 
     async def quote(self, rfq: RFQ) -> list[PriceOption]:
         shipment = to_shipment(rfq)
-        options = []
         if rfq.ready_date is not None:
+            # A sheet only counts if it is valid on the departure day; no fallback to today.
             departure = rfq.ready_date + timedelta(days=1 if rfq.door_pickup else 0)
             options = await asyncio.to_thread(get_sheet_prices, shipment, None, departure)
-        if not options:
+        else:
             options = await asyncio.to_thread(get_sheet_prices, shipment)
         out = [o for o in (convert(x) for x in options) if o is not None]
         log.info(
