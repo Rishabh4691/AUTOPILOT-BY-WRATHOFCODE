@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { clock, get } from './api'
+import RoundDetail from './RoundDetail'
 
 const VERDICT = {
   accepted: 'text-emerald-300 bg-emerald-500/15',
@@ -24,6 +25,7 @@ function Stat({ label, value, tone = 'text-white' }) {
 export default function Scoreboard() {
   const [d, setD] = useState(null)
   const [err, setErr] = useState(null)
+  const [open, setOpen] = useState(null)
 
   useEffect(() => {
     let alive = true
@@ -66,7 +68,7 @@ export default function Scoreboard() {
           <div className="flex items-baseline justify-between border-b border-line px-4 py-3">
             <h3 className="text-sm font-semibold text-white">Rounds</h3>
             <span className="text-xs text-muted">
-              {rejected} rejected · {timeLost.toFixed(1)} time points lost · cost points arrive hourly
+              click a round to see its mails · {rejected} rejected · {timeLost.toFixed(1)} time points lost · cost points arrive hourly
             </span>
           </div>
           <table className="w-full text-sm">
@@ -82,7 +84,11 @@ export default function Scoreboard() {
             </thead>
             <tbody>
               {rounds.map((r) => (
-                <tr key={r.round_no} className="border-b border-line/60 last:border-0 align-top">
+                <tr
+                  key={r.round_no}
+                  onClick={() => setOpen(r.round_no)}
+                  className="cursor-pointer border-b border-line/60 align-top last:border-0 hover:bg-white/[0.03]"
+                >
                   <td className="px-4 py-2 font-mono text-xs">{r.round_no}</td>
                   <td className="px-4 py-2 font-mono text-xs">{ts(r.sent_at)}</td>
                   <td className={`px-4 py-2 font-mono text-xs ${r.seconds == null ? 'text-muted' : r.seconds <= 120 ? 'text-emerald-300' : 'text-amber-300'}`}>
@@ -154,6 +160,7 @@ export default function Scoreboard() {
           </ol>
         </section>
       </div>
+      {open && <RoundDetail round={open} onClose={() => setOpen(null)} />}
     </div>
   )
 }

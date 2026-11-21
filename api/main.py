@@ -210,3 +210,145 @@ async def board():
     }
     _board_cache.update(at=_t.time(), data=data)
     return data
+
+
+_mail_index: dict = {"since": 0, "mails": [], "at": 0.0}
+_round_cache: dict = {}
+NOTES_PATH = store.ROOT / "data" / "round_notes.json"
+
+
+def _fiveu():
+    import os
+
+    key = os.getenv("FIVEU_API_KEY")
+    base = os.getenv("FIVEU_BASE_URL", "https://api.start-hack.5u.ai").rstrip("/")
+    if not key:
+        raise HTTPException(503, "FIVEU_API_KEY missing in .env")
+    return httpx.AsyncClient(base_url=base, headers={"X-API-Key": key}, timeout=15)
+
+
+async def _sync_mailbox(client) -> list[dict]:
+    import time as _t
+
+    if _t.time() - _mail_index["at"] < 5:
+        return _mail_index["mails"]
+    for _ in range(100):
+        r = await client.get("/v1/mailbox/messages", params={"since_id": _mail_index["since"], "limit": 200})
+        if r.status_code != 200:
+            break
+        data = r.json()
+        if not data.get("messages"):
+            break
+        _mail_index["mails"].extend(data["messages"])
+        _mail_index["since"] = data.get("next_since_id") or _mail_index["since"]
+    _mail_index["at"] = _t.time()
+    return _mail_index["mails"]
+
+
+def _short(m: dict) -> dict:
+    return {
+        "id": m.get("id"),
+        "at": m.get("received_at"),
+        "from": m.get("from"),
+        "to": m.get("to"),
+        "subject": m.get("subject"),
+        "body": m.get("body"),
+        "attachments": [a.get("filename") for a in m.get("attachments", [])],
+        "in_reply_to": m.get("in_reply_to"),
+    }
+
+
+async def _find_reply(client, rfq_id: int, thread: set[int]) -> dict | None:
+    sem = asyncio.Semaphore(16)
+
+    async def one(i):
+        async with sem:
+            r = await client.get(f"/v1/mailbox/messages/{i}")
+            if r.status_code == 200:
+                m = r.json()
+                if m.get("from", "").startswith("wrathofcode@") and m.get("in_reply_to") in thread:
+                    return m
+        return None
+
+    for start in range(rfq_id + 1, rfq_id + 600, 120):
+        found = [m for m in await asyncio.gather(*(one(i) for i in range(start, start + 120))) if m]
+        if found:
+            return min(found, key=lambda m: m["id"])
+    return None
+
+
+@app.get("/api/rounds/{round_no}")
+async def round_detail(round_no: int):
+    import re
+    from datetime import datetime, timedelta
+
+    async with _fiveu() as client:
+        me = (await client.get("/v1/board/me")).json()
+        req = next((r for r in me.get("requests", []) if r.get("round_no") == round_no), None)
+        if req is None:
+            raise HTTPException(404, "round not found")
+        cached = _round_cache.get(round_no)
+        if cached and cached["verdict"] == req.get("verdict") and req.get("verdict") not in ("open", "pending"):
+            return {**cached, "note": _notes().get(str(round_no), "")}
+        mails = await _sync_mailbox(client)
+        sent = req["sent_at"][:19]
+        rfq = next((m for m in mails if (m.get("received_at") or "")[:19] == sent and not m["from"].startswith("tracking@")), None)
+        related, customer = [], []
+        if rfq:
+            rid = rfq["id"]
+            for m in mails:
+                if m["id"] == rid:
+                    continue
+                s = m.get("subject") or ""
+                refs = m.get("references") or []
+                if rid in refs or m.get("in_reply_to") == rid:
+                    (customer if m["from"] == rfq["from"] else related).append(_short(m))
+                elif re.search(rf"\b{rid}\b", s) or re.search(rf"\bref\s+{rid}\b", m.get("body") or "", re.I):
+                    related.append(_short(m))
+        reply = await _find_reply(client, rfq["id"], {rfq["id"]}) if rfq else None
+        board = (await client.get("/v1/board")).json()
+        start = datetime.fromisoformat(req["sent_at"])
+        window = [
+            {"team": b["team"], "airline": b.get("airline")}
+            for b in board.get("bookings", [])
+            if start <= datetime.fromisoformat(b["booked_at"]) <= start + timedelta(minutes=6)
+            and b.get("team", "").lower() != (me.get("team") or "").lower()
+        ]
+    out = {
+        "round": round_no,
+        "verdict": req.get("verdict"),
+        "reason": req.get("reason"),
+        "points": req.get("points"),
+        "booked": req.get("booked"),
+        "sent_at": req.get("sent_at"),
+        "answered_at": req.get("answered_at"),
+        "request": _short(rfq) if rfq else None,
+        "reply": _short(reply) if reply else None,
+        "customer": customer,
+        "related": sorted(related, key=lambda m: m["id"])[:40],
+        "others_booked": window,
+    }
+    _round_cache[round_no] = out
+    return {**out, "note": _notes().get(str(round_no), "")}
+
+
+def _notes() -> dict:
+    try:
+        return json.loads(NOTES_PATH.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+class Note(BaseModel):
+    text: str = Field("", max_length=4000)
+    by: str = Field("", max_length=40)
+
+
+@app.post("/api/rounds/{round_no}/note")
+def save_note(round_no: int, note: Note):
+    notes = _notes()
+    stamp = time.strftime("%H:%M")
+    notes[str(round_no)] = f"{note.text.strip()}\n(by {note.by or 'team'} at {stamp})" if note.text.strip() else ""
+    NOTES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    NOTES_PATH.write_text(json.dumps(notes, indent=2, ensure_ascii=False))
+    return {"ok": True}
