@@ -274,7 +274,7 @@ def test_pickup_uses_50_50_price_and_time_balance_round_14(
     )
 
 
-def test_default_pickup_rule_is_balanced_round_15() -> None:
+def test_default_pickup_rule_round_15() -> None:
     from core.agents.trucker import best_offer
     from core.contracts import PickupPrice
 
@@ -296,4 +296,45 @@ def test_default_pickup_rule_is_balanced_round_15() -> None:
             ("Flinkwagen", "241.96", 6),
         ]
     ]
-    assert best_offer(offers).trucker == "Neckarstrom"
+    assert best_offer(offers).trucker == "Elbkante"
+
+
+def test_cheapest_within_30_hours_rounds_14_and_18() -> None:
+    from core.agents.trucker import best_offer, parse_hours
+    from core.contracts import PickupPrice
+
+    now = datetime(2026, 11, 21, 16, 45, tzinfo=UTC)
+
+    def offers(rows):
+        return [
+            PickupPrice(
+                source="e",
+                trucker=n,
+                zone="42",
+                total=Decimal(p),
+                currency="EUR",
+                received_at=now,
+                pickup_hours=Decimal(h),
+            )
+            for n, p, h in rows
+        ]
+
+    r14 = offers(
+        [
+            ("Westfalenroute", "321.74", 4),
+            ("Schwabenbote", "379.79", 6),
+            ("Rheinufer", "379.38", 7),
+            ("Spessart", "113.05", 32),
+        ]
+    )
+    assert best_offer(r14).trucker == "Westfalenroute"
+    r18 = offers(
+        [
+            ("Maintal", "212.14", 13),
+            ("Bodenseefracht", "254.84", 12),
+            ("Elbkante", "128.18", 29),
+            ("Westfalenroute", "208.88", 11),
+        ]
+    )
+    assert best_offer(r18).trucker == "Elbkante"
+    assert parse_hours("We can collect within 30 hours.") == Decimal("30")

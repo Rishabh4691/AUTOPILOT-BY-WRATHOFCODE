@@ -554,6 +554,15 @@ def recall_pickup(sender: str) -> str | None:
     return _load_memory().get(sender_email(sender))
 
 
+def zone_from_signature(text: str, zones: dict) -> str | None:
+    tail = "\n".join((text or "").strip().splitlines()[-8:])
+    for zone, info in sorted(zones.items(), key=lambda kv: -len(kv[1]["area"])):
+        area = info["area"]
+        if re.search(rf"\b{re.escape(area)}\b", tail, re.I):
+            return zone
+    return None
+
+
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     text = f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)
@@ -573,8 +582,11 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     if door and zone and postcode:
         remember_pickup(sender, postcode)
     elif door and not zone:
+        signed = zone_from_signature(fresh_text(body), zones)
         known = recall_pickup(sender)
-        if known and known[:2] in zones:
+        if signed:
+            zone = signed
+        elif known and known[:2] in zones:
             postcode, zone = known, known[:2]
     if door and zone:
         zone_airport = zones[zone]["airport"]

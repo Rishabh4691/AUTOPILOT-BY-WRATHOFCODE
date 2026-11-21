@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 from decimal import Decimal
 
@@ -98,7 +99,8 @@ class SheetPriceSource:
         shipment = to_shipment(rfq)
         options = []
         if rfq.ready_date is not None:
-            options = await asyncio.to_thread(get_sheet_prices, shipment, None, rfq.ready_date)
+            departure = rfq.ready_date + timedelta(days=1 if rfq.door_pickup else 0)
+            options = await asyncio.to_thread(get_sheet_prices, shipment, None, departure)
         if not options:
             options = await asyncio.to_thread(get_sheet_prices, shipment)
         out = [o for o in (convert(x) for x in options) if o is not None]

@@ -129,6 +129,7 @@ PICKUP_TIME = re.compile(
     r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*(?:is|of|:|=)?\s*(?:about|approx\.?|ca\.?)?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
     re.I,
 )
+MAX_PICKUP_HOURS = Decimal("30")
 PRICE_WEIGHT = Decimal("0.5")
 TIME_WEIGHT = Decimal("0.5")
 
@@ -136,7 +137,8 @@ TIME_WEIGHT = Decimal("0.5")
 def parse_hours(text: str) -> Decimal | None:
     match = PICKUP_TIME.search(text or "")
     if not match:
-        return None
+        within = re.search(r"\bwithin\s+(\d+(?:[.,]\d+)?)\s*(?:hours?|hrs?|h)\b", text or "", re.I)
+        return Decimal(within.group(1).replace(",", ".")) if within else None
     value = Decimal(match.group(1).replace(",", "."))
     unit = match.group(2).lower()
     return (
@@ -145,11 +147,14 @@ def parse_hours(text: str) -> Decimal | None:
 
 
 def pickup_rule() -> str:
-    return (os.getenv("PICKUP_RULE") or "balanced").strip().lower()
+    return (os.getenv("PICKUP_RULE") or "fast_cheapest").strip().lower()
 
 
 def best_offer(prices: list[PickupPrice]) -> PickupPrice:
     pool = [p for p in prices if p.currency == "EUR"] or prices
+    if pickup_rule() == "fast_cheapest":
+        quick = [p for p in pool if p.pickup_hours is not None and p.pickup_hours <= MAX_PICKUP_HOURS]
+        return min(quick or pool, key=lambda p: p.total)
     if pickup_rule() != "balanced":
         return min(pool, key=lambda p: p.total)
     timed = [p for p in pool if p.pickup_hours is not None and p.pickup_hours > 0]
