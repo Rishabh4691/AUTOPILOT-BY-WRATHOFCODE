@@ -172,9 +172,13 @@ class AirlineBidSource:
             if str(lane.origin).upper() == o and str(lane.destination).upper() == d
             for airline in getattr(lane, "airlines", [])
         }
-        contacts = [
-            c for c in self.directory.airlines_serving(rfq.destination) if c.name.lower() in names
-        ]
+        serving = self.directory.airlines_serving(rfq.destination)
+        contacts = [c for c in serving if c.name.lower() in names]
+        if not lanes:
+            # Round 45: the portal was down, so its lane list was empty and no airline was asked;
+            # the quote went out from a rate sheet. Ask every airline the kit says serves the
+            # destination instead.
+            contacts = list(serving)
         if not contacts:
             return False
         self._asked.add(rfq.mail_id)

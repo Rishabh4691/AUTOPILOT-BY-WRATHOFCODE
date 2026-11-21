@@ -274,3 +274,15 @@ async def test_excluded_airline_gets_no_bid_request_round_42() -> None:
     asked = {to for to, _, _ in sender.sent}
     assert "zephyr-steppe-cargo@hackloop.mail" not in asked
     assert asked == {c.email for c in DIRECTORY.airlines_serving("ULN")} - {"zephyr-steppe-cargo@hackloop.mail"}
+
+
+async def test_portal_down_asks_every_airline_serving_the_destination_round_45() -> None:
+    async def broken() -> list[Lane]:
+        raise RuntimeError("portal down")
+
+    sender = FakeSender()
+    source = AirlineBidSource(DIRECTORY, sender, broken)
+    assert await source.request_lane(rfq("ASU")) is True
+    expected = {c.email for c in DIRECTORY.airlines_serving("ASU")}
+    assert expected and {to for to, _, _ in sender.sent} == expected
+    assert source.waiting(7)
