@@ -53,6 +53,36 @@ def reply_subject(subject: str) -> str:
     return clean if clean.lower().startswith("re:") else f"Re: {clean}".strip()
 
 
+def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
+    if source == target:
+        return amount
+    from sourcing import fx
+
+    source_rate, target_rate = fx.get_rate(source), fx.get_rate(target)
+    if source_rate is None or target_rate is None or target_rate == 0:
+        return None
+    return to_money(amount * source_rate / target_rate)
+
+
+def quote_currency(rfq: RFQ, options: list[PriceOption]) -> str:
+    currencies = {option.currency for option in options}
+    if rfq.currency:
+        return rfq.currency
+    return "EUR" if "EUR" in currencies or not currencies else sorted(currencies)[0]
+
+
+def in_currency(options: list[PriceOption], target: str) -> list[PriceOption]:
+    converted: list[PriceOption] = []
+    for option in options:
+        total = convert_money(option.total, option.currency, target)
+        if total is not None:
+            converted.append(option.model_copy(update={"total": total, "currency": target}))
+    if converted:
+        return converted
+    fallback = sorted({option.currency for option in options})[0]
+    return [option for option in options if option.currency == fallback]
+
+
 @dataclass
 class SourcingState:
     options: list[PriceOption] = field(default_factory=list)
@@ -352,11 +382,13 @@ class Orchestrator:
     async def build_quote(
         self, rfq: RFQ, options: list[PriceOption], pickup: PickupPrice | None
     ) -> Quote | None:
-        currencies = {option.currency for option in options}
-        currency = rfq.currency if rfq.currency in currencies else sorted(currencies)[0]
-        usable = [option for option in options if option.currency == currency]
+        usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)
         total = option.total
+        if pickup is not None and pickup.currency != option.currency:
+            converted = convert_money(pickup.total, pickup.currency, option.currency)
+            if converted is not None:
+                pickup = pickup.model_copy(update={"total": converted, "currency": option.currency})
         if pickup is not None:
             if pickup.currency != option.currency:
                 self.hold(

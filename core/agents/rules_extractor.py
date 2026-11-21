@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from core.agents.extractor import clean_body
+from core.agents.extractor import clean_body, find_currency
 from core.contracts import RFQ, LlmUsage, Mail, Piece, Preference, RfqExtractor
 from mail.extract import extract as rules_extract
 from sourcing.weights import gross_weight_kg, to_cm, to_kg
@@ -45,7 +45,7 @@ def to_rfq(mail: Mail, x) -> RFQ:
         door_pickup=s.door_pickup,
         pickup_zone=s.pickup_zone if s.door_pickup else None,
         pickup_postcode=s.pickup_postcode if s.door_pickup else None,
-        currency=s.quote_currency,
+        currency=s.quote_currency or find_currency(clean_body(mail.body)),
         preference=Preference(x.preference),
         preference_assumed=not x.preference_stated,
         ready_date=s.ready_date,

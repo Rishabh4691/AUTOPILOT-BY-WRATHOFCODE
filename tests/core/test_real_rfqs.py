@@ -41,3 +41,15 @@ async def test_rfq_1639_sums_lots_and_respects_self_delivery() -> None:
     assert rfq.volume_cbm is not None and str(rfq.volume_cbm) == "2.39"
     assert rfq.door_pickup is False
     assert rfq.preference.value == "fastest"
+
+
+async def test_every_recorded_real_rfq_extracts() -> None:
+    settings = load_settings(environ={"FIVEU_API_KEY": "k"})
+    extractor = RulesFirstExtractor(RegexRfqExtractor(settings, None))
+    files = sorted(FIXTURES.glob("real_rfq_*.json"))
+    assert files
+    for path in files:
+        rfq, _ = await extractor.extract(parse_mail(load(path.name)))
+        assert rfq.gross_kg > 0
+        assert rfq.currency == "EUR"
+        assert not rfq.door_pickup or rfq.pickup_zone is not None
