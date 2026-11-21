@@ -143,3 +143,26 @@ async def test_huge_body_is_truncated_before_llm(settings: Settings) -> None:
     limit = getattr(settings, "body_char_limit", 4000)
     assert len(llm.calls) == 1
     assert len(llm.calls[0][1]) <= limit
+
+
+async def test_real_rfq_276_takes_origin_from_pickup_zone() -> None:
+    import json
+    from pathlib import Path
+
+    from core.agents.extractor import RegexRfqExtractor as Extractor
+    from core.agents.mailbox import parse_mail as parse
+    from core.config import load_settings as settings_for
+
+    raw = json.loads(
+        (Path(__file__).parent / "fixtures" / "mail" / "real_rfq_276.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rfq, usage = await Extractor(settings_for(environ={"FIVEU_API_KEY": "k"}), None).extract(
+        parse(raw)
+    )
+    assert (rfq.origin, rfq.destination) == ("CGN", "ORD")
+    assert rfq.door_pickup and rfq.pickup_zone == "51"
+    assert str(rfq.gross_kg) == "676.00"
+    assert rfq.preference.value == "fastest"
+    assert usage is None

@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import signal
 import sys
 from datetime import UTC, datetime
@@ -22,11 +23,12 @@ from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
-from core.contracts import MailboxClient
+from core.contracts import MailboxClient, Stage
 from core.llm import GatewayLlmClient
 from core.orchestrator import Orchestrator
 from core.outbound import DirectoryMailSender
 from core.store import SqliteEventSink, Store
+from core.timing import is_stale
 from mail.lock import AlreadyRunning, single_instance
 
 log = logging.getLogger("core.main")
@@ -100,6 +102,30 @@ async def poll_loop(orchestrator: Orchestrator, interval_s: float, stop: asyncio
             await asyncio.wait_for(stop.wait(), timeout=interval_s)
 
 
+def reprocess_ids() -> list[int]:
+    raw = os.environ.get("REPROCESS_MAIL_IDS", "")
+    return [int(part) for part in raw.split(",") if part.strip().isdigit()]
+
+
+async def reprocess(orchestrator: Orchestrator) -> None:
+    for mail_id in reprocess_ids():
+        try:
+            mail = await orchestrator.mailbox.read_one(mail_id)
+        except Exception:
+            log.exception("reprocess_read_failed", extra={"mail": mail_id})
+            continue
+        if orchestrator.store.outbox_status(mail.thread_root_id, Stage.QUOTED) is not None:
+            log.info("reprocess_skipped_already_quoted", extra={"mail": mail_id})
+            continue
+        if is_stale(mail.received_at, datetime.now(UTC), orchestrator.settings.rfq_lifetime_s):
+            log.info("reprocess_skipped_stale", extra={"mail": mail_id})
+            continue
+        log.info("reprocess_started", extra={"mail": mail_id})
+        task = asyncio.create_task(orchestrator.handle_rfq(mail), name=f"rfq-{mail_id}")
+        orchestrator.tasks.add(task)
+        task.add_done_callback(orchestrator.tasks.discard)
+
+
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
     store = Store(settings.db_path)
     try:
@@ -117,6 +143,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                 },
             )
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
+            await reprocess(orchestrator)
             try:
                 await poll_loop(orchestrator, settings.poll_interval_s, stop)
                 await asyncio.wait_for(orchestrator.outbox.join(), timeout=10)

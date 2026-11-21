@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from core.agents.directory import load_directory
 from core.config import Settings
 from core.contracts import (
     RFQ,
@@ -166,6 +167,9 @@ def _airport(code: str | None) -> str | None:
     return code.upper()
 
 
+TO_AIRPORT = re.compile(r"\b(?:to|nach|towards)\s+([A-Z]{3})\b")
+
+
 def find_route(text: str) -> tuple[str | None, str | None]:
     origin_match = LABELED_ORIGIN.search(text)
     destination_match = LABELED_DESTINATION.search(text)
@@ -179,6 +183,9 @@ def find_route(text: str) -> tuple[str | None, str | None]:
             if first and second:
                 origin, destination = origin or first, destination or second
                 break
+    if destination is None:
+        to_match = TO_AIRPORT.search(text)
+        destination = _airport(to_match.group(1)) if to_match else None
     return origin, destination
 
 
@@ -313,15 +320,26 @@ def merge_llm(draft: Draft, fields: LlmFields) -> None:
     draft.ready_date = draft.ready_date or fields.ready_date
 
 
+def zone_airports(settings: Settings) -> dict[str, str]:
+    try:
+        directory = load_directory(settings.kit_dir)
+    except OSError:
+        return {}
+    return {zone.zone: zone.airport for zone in directory.zones}
+
+
 class RegexRfqExtractor:
     def __init__(self, settings: Settings, llm: LlmClient | None = None) -> None:
         self._settings = settings
         self._llm = llm
         self._limit = int(getattr(settings, "body_char_limit", DEFAULT_BODY_CHAR_LIMIT))
+        self._zone_airports = zone_airports(settings)
 
     async def extract(self, mail: Mail) -> tuple[RFQ, LlmUsage | None]:
         text = f"{mail.subject}\n{clean_body(mail.body)}"
         draft = regex_draft(text)
+        if draft.origin is None and draft.pickup_zone in self._zone_airports:
+            draft.origin = self._zone_airports[draft.pickup_zone]
         usage = None
         if draft.missing() and self._llm is not None:
             usage = await self._ask_llm(self._llm, draft, text)
