@@ -36,3 +36,5 @@ dist/
 .idea/
 .vscode/
 fake.db*
+
+data/bot.lock
