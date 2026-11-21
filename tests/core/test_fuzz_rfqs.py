@@ -363,6 +363,11 @@ EXPECTED: dict[int, dict[str, object]] = {
         "ready": "2026-11-24",
         "dg": False,
     },
+    9121: {"dg": True},
+    9122: {"dg": True},
+    9123: {"dg": True},
+    9124: {"dg": False},
+    9127: {"dg": False},
 }
 
 

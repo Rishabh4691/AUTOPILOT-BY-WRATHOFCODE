@@ -8,3 +8,4 @@
 - Round 6: 8 fake RFQs, 2 failed. Fixed "Gross weight (kg): 812" / "Volume (cbm): 3.3" without a total label, ready dates written with month names (30 November 2026, 28 de noviembre de 2026, Nov 26, 2026).
 - Round 7: 6 fake RFQs, 4 failed. Fixed weight taken from a "RE: FW:" subject, fallback DG check reading quoted history, Outlook history without an address ("From: Sales Team" + "Sent:", underscore line) not cut, "1.2 cbm each" not multiplied by the piece count.
 - Round 8: 5 fake RFQs, 5 failed. Fixed US consignee ZIP (IL 60606) taken as pickup postcode, "Express" in a signature company name forcing fastest, Italian "peso lordo kg 450, volume mc 2,5", German "wird bei uns abgeholt", "each 50x40x30 cm and 18.5 kg".
+- Round 9 (DG): 8 fake RFQs, 3 failed. Fixed German "Lithium-Ionen-Akkus"/"Lithiumbatterien" and French "colle"/"piles au lithium" not flagged; negated wording still passes.
