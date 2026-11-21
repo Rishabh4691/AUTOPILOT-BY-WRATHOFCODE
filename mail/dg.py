@@ -26,6 +26,31 @@ DOCS = re.compile(
 )
 
 
+NEGATED = re.compile(
+    r"(?:\b(?:no|not|non|without|free of|kein\w*|nicht|ohne|sans|pas de|sin|senza|bez)\b[^.;,!?\n]{0,25}|\bnon-?)$",
+    re.I,
+)
+DG_CONTEXT = re.compile(r"dangerous|hazard|\bDG\b|gefahrgut|flammable|entzündlich|\bUN\s?\d{4}", re.I)
+
+
+def dg_goods(text: str):
+    """First goods keyword that is not negated ("non-flammable", "no lithium batteries")."""
+    for m in DG_GOODS.finditer(text or ""):
+        if not NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
+            return m
+    return None
+
+
+def body_classes(text: str) -> list[str]:
+    """Hazard classes written in the mail itself, e.g. "Class 3 dangerous goods"."""
+    out = []
+    for line in (text or "").splitlines():
+        for m in CLASS.finditer(line):
+            if DG_CONTEXT.search(line) and not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
+                out.append(m.group(1))
+    return out
+
+
 @dataclass
 class DgCheck:
     dangerous: bool
@@ -117,7 +142,11 @@ def check(body: str, attachments: list[tuple[str, str]]) -> DgCheck:
             classes += CLASS.findall(text)
             if DOCS.search(text[:400]):
                 docs = True
-    goods = DG_GOODS.search(body) or next((DG_GOODS.search(t) for _, t in attachments if DG_GOODS.search(t)), None)
+        else:
+            for c in body_classes(text):
+                classes.append(c)
+                reasons.append(f"class {c} in {where}")
+    goods = dg_goods(body) or next((dg_goods(t) for _, t in attachments if dg_goods(t)), None)
     if goods and not reasons:
         reasons.append(f"'{goods.group(0)}' is usually dangerous goods")
     return DgCheck(

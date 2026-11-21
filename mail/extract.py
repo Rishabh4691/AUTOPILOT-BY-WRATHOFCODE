@@ -97,10 +97,55 @@ CITIES = {
     "asuncion": "ASU",
     "asunción": "ASU",
     "papeete": "PPT",
+    # French, Spanish, Italian and Polish names seen in non-English mails.
+    "francfort": "FRA",
+    "fráncfort": "FRA",
+    "francoforte": "FRA",
+    "frankfurt nad menem": "FRA",
+    "múnich": "MUC",
+    "monaco di baviera": "MUC",
+    "monachium": "MUC",
+    "hambourg": "HAM",
+    "hamburgo": "HAM",
+    "amburgo": "HAM",
+    "stoccarda": "STR",
+    "colonia": "CGN",
+    "kolonia": "CGN",
+    "berlín": "BER",
+    "berlino": "BER",
+    "norimberga": "NUE",
+    "núremberg": "NUE",
+    "norymberga": "NUE",
+    "lipsia": "LEJ",
+    "lipsk": "LEJ",
+    "nueva york": "JFK",
+    "nowy jork": "JFK",
+    "tokio": "NRT",
+    "pékin": "PEK",
+    "pekín": "PEK",
+    "pechino": "PEK",
+    "pekin": "PEK",
+    "le caire": "CAI",
+    "el cairo": "CAI",
+    "il cairo": "CAI",
+    "kair": "CAI",
+    "singapour": "SIN",
+    "singapur": "SIN",
+    "dubaï": "DXB",
+    "dubái": "DXB",
+    "dubaj": "DXB",
+    "séoul": "ICN",
+    "seúl": "ICN",
+    "johannesbourg": "JNB",
+    "ciudad de méxico": "MEX",
+    "città del messico": "MEX",
+    "san paolo": "GRU",
+    "bombay": "BOM",
+    "hongkong": "HKG",
 }
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
-    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*)?"
+    rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*(?:(?:each|je|à|chacun\w*|cada|ciascun\w*|każd\w*)\s*:?\s*)?)?"
     rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*)\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
     re.I,
@@ -161,7 +206,7 @@ def volume_cbm_of(m) -> Decimal:
 
 
 COUNT_ONLY = re.compile(
-    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?)\b",
+    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
     re.I,
 )
 READY = re.compile(
@@ -201,6 +246,9 @@ class Extracted:
 
 def num(s: str) -> Decimal:
     s = s.strip().replace(" ", "")
+    if "," in s and "." in s:
+        mark = "," if s.rfind(",") > s.rfind(".") else "."
+        return Decimal(s.replace("." if mark == "," else ",", "").replace(mark, "."))
     if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", s):
         return Decimal(re.sub(r"[.,]", "", s))
     return Decimal(s.replace(",", "."))
@@ -286,7 +334,7 @@ EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cad
 TOGETHER = r"(?:together|total|in total|combined|insgesamt|zusammen|gesamt|au total|en total|in totale|łącznie)"
 LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?[a-zäöüéèàçñ]+", re.I)
 LOT_WEIGHT = re.compile(
-    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
+    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>\d{{1,3}}(?:[.,]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
     re.I,
 )
 LOT_VOLUME = re.compile(
@@ -431,6 +479,22 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
     return None, "kg"
 
 
+EACH_WEIGHT = re.compile(
+    rf"(?P<n>\d{{1,4}})\s*(?:x\s*)?[a-zäöüéèàçñąćęłńóśźż]+[^\n\d]{{0,20}}?(?P<pre>\b(?:each|je|à|chacun\w*|cada|ciascun\w*|każd\w*)\s*)?"
+    rf"(?P<v>{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?)\b\s*(?P<post>each|per (?:piece|unit|drum|carton|box|case|pallet)|/\s*pc|je|chacun\w*|cada uno|ciascun\w*|każd\w*)?",
+    re.I,
+)
+
+
+def each_times_count(text: str) -> tuple[Decimal | None, str]:
+    """Total for "8 drums, 180 kg each" when no dimensions or total weight are given."""
+    for m in EACH_WEIGHT.finditer(text):
+        if m.group("pre") or m.group("post"):
+            value, unit = weight_kg(num(m.group("v")), m.group("u"))
+            return value * int(m.group("n")), unit
+    return None, "kg"
+
+
 def sender_email(sender: str) -> str:
     s = (sender or "").strip().lower()
     return s[s.index("<") + 1 : s.index(">")] if "<" in s and ">" in s else s
@@ -572,6 +636,8 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     origin, dest = find_route(route_text)
     pieces = find_pieces(text)
     gross, wunit = find_gross(text, pieces)
+    if gross is None and not pieces:
+        gross, wunit = each_times_count(text)
     lots = parse_lots(text)
     if lots and lots[1] > 0:
         pieces, gross, wunit = [], lots[1], "kg"
