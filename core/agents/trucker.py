@@ -125,7 +125,7 @@ def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
 
 
 PICKUP_TIME = re.compile(
-    r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
+    r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*(?:is|of|:|=)?\s*(?:about|approx\.?|ca\.?)?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
     re.I,
 )
 PRICE_WEIGHT = Decimal("0.5")

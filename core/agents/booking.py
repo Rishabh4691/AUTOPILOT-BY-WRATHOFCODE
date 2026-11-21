@@ -106,19 +106,19 @@ DECLINE = [
 ]
 
 CONFIRM = {
-    "en": "Hi {first},\n\ngood news, it's booked. Booking reference {ref}, your reference {team}.\n"
+    "en": "Hi {first},\n\ngood news, it's booked. Booking reference {ref}, our reference {team}.\n"
     "{carrier}, {route}, {transit} transit, arriving around {eta}.\n"
     "We'll keep an eye on it and let you know if anything changes.\n\nCheers,\n{agent}\n{company}",
-    "de": "Hallo {first},\n\nerledigt, die Sendung ist gebucht. Buchungsnummer {ref}, Ihre Referenz {team}.\n"
+    "de": "Hallo {first},\n\nerledigt, die Sendung ist gebucht. Buchungsnummer {ref}, unsere Referenz {team}.\n"
     "{carrier}, {route}, {transit} Laufzeit, Ankunft etwa {eta}.\n"
     "Wir behalten alles im Blick und melden uns, falls sich etwas ändert.\n\nViele Grüße\n{agent}\n{company}",
-    "fr": "Bonjour {first},\n\nc'est réservé. Référence de réservation {ref}, votre référence {team}.\n"
+    "fr": "Bonjour {first},\n\nc'est réservé. Référence de réservation {ref}, notre référence {team}.\n"
     "{carrier}, {route}, {transit} de transit, arrivée vers {eta}.\n"
     "Nous suivons l'envoi et vous prévenons si quelque chose change.\n\nBien à vous,\n{agent}\n{company}",
-    "es": "Hola {first},\n\nya está reservado. Referencia de reserva {ref}, tu referencia {team}.\n"
+    "es": "Hola {first},\n\nya está reservado. Referencia de reserva {ref}, nuestra referencia {team}.\n"
     "{carrier}, {route}, {transit} de tránsito, llegada sobre el {eta}.\n"
     "Lo seguimos de cerca y te avisamos si cambia algo.\n\nUn saludo,\n{agent}\n{company}",
-    "it": "Ciao {first},\n\nfatto, è prenotato. Riferimento prenotazione {ref}, il tuo riferimento {team}.\n"
+    "it": "Ciao {first},\n\nfatto, è prenotato. Riferimento prenotazione {ref}, il nostro riferimento {team}.\n"
     "{carrier}, {route}, {transit} di transito, arrivo verso {eta}.\n"
     "Lo seguiamo noi e ti avvisiamo se cambia qualcosa.\n\nUn saluto,\n{agent}\n{company}",
     "pl": "Dzień dobry {first},\n\nzarezerwowane. Numer rezerwacji {ref}, Państwa numer {team}.\n"

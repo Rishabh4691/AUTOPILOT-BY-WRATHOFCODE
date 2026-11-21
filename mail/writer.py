@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -6,7 +7,7 @@ from datetime import date, datetime, timedelta
 from . import gateway
 from .text import fresh_text, reply_subject
 
-AGENT_NAME = os.getenv("AGENT_NAME") or "Lena"
+AGENT_NAME = os.getenv("AGENT_NAME") or "Lena Hartmann"
 COMPANY = "WRATHOFCODE Air Freight"
 
 SLOTS = ("FIRST", "REF", "ROUTE", "PIECES", "GROSS", "CHARGEABLE", "CARRIER", "TRANSIT", "ARRIVAL", "TOTAL", "INCLUDED", "VALID")
@@ -133,9 +134,22 @@ def facts(rfq: dict, price: dict) -> tuple[str, dict]:
         "TOTAL": money(price["total"], price["currency"], lang),
         "INCLUDED": ", ".join(inc) if lang != "en" or len(inc) < 2 else ", ".join(inc[:-1]) + " and " + inc[-1],
         "VALID": valid_text(price, lang),
+        "_VALID_UNTIL": str(price.get("valid_until") or ""),
     }
     values.update(story(rfq, values))
     return lang, values
+
+
+def hold_text(valid_until: str, now: datetime | None = None) -> str:
+    try:
+        until = datetime.fromisoformat(valid_until.replace("Z", "+00:00"))
+    except ValueError:
+        return "for a short time"
+    current = now or datetime.now(until.tzinfo)
+    minutes = int((until - current).total_seconds() // 60)
+    if minutes < 2:
+        return "for a short time"
+    return f"for about {minutes} minutes"
 
 
 def story(rfq: dict, values: dict) -> dict:
@@ -145,8 +159,12 @@ def story(rfq: dict, values: dict) -> dict:
     gross = float(rfq.get("gross_kg") or 0)
     chargeable = float(rfq.get("chargeable_kg") or 0)
     pref = "fastest" if str(rfq.get("preference") or "").startswith("fast") else "cheapest"
+    text = str(rfq.get("customer_text") or "")
+    formal = bool(re.search(r"\b(dear (sir|madam|team|mr|ms|mrs)|kind regards|best regards|yours sincerely|mit freundlichen|sehr geehrte)", text, re.I))
     return {
         "PREF": pref,
+        "SIGNOFF": "Kind regards," if formal else "Cheers,",
+        "HOLD": hold_text(values.get("_VALID_UNTIL", "")),
         "GOODS_LINE": f"Here's how we'd move your {goods}. " if goods else "",
         "PICKUP_LINE": (
             f" We'll collect it from your site in {town} and truck it to {origin_city} airport first."
@@ -156,7 +174,7 @@ def story(rfq: dict, values: dict) -> dict:
             else ""
         ),
         "VOLUME_NOTE": (
-            f" The airline bills it on {values['CHARGEABLE']} rather than {values['GROSS']} because of the volume."
+            f" The airline bills it on {math.ceil(chargeable):,} kg rather than {values['GROSS']} because of the volume."
             if gross and chargeable > gross * 1.02
             else ""
         ),
@@ -170,12 +188,12 @@ thanks for getting in touch. [GOODS_LINE]For the [PREF] routing I'd put your [PI
 
 Your all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
 
-I can hold this rate until [VALID].
+I can hold this rate [HOLD].
 If it works for you, just reply yes and I'll book it straight away. Our reference is [REF].
 
-Cheers,
+[SIGNOFF]
 {agent}
-{company}""",
+Export Air Freight, {company}""",
     "de": """Hallo [FIRST],
 
 danke für die Anfrage, unsere Referenz ist [REF].
