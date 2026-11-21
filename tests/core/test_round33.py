@@ -81,6 +81,32 @@ def test_document_gross_with_thousands_comma_is_not_a_decimal() -> None:
     assert document_totals("Total gross weight (kg): 12,5")["gross_kg"] == Decimal("12.5")
 
 
+def test_document_totals_read_other_label_styles() -> None:
+    cases = [
+        ("TOTAL GROSS WEIGHT: 420,5 KG\nTOTAL VOLUME: 2.1 M3", "420.5", "2.1"),
+        ("Total G.W.: 1,202 kgs\nTotal measurement: 1.44 cbm", "1202", "1.44"),
+        ("Gesamtbruttogewicht (kg): 1.917,5\nGesamtvolumen (m³): 8,32", "1917.5", "8.32"),
+        ("Gross weight total: 1202 kg\nVolume total: 1.095 m3", "1202", "1.095"),
+        ("Poids brut total (kg) : 3147\nVolume total (m3) : 1,42", "3147", "1.42"),
+        ("Total gross weight | 86 kg\nTotal volume | 0.47 m³", "86", "0.47"),
+    ]
+    for text, gross, cbm in cases:
+        found = document_totals(text)
+        assert found["gross_kg"] == Decimal(gross) and found["volume_cbm"] == Decimal(cbm), text
+
+
+def test_site_unknown_ignores_a_po_number_but_not_a_postcode() -> None:
+    body = (
+        "Please quote to KUL. Please arrange pickup from our warehouse.\n"
+        "3 pallets, 450 kg, 2.1 cbm.\nOur reference: PO 70247\nThanks,\nMarco"
+    )
+    rfq, _ = asyncio.run(extractor([]).extract(_mail(body, attachments=False)))
+    assert "site_unknown" in rfq.notes
+    with_postcode = body.replace("warehouse.", "warehouse, 61018 Bad Homburg.")
+    rfq, _ = asyncio.run(extractor([]).extract(_mail(with_postcode, attachments=False)))
+    assert "site_unknown" not in rfq.notes and rfq.pickup_postcode == "61018"
+
+
 def test_document_volume_keeps_the_piece_count_from_the_mail() -> None:
     body = (
         "Please quote FRA to SYD.\n12 pallets 80x60x75 cm, total gross weight 132 kg.\n"

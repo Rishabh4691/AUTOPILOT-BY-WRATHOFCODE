@@ -7,7 +7,8 @@ from decimal import Decimal
 from core.agents.extractor import clean_body, find_currency
 from core.contracts import RFQ, LlmUsage, Mail, Piece, Preference, RfqExtractor
 from mail.extract import extract as rules_extract
-from mail.text import fresh_text
+from mail.extract import find_postcode, num, small_num
+from mail.text import request_text
 from sourcing.weights import gross_weight_kg, to_cm, to_kg
 
 log = logging.getLogger("core.rules_extractor")
@@ -52,7 +53,8 @@ def to_rfq(mail: Mail, x) -> RFQ:
         pickup_zone=s.pickup_zone if s.door_pickup else None,
         pickup_postcode=s.pickup_postcode if s.door_pickup else None,
         # Only the new message: a quoted older mail ("Currency USD.") is about another shipment.
-        currency=s.quote_currency or find_currency(fresh_text(clean_body(mail.body))),
+        currency=s.quote_currency
+        or find_currency(request_text(mail.subject, clean_body(mail.body))),
         preference=Preference(x.preference),
         preference_assumed=not x.preference_stated,
         ready_date=s.ready_date,
@@ -72,8 +74,9 @@ GERMAN_AIRPORTS = re.compile(
 def site_unknown(body: str, rfq: RFQ) -> bool:
     if not rfq.door_pickup:
         return False
-    text = fresh_text(body or "")
-    if re.search(r"\b\d{5}\b", text):
+    text = request_text(rfq.subject, body or "")
+    # A PO or reference number ("Our reference: PO 70247") is not a pickup postcode.
+    if find_postcode(text, {}):
         return False
     if GERMAN_AIRPORTS.search(f"{rfq.subject}\n{text}"):
         return False
@@ -81,20 +84,25 @@ def site_unknown(body: str, rfq: RFQ) -> bool:
 
 
 TOTAL_PIECES = re.compile(r"total\s+(?:pieces|pcs|packages|colli)\s*(?:\(\w+\))?\s*[:=|]+\s*\|?\s*(\d{1,4})\b", re.I)
-TOTAL_GROSS = re.compile(r"total\s+gross\s+weight\s*(?:\(kg\))?\s*[:=|]+\s*\|?\s*(\d[\d.,]*)", re.I)
-TOTAL_VOLUME = re.compile(r"total\s+volume\s*(?:\(cbm\)|\(m3\)|\(m³\))?\s*[:=|]+\s*\|?\s*(\d[\d.,]*)", re.I)
+TOTAL_GROSS = re.compile(
+    r"(?:total\s+gross\s+weight|gross\s+weight\s+total|total\s+g\.?\s*w\.?|gesamt\s*brutto\s*gewicht|"
+    r"bruttogewicht\s+gesamt|poids\s+brut\s+total|peso\s+bruto\s+total|peso\s+lordo\s+totale|"
+    r"łączna\s+waga\s+brutto)\s*(?:\((?:kg|kgs)\))?\s*[:=|]+\s*\|?\s*(\d[\d.,'\u2019]*)",
+    re.I,
+)
+TOTAL_VOLUME = re.compile(
+    r"(?:total\s+volume|volume\s+totale?|total\s+measurement|total\s+cbm|gesamt\s*volumen|"
+    r"volumen\s+gesamt|volumen\s+total|łączna\s+objętość)\s*(?:\((?:cbm|m3|m³)\))?"
+    r"\s*[:=|]+\s*\|?\s*(\d[\d.,]*)",
+    re.I,
+)
 
 
 def _number(text: str, thousands: bool = False) -> Decimal | None:
-    raw = text.strip().rstrip(".")
-    if thousands and re.fullmatch(r"\d{1,3}(?:,\d{3})+", raw):
-        raw = raw.replace(",", "")  # "Total gross weight (kg): 1,518" is 1518 kg, not 1.518
-    elif "," in raw and "." not in raw:
-        raw = raw.replace(",", ".")
-    else:
-        raw = raw.replace(",", "")
+    """Weights: "1,518" is 1518 and "1.917,5" is 1917.5. Volumes: "1.095" stays 1.095."""
+    raw = text.strip().rstrip(".,")
     try:
-        value = Decimal(raw)
+        value = num(raw) if thousands else small_num(raw)
     except Exception:
         return None
     return value if value > 0 else None
