@@ -95,7 +95,8 @@ def load_settings(root: Path = ROOT, environ: Mapping[str, str] | None = None) -
         dry_run=_flag(env.get("DRY_RUN"), default=True),
         kill_switch=_flag(env.get("KILL_SWITCH"), default=False),
         llm_model=env.get("LLM_MODEL", "").strip() or "gpt-5-nano",
-        poll_interval_s=float(env.get("POLL_INTERVAL_SECONDS") or "2"),
+        # The mailbox allows one poll per 5 s (since ~21:14 UTC); polling faster locked us out.
+        poll_interval_s=max(6.0, float(env.get("POLL_INTERVAL_SECONDS") or "6")),
         max_tokens_per_rfq=_int(env.get("MAX_TOKENS_PER_RFQ"), 3000),
         db_path=root / (env.get("DB_PATH") or "data/app.db"),
         kit_dir=root / (env.get("KIT_DIR") or "data/kit"),
