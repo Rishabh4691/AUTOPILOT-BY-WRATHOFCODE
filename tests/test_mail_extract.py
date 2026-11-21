@@ -190,6 +190,25 @@ def test_prompt_injection_lines_do_not_change_the_cargo(line):
 
 
 @needs_kit
+@pytest.mark.parametrize("weight", ["3'418.5 kg", "3’418.5 kg", "3 418,5 kg", "3 418,5 kg"])
+def test_swiss_apostrophe_and_space_thousands(weight):
+    x = run(f"Quote FRA to RUH.\n5 colis, poids brut {weight}, volume 0.43 m3.")
+    assert x.gross_kg == 3418.5
+
+
+def test_cubic_meters_are_not_cubic_feet():
+    for text, cbm in [("7.97 cubic meters", "7.97"), ("7.97 cubic metres", "7.97"), ("100 cu ft", "2.83168")]:
+        assert ex.volume_cbm_of(next(ex.VOLUME.finditer(text))) == Decimal(cbm)
+
+
+@needs_kit
+@pytest.mark.parametrize("dims", ["L120 x W80 x H100 cm", "120cm x 80cm x 100cm", "120 cm x 80 cm x 100 cm"])
+def test_dims_with_axis_letters_or_unit_after_each_number(dims):
+    x = run(f"Quote FRA to JFK.\n11 pallets {dims}, total gross weight 852.5 kg.")
+    assert x.pieces == 11 and x.chargeable_kg == 1764.0
+
+
+@needs_kit
 def test_form_with_one_piece_uses_weight_per_piece():
     x = run("Quote CGN to LIM.\nNo. of pieces: 1\nWeight per piece: 94 kg\nDims per piece: 120 x 100 x 150 cm")
     assert x.shipment is not None and x.gross_kg == 94 and x.pieces == 1

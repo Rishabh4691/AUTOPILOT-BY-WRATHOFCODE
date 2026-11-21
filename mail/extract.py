@@ -144,14 +144,17 @@ CITIES = {
     "hongkong": "HKG",
 }
 NUM = r"\d+(?:[.,]\d+)?"
+# "L120 x W80 x H100 cm" and "120cm x 80cm x 100cm"
+PFX = r"(?:\b[LWBH]\s*[:=]?\s*)?"
+SFX = r"(?:\s*(?:cm|mm|in)\b)?"
 DIMS = re.compile(
     rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?P<each0>each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
-    rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
+    rf"{PFX}(?P<l>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<w>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
     re.I,
 )
 WEIGHT = re.compile(
-    rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b",
+    rf"(?P<v>\d{{1,3}}(?:[  ,.']\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b",
     re.I,
 )
 NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b", re.I)
@@ -202,7 +205,8 @@ CUFT = Decimal("0.0283168")
 def volume_cbm_of(m) -> Decimal:
     u = (m.group("u") or "").lower().replace(" ", "")
     v = num(m.group("v"))
-    return v * CUFT if u.startswith(("cu", "cubicf", "ft", "cft")) else v
+    # "cu ft", "cu.ft", "cubic feet", "ft3", "cft" are cubic feet; "cubic meters" is not.
+    return v * CUFT if u.startswith(("cuft", "cu.ft", "cubicf", "ft", "cft")) else v
 
 
 COUNT_ONLY = re.compile(
@@ -258,7 +262,8 @@ class Extracted:
 
 
 def num(s: str) -> Decimal:
-    s = s.strip().replace(" ", "")
+    # Thousands written with a space, a no-break space or a Swiss apostrophe: "1 250", "3'418.5".
+    s = re.sub(r"[\s'’]", "", s)
     if "," in s and "." in s:
         mark = "," if s.rfind(",") > s.rfind(".") else "."
         return Decimal(s.replace("." if mark == "," else ",", "").replace(mark, "."))
@@ -362,7 +367,7 @@ EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cad
 TOGETHER = r"(?:together|total|in total|combined|insgesamt|zusammen|gesamt|au total|en total|in totale|łącznie)"
 LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?[a-zäöüéèàçñ]+", re.I)
 LOT_WEIGHT = re.compile(
-    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>\d{{1,3}}(?:[.,]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
+    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>\d{{1,3}}(?:[.,' ]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
     re.I,
 )
 LOT_VOLUME = re.compile(
@@ -370,7 +375,7 @@ LOT_VOLUME = re.compile(
     re.I,
 )
 LOT_DIMS = re.compile(
-    rf"(?:(?P<pre>{EACH})\s*)?(?P<l>{NUM})\s*(?:[x×*]|by)\s*(?P<w>{NUM})\s*(?:[x×*]|by)\s*(?P<h>{NUM})\s*(?P<u>cm|mm|m|in|inch(?:es)?)?",
+    rf"(?:(?P<pre>{EACH})\s*)?{PFX}(?P<l>{NUM}){SFX}\s*(?:[x×*]|by)\s*{PFX}(?P<w>{NUM}){SFX}\s*(?:[x×*]|by)\s*{PFX}(?P<h>{NUM})\s*(?P<u>cm|mm|m|in|inch(?:es)?)?",
     re.I,
 )
 
