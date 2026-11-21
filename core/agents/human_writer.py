@@ -60,6 +60,51 @@ def pickup_town(body: str, postcode: str | None) -> str:
     return ""
 
 
+SMALL_WORDS = {"am", "an", "der", "die", "das", "im", "in", "ob", "bei", "von", "vor", "de", "la", "le", "du", "del", "da", "di", "and", "of"}
+
+
+def proper(text: str) -> str:
+    words = (text or "").split(" ")
+    if not any(w.isalpha() and w.islower() for w in words):
+        return text or ""
+    out = []
+    for index, word in enumerate(words):
+        if index and word.lower() in SMALL_WORDS:
+            out.append(word.lower())
+        elif word.islower():
+            out.append("-".join(part[:1].upper() + part[1:] for part in word.split("-")))
+        else:
+            out.append(word)
+    return " ".join(out)
+
+
+_CARRIERS: dict[str, str] = {}
+
+
+def _carrier_names() -> dict[str, str]:
+    if not _CARRIERS:
+        try:
+            from core.agents.directory import load_directory
+            from core.config import load_settings
+
+            for contact in load_directory(load_settings().kit_dir).contacts:
+                if contact.kind == "airline":
+                    _CARRIERS[re.sub(r"[^a-z0-9]", "", contact.name.lower())] = contact.name
+                    _CARRIERS[re.sub(r"[^a-z0-9]", "", contact.email.split("@")[0])] = contact.name
+        except Exception as error:
+            log.info("carrier_names_unavailable", extra={"error": type(error).__name__})
+    return _CARRIERS
+
+
+def carrier_name(name: str, code: str | None = None) -> str:
+    key = re.sub(r"[^a-z0-9]", "", (name or "").lower())
+    known = _carrier_names().get(key)
+    if known:
+        return known
+    cleaned = (name or code or "").replace("-", " ").strip()
+    return proper(cleaned) if cleaned.islower() else cleaned
+
+
 class HumanEmailWriter:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
@@ -106,10 +151,10 @@ class HumanEmailWriter:
         rfq_dict = {
             "id": str(rfq.mail_id),
             "reference": f"WOC-{rfq.mail_id}",
-            "first_name": find_first_name(sender, body),
+            "first_name": proper(find_first_name(sender, body)),
             "language": lang.detect(fresh_text(body) or rfq.subject),
-            "origin": rfq.origin,
-            "destination": rfq.destination,
+            "origin": rfq.origin.upper(),
+            "destination": rfq.destination.upper(),
             "pieces": piece_count(rfq),
             "gross_kg": float(rfq.gross_kg),
             "chargeable_kg": float(self._chargeable(rfq, option)),
@@ -118,12 +163,12 @@ class HumanEmailWriter:
             "customer_text": body,
             "door_pickup": rfq.door_pickup,
             "goods": goods_of(body),
-            "pickup_town": pickup_town(body, rfq.pickup_postcode) if rfq.door_pickup else "",
+            "pickup_town": proper(pickup_town(body, rfq.pickup_postcode)) if rfq.door_pickup else "",
         }
         price = {
             "total": float(total),
             "currency": currency,
-            "carrier": option.carrier,
+            "carrier": carrier_name(option.carrier, option.carrier_code),
             "transit_days": option.transit_days,
             "valid_until": option.valid_until.isoformat() if option.valid_until else None,
             "includes": self._includes(option, rfq.door_pickup),

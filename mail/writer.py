@@ -66,7 +66,7 @@ def arrival_day(price: dict, lang: str, today: date | None = None) -> str:
             start = max(start, datetime.fromisoformat(str(ready)[:10]).date())
         d = start + timedelta(days=1 + int(price.get("transit_days") or 0))
     name = WEEKDAYS.get(lang, WEEKDAYS["en"]).split()[d.weekday()]
-    return f"{name} {d.day:02d}.{d.month:02d}" if lang != "en" else f"{name} {d.strftime('%d %b')}"
+    return f"{name} {d.day:02d}.{d.month:02d}" if lang != "en" else f"{name} {d.day} {d.strftime('%b')}"
 
 
 def valid_text(price: dict, lang: str) -> str:
@@ -282,10 +282,49 @@ def fill(text: str, values: dict) -> str:
         text = re.sub(rf"({re.escape(values['PIECES'])})(?:\s+(?:{re.escape(unit)}|{extra})\b\.?)+", r"\1", text, flags=re.I)
     text = tidy(re.sub(r" +,", ",", text))
     text = "\n".join(line.rstrip() for line in text.splitlines())
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
+    for name in {values.get("CARRIER", ""), *CITY.values()}:
+        if name:
+            text = re.sub(rf"\b{re.escape(name)}\b", name, text, flags=re.I)
+    return capitalize_sentences(re.sub(r"\n{3,}", "\n\n", text).strip())
 
 
 GREET_LINE = re.compile(r"^\s*[^\n]{0,40}?,\s*$")
+
+
+ABBREVIATIONS = ("e.g.", "i.e.", "approx.", "ca.", "no.", "nr.", "vs.", "etc.", "z.b.", "bzw.", "inkl.", "ggf.")
+
+
+def _upper_first(text: str) -> str:
+    for index, char in enumerate(text):
+        if char.isalpha():
+            return text[:index] + char.upper() + text[index + 1 :]
+        if not (char.isspace() or char in "\"'(["):
+            return text
+    return text
+
+
+def capitalize_sentences(text: str) -> str:
+    lines = text.split("\n")
+    out: list[str] = []
+    paragraph_start = True
+    for index, line in enumerate(lines):
+        if not line.strip():
+            out.append(line)
+            paragraph_start = True
+            continue
+        is_greeting = index == 0 or GREET_LINE.match(line) is not None and len(out) == 0
+        if paragraph_start and not is_greeting:
+            line = _upper_first(line)
+        line = re.sub(
+            r"([.!?])(\s+)([a-zäöüéèàçñ])",
+            lambda m: m.group(0)
+            if line[: m.start() + 1].lower().endswith(ABBREVIATIONS)
+            else m.group(1) + m.group(2) + m.group(3).upper(),
+            line,
+        )
+        out.append(line)
+        paragraph_start = False
+    return "\n".join(out)
 
 
 def fix_greeting(draft: str, lang: str) -> str:

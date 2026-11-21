@@ -216,3 +216,24 @@ async def test_customer_dates_and_postcodes_are_allowed_in_llm_text():
     draft = GOOD.replace("Speak soon.", "We'll collect in 61391 once it's ready on 2026-11-28. Speak soon.")
     assert "model wrote digits" not in problems(draft, values, rfq["customer_text"])
     assert "model wrote digits" in problems(draft.replace("61391", "99999"), values, rfq["customer_text"])
+
+
+def test_every_sentence_and_paragraph_starts_with_a_capital():
+    from mail.writer import facts, template
+
+    _, values = facts(RFQ, PRICE)
+    body = template("en", values)
+    for paragraph in [p for p in body.split("\n\n") if p.strip()][1:]:
+        first = next(c for c in paragraph if c.isalpha())
+        assert first.isupper(), paragraph
+    assert not re.search(r"[.!?]\s+[a-z]", body.replace("e.g.", ""))
+    assert " 0" not in body.split("arriv")[-1][:30]
+
+
+def test_known_names_are_cased_exactly():
+    from mail.writer import facts, fill
+
+    _, values = facts(dict(RFQ, origin="fra", destination="del"), dict(PRICE, carrier="Borealis Freight Airways"))
+    text = fill("Hi [FIRST],\n\nwe fly from frankfurt to DELHI with borealis freight airways. Total [TOTAL]. Ref [REF].", values)
+    assert "Frankfurt" in text and "Delhi" in text and "Borealis Freight Airways" in text
+    assert "\n\nWe fly" in text
