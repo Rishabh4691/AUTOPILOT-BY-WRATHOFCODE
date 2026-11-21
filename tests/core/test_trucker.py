@@ -238,3 +238,33 @@ async def test_waits_for_slower_truckers_until_100_seconds() -> None:
     trucker.now = lambda: NOW + timedelta(seconds=101)
     price = await trucker.collect(rfq)
     assert price is not None and price.total == Decimal("85.00")
+
+
+def test_pickup_uses_50_50_price_and_time_balance_round_14() -> None:
+    from core.agents.trucker import best_offer, parse_hours
+    from core.contracts import PickupPrice
+
+    now = datetime(2026, 11, 21, 16, 20, tzinfo=UTC)
+    offers = [
+        PickupPrice(
+            source="email",
+            trucker=name,
+            zone="42",
+            total=Decimal(total),
+            currency="EUR",
+            received_at=now,
+            pickup_hours=parse_hours(f"Pickup time: {hours} hours"),
+        )
+        for name, total, hours in [
+            ("Westfalenroute", "321.74", 4),
+            ("Schwabenbote", "379.79", 6),
+            ("Rheinufer", "379.38", 7),
+            ("Spessart", "113.05", 32),
+        ]
+    ]
+    assert best_offer(offers).trucker == "Westfalenroute"
+    assert parse_hours("Pickup time: 2 days") == Decimal("48")
+    assert (
+        best_offer([o.model_copy(update={"pickup_hours": None}) for o in offers]).trucker
+        == "Spessart"
+    )

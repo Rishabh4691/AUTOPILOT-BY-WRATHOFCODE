@@ -124,6 +124,40 @@ def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
     )
 
 
+PICKUP_TIME = re.compile(
+    r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
+    re.I,
+)
+PRICE_WEIGHT = Decimal("0.5")
+TIME_WEIGHT = Decimal("0.5")
+
+
+def parse_hours(text: str) -> Decimal | None:
+    match = PICKUP_TIME.search(text or "")
+    if not match:
+        return None
+    value = Decimal(match.group(1).replace(",", "."))
+    unit = match.group(2).lower()
+    return value * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else value
+
+
+def best_offer(prices: list[PickupPrice]) -> PickupPrice:
+    pool = [p for p in prices if p.currency == "EUR"] or prices
+    timed = [p for p in pool if p.pickup_hours is not None and p.pickup_hours > 0]
+    if len(timed) != len(pool) or not timed:
+        return min(pool, key=lambda p: p.total)
+    cheapest = min(p.total for p in timed)
+    fastest = min(p.pickup_hours for p in timed if p.pickup_hours is not None)
+    return min(
+        timed,
+        key=lambda p: (
+            PRICE_WEIGHT * p.total / cheapest
+            + TIME_WEIGHT * (p.pickup_hours or fastest) / fastest,
+            p.total,
+        ),
+    )
+
+
 class EmailTruckerPickupSource:
     name = "trucker_email"
 
@@ -212,6 +246,7 @@ class EmailTruckerPickupSource:
                 total=parsed[0],
                 currency=parsed[1],
                 received_at=mail.received_at,
+                pickup_hours=parse_hours(mail.body),
             )
         except ValidationError:
             log.info("trucker_offer_invalid", extra={"rfq": rfq_id, "mail": mail.id})
@@ -329,4 +364,4 @@ class EmailTruckerPickupSource:
             waited < PICKUP_GRACE_S or since_rfq < PICKUP_WAIT_S
         ):
             return None
-        return min(prices, key=lambda p: (p.currency != "EUR", p.total))
+        return best_offer(prices)

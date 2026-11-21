@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from core.agents.directory import CarrierDirectory
+from core.agents.human_writer import carrier_name, proper
 from core.agents.portal import PortalPriceSource
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, MailKind, OutgoingMail, Stage
@@ -17,6 +18,7 @@ from mail import lang
 from mail.extract import extract as rules_extract
 from mail.extract import find_first_name, find_ready
 from mail.text import fresh_text, reply_subject
+from mail.writer import capitalize_sentences, place
 
 log = logging.getLogger("core.booking")
 
@@ -446,17 +448,19 @@ class BookingAgent:
         one, many = DAYS[language]
         eta_date = datetime.fromisoformat(booking["eta"]).date()
         body = CONFIRM[language].format(
-            first=find_first_name(mail.sender, mail.body) or {"en": "there"}.get(language, ""),
+            first=proper(find_first_name(mail.sender, mail.body)) or {"en": "there"}.get(language, ""),
             ref=booking.get("booking_reference") or "follows shortly",
             team=booking["team_reference"],
-            carrier=booking["carrier"],
-            route=f"{booking['origin']} → {booking['destination']}",
+            carrier=carrier_name(booking["carrier"]),
+            route=f"{place(booking['origin'])} to {place(booking['destination'])}",
             transit=f"{days} {one if days == 1 else many}",
-            eta=eta_date.strftime("%a %d %b") if language == "en" else eta_date.strftime("%d.%m."),
+            eta=f"{eta_date.strftime('%a')} {eta_date.day} {eta_date.strftime('%b')}"
+            if language == "en"
+            else eta_date.strftime("%d.%m."),
             agent=self.agent_name,
             company=self.company,
         )
-        body = re.sub(r" +,", ",", body)
+        body = capitalize_sentences(re.sub(r" +,", ",", body))
         try:
             sent = await orch.mailbox.send(
                 OutgoingMail(

@@ -86,7 +86,7 @@ async def test_answer_once_with_status_and_eta(tmp_path: Path) -> None:
     reply = orch.mailbox.sent[0]
     assert reply.in_reply_to == 700 and reply.to == "tracking@hackloop.mail"
     assert "BK-AB12CD34" in reply.body and "Meridian Freightways" in reply.body
-    assert "Thu 26 Nov 2026" in reply.body and "CGN → ORD" in reply.body
+    assert "Thu 26 Nov 2026" in reply.body and "Cologne (CGN) to Chicago (ORD)" in reply.body
     store.close()
 
 

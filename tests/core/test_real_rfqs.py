@@ -64,3 +64,23 @@ async def test_rfq_1978_sums_mixed_lots_and_ignores_net_weight() -> None:
     assert rfq.gross_kg == Decimal("1952")
     assert rfq.volume_cbm == Decimal("4.677")
     assert rfq.door_pickup and rfq.pickup_zone == "36"
+
+
+def test_first_name_is_found_in_every_real_rfq() -> None:
+    from mail.extract import find_first_name
+
+    expected = {
+        "276": "Sara",
+        "432": "Anna",
+        "742": "Tobias",
+        "948": "Deniz",
+        "1234": "Klaus",
+        "1471": "Jonas",
+        "1639": "Deniz",
+        "1978": "Mira",
+        "2268": "Klaus",
+        "3328": "Petra",
+    }
+    for rfq_id, name in expected.items():
+        raw = load(f"real_rfq_{rfq_id}.json")
+        assert find_first_name(str(raw["from"]), str(raw["body"])) == name, rfq_id

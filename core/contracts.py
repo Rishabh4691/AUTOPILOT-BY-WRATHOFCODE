@@ -185,6 +185,7 @@ class PickupPrice(Frozen):
     total: Money
     currency: Currency
     received_at: UtcDatetime
+    pickup_hours: Decimal | None = None
 
 
 class Bid(Frozen):
