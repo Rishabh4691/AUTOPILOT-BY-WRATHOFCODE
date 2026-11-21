@@ -36,3 +36,6 @@ fake.db*
 
 env.env
 *.env
+*.db-shm
+*.db-wal
+data/STOP
