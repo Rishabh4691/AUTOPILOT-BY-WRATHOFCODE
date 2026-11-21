@@ -13,13 +13,24 @@ function Section({ title, children }) {
   )
 }
 
-export default function RfqDetail({ id, tick, now, onClose }) {
+export default function RfqDetail({ id, tick, now, operator, onClose }) {
   const [r, setR] = useState(null)
+  const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    get(`/rfqs/${id}`).then(setR)
+    let stale = false
+    get(`/rfqs/${id}`)
+      .then((d) => !stale && (setR(d), setErr(null)))
+      .catch((e) => !stale && setErr(e.message))
+    return () => {
+      stale = true
+    }
   }, [id, tick])
+
+  useEffect(() => {
+    setR(null)
+  }, [id])
 
   useEffect(() => {
     const esc = (e) => e.key === 'Escape' && onClose()
@@ -27,15 +38,30 @@ export default function RfqDetail({ id, tick, now, onClose }) {
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
-  if (!r) return null
+  if (!r) {
+    return (
+      <div className="fixed inset-0 z-20 flex justify-end bg-black/50" onClick={onClose}>
+        <aside className="h-full w-full max-w-xl border-l border-line bg-panel p-6 text-sm text-muted">
+          {err ? `Could not load ${id} (${err}).` : 'Loading...'}
+        </aside>
+      </div>
+    )
+  }
+
   const b = r.breakdown
   const human = !!r.human_takeover
 
   const toggle = async () => {
     setBusy(true)
-    await post(`/rfqs/${id}/takeover`, { on: !human, by: 'Rishabh' })
-    setR(await get(`/rfqs/${id}`))
-    setBusy(false)
+    try {
+      await post(`/rfqs/${id}/takeover`, { on: !human, by: operator || 'operator' })
+      setR(await get(`/rfqs/${id}`))
+      setErr(null)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -69,6 +95,7 @@ export default function RfqDetail({ id, tick, now, onClose }) {
             {human ? 'Hand back to autopilot' : 'Take over'}
           </button>
           {human && <p className="mt-2 text-xs text-amber-300">You have the controls. The bot won't send anything on this thread.</p>}
+          {err && <p className="mt-2 text-xs text-rose-300">Something went wrong: {err}</p>}
         </div>
 
         <Section title="Price breakdown">
@@ -76,7 +103,7 @@ export default function RfqDetail({ id, tick, now, onClose }) {
             <>
               <table className="w-full text-sm">
                 <tbody>
-                  {b.lines.map((l) => (
+                  {(b.lines ?? []).map((l) => (
                     <tr key={l.label}>
                       <td className="py-1 text-zinc-300">{l.label}</td>
                       <td className="py-1 text-right font-mono text-xs">{money(l.amount, b.currency)}</td>
@@ -117,7 +144,7 @@ export default function RfqDetail({ id, tick, now, onClose }) {
 
         <Section title="Timeline">
           <ol className="relative ml-1 border-l border-line">
-            {r.events.map((e) => (
+            {(r.events ?? []).map((e) => (
               <li key={e.id} className="mb-4 ml-4">
                 <span className={`absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full ${DOT[e.status] ?? DOT.info}`} />
                 <div className="flex items-baseline justify-between gap-3">

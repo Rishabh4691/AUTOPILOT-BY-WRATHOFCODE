@@ -1,4 +1,4 @@
-import { clock, money } from './api'
+import { clock, mmss, money } from './api'
 
 export const STATUS = {
   NEW: 'text-zinc-300 bg-zinc-500/15',
@@ -15,17 +15,19 @@ export const STATUS = {
 const OPEN = ['NEW', 'EXTRACTED', 'SOURCING', 'PRICED']
 
 export function Countdown({ r, now }) {
-  if (!OPEN.includes(r.status)) {
-    if (!r.quoted_at) return <span className="text-muted">—</span>
+  if (r.quoted_at && r.received_at) {
     const s = Math.round(r.quoted_at - r.received_at)
-    return <span className={s <= 120 ? 'text-emerald-300' : 'text-amber-300'}>in {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>
+    return <span className={s <= 120 ? 'text-emerald-300' : 'text-amber-300'}>in {mmss(s)}</span>
   }
+  if (!OPEN.includes(String(r.status).toUpperCase()) || !r.deadline) return <span className="text-muted">—</span>
+  if (r.human_takeover) return <span className="text-amber-300">Human</span>
   const left = Math.max(0, Math.round(r.deadline - now))
+  if (left === 0) return <span className="text-rose-400">Missed</span>
   const color = left > 240 ? 'text-emerald-300' : left > 120 ? 'text-amber-300' : 'text-rose-400 blip'
   const pct = (left / 360) * 100
   return (
     <div className="w-24">
-      <span className={color}>{Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')}</span>
+      <span className={color}>{mmss(left)}</span>
       <div className="mt-1 h-1 rounded-full bg-line">
         <div className={`h-full rounded-full ${left > 240 ? 'bg-emerald-400' : left > 120 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${pct}%` }} />
       </div>
@@ -34,7 +36,8 @@ export function Countdown({ r, now }) {
 }
 
 export function Badge({ status }) {
-  return <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS[status] ?? STATUS.NEW}`}>{status}</span>
+  const s = String(status ?? 'NEW').toUpperCase()
+  return <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ${STATUS[s] ?? STATUS.NEW}`}>{s}</span>
 }
 
 export default function RfqList({ rfqs, now, selected, onOpen }) {

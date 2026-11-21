@@ -1,29 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { get, money, useNow, useStream } from './api'
+import { get, mmss, money, useNow, useOperator, useStream } from './api'
 import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
 
-function Summary({ rfqs, agents }) {
-  const quoted = rfqs.filter((r) => r.quoted_at)
-  const failed = rfqs.filter((r) => r.status === 'FAILED').length
-  const times = quoted.map((r) => r.quoted_at - r.received_at).sort((a, b) => a - b)
-  const median = times.length ? Math.round(times[Math.floor(times.length / 2)]) : null
-  const cost = agents.reduce((s, a) => s + a.llm_cost_usd, 0)
+function Summary({ s }) {
+  const booked = s?.booked?.length ? s.booked.map((b) => money(b.total, b.currency)).join(' + ') : '—'
   const items = [
-    ['RFQs', rfqs.length],
-    ['Quoted', quoted.length],
-    ['Failed', failed],
-    ['Median time', median == null ? '—' : `${Math.floor(median / 60)}:${String(median % 60).padStart(2, '0')}`],
-    ['LLM / quote', quoted.length ? `$${(cost / quoted.length).toFixed(5)}` : '—'],
-    ['Booked value', money(rfqs.filter((r) => r.status === 'BOOKED').reduce((s, r) => s + (r.total ?? 0), 0))],
+    ['RFQs', s?.rfqs ?? '—'],
+    ['Quoted', s ? `${s.quoted}${s.quoted ? ` (${s.under_2min} < 2 min)` : ''}` : '—'],
+    ['Failed', s?.failed ?? '—', s?.failed > 0],
+    ['Median time', mmss(s?.median_s)],
+    ['LLM / quote', s?.llm_per_quote != null ? `$${s.llm_per_quote.toFixed(5)}` : '—'],
+    ['Booked value', booked],
   ]
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
-      {items.map(([k, v]) => (
-        <div key={k} className="bg-panel px-4 py-3">
+      {items.map(([k, v, bad]) => (
+        <div key={k} className="min-w-0 bg-panel px-4 py-3">
           <div className="text-[11px] uppercase tracking-wider text-muted">{k}</div>
-          <div className={`mt-1 font-mono text-lg ${k === 'Failed' && v ? 'text-rose-400' : 'text-white'}`}>{v}</div>
+          <div className={`mt-1 truncate font-mono text-lg ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
         </div>
       ))}
     </div>
@@ -34,29 +30,44 @@ export default function App() {
   const [tab, setTab] = useState('agents')
   const [agents, setAgents] = useState([])
   const [rfqs, setRfqs] = useState([])
+  const [sum, setSum] = useState(null)
   const [open, setOpen] = useState(null)
   const [tick, setTick] = useState(0)
   const [alarm, setAlarm] = useState(null)
   const [fake, setFake] = useState(false)
+  const [down, setDown] = useState(false)
+  const [operator, setOperator] = useOperator()
   const now = useNow()
   const timer = useRef()
 
-  const load = useCallback(() => {
-    get('/agents').then(setAgents)
-    get('/rfqs').then(setRfqs)
-    setTick((t) => t + 1)
+  const load = useCallback(async () => {
+    try {
+      const [a, r, s] = await Promise.all([get('/agents'), get('/rfqs'), get('/summary')])
+      setAgents(a)
+      setRfqs(r)
+      setSum(s)
+      setDown(false)
+      setTick((t) => t + 1)
+    } catch {
+      setDown(true)
+    }
   }, [])
 
   useEffect(() => {
     load()
-    get('/health').then((h) => setFake(h.fake))
+    get('/health').then((h) => setFake(h.fake)).catch(() => setDown(true))
+    const slow = setInterval(load, 15000)
+    return () => clearInterval(slow)
   }, [load])
 
-  const live = useStream((e) => {
-    if (e.status === 'fail') setAlarm(e)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(load, 300)
-  })
+  const live = useStream(
+    (e) => {
+      if (['fail', 'failed', 'error'].includes(String(e.status).toLowerCase())) setAlarm(e)
+      clearTimeout(timer.current)
+      timer.current = setTimeout(load, 300)
+    },
+    load,
+  )
 
   const show = (id) => {
     setOpen(id)
@@ -80,18 +91,31 @@ export default function App() {
             <p className="text-xs text-muted">WRATHOFCODE · digital air forwarder</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
           {fake && <span className="rounded-md bg-violet-500/15 px-2 py-1 text-violet-300">Demo data</span>}
+          <input
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+            placeholder="Your name"
+            maxLength={40}
+            className="w-28 rounded-md border border-line bg-panel px-2 py-1 text-zinc-200 placeholder:text-muted focus:border-sky-500 focus:outline-none"
+          />
           <span className="flex items-center gap-1.5 text-muted">
-            <span className={`h-2 w-2 rounded-full ${live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
-            {live ? 'Live' : 'Reconnecting'}
+            <span className={`h-2 w-2 rounded-full ${down ? 'bg-rose-500' : live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
+            {down ? 'API down' : live ? 'Live' : 'Reconnecting'}
           </span>
         </div>
       </header>
 
+      {down && (
+        <div className="mb-5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          Can't reach the API. Start it with <code className="font-mono">uvicorn api.main:app --port 8000</code> from the repo root.
+        </div>
+      )}
+
       {alarm && (
-        <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm">
-          <div>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm">
+          <div className="min-w-0">
             <span className="font-semibold text-rose-300">Failure · {alarm.agent}</span>
             <span className="ml-2 text-zinc-200">{alarm.message}</span>
             <span className="ml-2 text-xs text-muted">Something in the setup may have changed.</span>
@@ -107,7 +131,7 @@ export default function App() {
         </div>
       )}
 
-      <Summary rfqs={rfqs} agents={agents} />
+      <Summary s={sum} />
 
       <nav className="mt-8 mb-5 flex gap-1 border-b border-line">
         {tabs.map(([k, label]) => (
@@ -129,7 +153,7 @@ export default function App() {
         <RfqList rfqs={rfqs} now={now} selected={open} onOpen={setOpen} />
       )}
 
-      {open && <RfqDetail id={open} tick={tick} now={now} onClose={() => setOpen(null)} />}
+      {open && <RfqDetail id={open} tick={tick} now={now} operator={operator} onClose={() => setOpen(null)} />}
     </div>
   )
 }
