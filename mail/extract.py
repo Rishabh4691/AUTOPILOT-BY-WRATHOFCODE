@@ -188,6 +188,10 @@ PICKUP = re.compile(
     re.I,
 )
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
+# Round 72 (Chinese) lost as too_low: "安排卡车上门提货" was not read as a door pickup. CJK has no
+# word boundaries, so these match anywhere.
+PICKUP_CJK = re.compile("上门提货|上门取货|提货|取货|揽收|集荷|引き取り|引取り|집하|픽업|수거|забрать|забор груза")
+SELF_DELIVERY_CJK = re.compile("自行送|自己送|我们送到机场|自送|持ち込み|직접 운송")
 SELF_DELIVERY = re.compile(
     r"\b(?:we(?:'ll| will| shall)? (?:deliver|bring|drop)|deliver(?:ed)? (?:it|them|the (?:cargo|goods|shipment)) "
     r"(?:to|at) [^.]{0,40}(?:airport|terminal)[^.]{0,15}ourselves|ourselves to the (?:airport|terminal)|"
@@ -915,7 +919,9 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     lots = parse_lots(text)
     if lots and lots[1] > 0:
         pieces, gross, wunit = [], lots[1], "kg"
-    door = bool(PICKUP.search(text)) and not SELF_DELIVERY.search(text)
+    door = bool(PICKUP.search(text) or PICKUP_CJK.search(text)) and not (
+        SELF_DELIVERY.search(text) or SELF_DELIVERY_CJK.search(text)
+    )
     postcode = find_postcode(text, kit.pickup_zones()) if door else None
     zones = kit.pickup_zones()
     zone = postcode[:2] if postcode and postcode[:2] in zones else None

@@ -155,3 +155,17 @@ def test_excluded_airline_is_never_quoted_or_named_round_42(tmp_path, monkeypatc
     text = "Hi Petra,\n\nI left Zephyr Steppe Cargo out. Lagoon Isles Airways is the cheapest.\n\nKind regards"
     assert "Zephyr" not in strip_excluded(text, rfq)
     assert "Lagoon Isles Airways is the cheapest." in strip_excluded(text, rfq)
+
+
+def test_chinese_door_pickup_round_72() -> None:
+    from mail.extract import extract
+
+    body = (
+        "您好，\n\n希望您这周过得顺利！想请您帮忙看看一票发往 LIM（Lima, PE）的空运。这票货我们想走最便宜的方案。\n\n"
+        "货物是汽车传感器，共 11 件，毛重 704 kg，体积 3.08 cbm。2026-11-23 可以提货，提货地点是我们在 Cologne, Germany 的场地，"
+        "邮编 50978。麻烦您安排卡车上门提货并送到机场。\n\n能否请您报一个包含上门提货和空运的 EUR 全包价？谢谢！\n\n"
+        "Petra Hofmann\nExport Desk, Hofmann Textilwerk KG"
+    )
+    x = extract("空运询价：Cologne → LIM", body, "hofmann-textilwerk@hackloop.mail", "20161")
+    assert x.shipment is not None
+    assert x.shipment.door_pickup is True
