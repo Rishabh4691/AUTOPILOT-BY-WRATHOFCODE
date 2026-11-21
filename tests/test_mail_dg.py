@@ -125,3 +125,9 @@ def test_live_round_33_not_restricted_is_not_dg():
     text = "Goods description: furniture samples\nTotal pieces: 5\nDangerous goods: Not restricted"
     assert not check("It's 5 pieces of furniture samples, 292 kg.", [("SLI_53351.pdf", text)]).dangerous
     assert check("adhesives", [("PL.xlsx", "Dangerous goods: UN1133, Class 3, Adhesives")]).dangerous
+
+
+@_pytest.mark.parametrize("line", ["Towary niebezpieczne: nie", "Towary niebezpieczne: brak", "Marchandises dangereuses : aucune", "Mercancías peligrosas: ninguna", "Merci pericolose: nessuna"])
+def test_polish_french_spanish_italian_dg_negations(line):
+    assert not check(f"3 pallets of tools\n{line}", []).dangerous
+    assert check("Towary niebezpieczne: UN3481, klasa 9", []).dangerous
