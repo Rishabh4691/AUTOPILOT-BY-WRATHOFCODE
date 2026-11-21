@@ -95,7 +95,9 @@ FAKE_DATA=1 uvicorn api.main:app --port 8000   # same, with demo traffic in fake
 cd ui && npm install && npm run dev      # http://localhost:5173
 ```
 
-Tests: `pytest`
+Tests: `pytest` (OCR tests for scanned sheets need `brew install tesseract`)
+
+Bot: `python -m mail.bot` (one instance only, `DRY_RUN=1` prints instead of sending)
 
 Before every push: `./scripts/scan_secrets.sh`. Turn on the hook once per clone with `git config core.hooksPath .githooks` and git will refuse any push that fails the scan. Files uploaded on the GitHub website skip this check, so never upload `.env`-style files there.
 
@@ -142,18 +144,19 @@ _Last updated: Sat 21 Nov 2026_
 - [x] Folder skeleton, shared `schema.sql`, LLM budget rules
 - [x] Control room API: agents, RFQs, detail, takeover, SSE stream, fake-data mode
 - [x] Control room UI: agent cards, RFQ list with countdown, detail drawer, take over, failure alarm
+- [x] Mail layer: client, poller, router, email writer (one gateway call), single sender with outbox (`mail/`, `docs/mailbox.md`)
+- [x] Sourcing: tariffs, portal client, bids, booking, tariff ingestion (Aryan, `sourcing/`)
 - [x] Hardening pass: API-down banner, stream resume, missed-deadline state, operator name, 13 API tests, pre-push secret hook
 
 **In progress**
 - [ ] `mvp_bot.py`: first RFQ priced from sheets and quoted end to end (Amaan)
-- [ ] Mailbox poll + router + reply in thread (Aditi)
-- [ ] Start kit parsed into structured tariffs, portal client (Aryan)
+- [ ] RFQ extraction (`mail/extract.py`), then wire extract + pricing + writer + sender into one quote path
 - [ ] Wire the real bot into `data/app.db` events (everyone)
 - [ ] Remove `env.env` (real key) from the repo and get a fresh key before submission
 
 **Next**
 - [ ] Carrier bids + 50/50 price-speed pick
-- [ ] Booking by rate ID, tracking answers
+- [ ] Accept + booking confirmation in thread, tracking agent (`mail/tracking.py`)
 - [ ] Automatic tariff ingestion
 - [ ] Board watcher on `/board` + phone alarms
 - [ ] Edit and send from the takeover drawer, radar view
