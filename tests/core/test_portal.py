@@ -158,3 +158,25 @@ async def test_fresh_rate(respx_mock: respx.MockRouter) -> None:
         old = (await portal.quote(make_rfq()))[0]
         fresh = await portal.fresh_rate(old, make_rfq())
     assert fresh.total == Decimal("1300.00")
+
+
+@respx.mock(assert_all_called=False)
+async def test_next_weight_break_is_used_when_cheaper(respx_mock: respx.MockRouter) -> None:
+    respx_mock.get(f"{BASE}/v1/portal/ports").respond(json=PORTS)
+    respx_mock.get(f"{BASE}/v1/portal/brackets").respond(
+        json={"airline": "x", "airline_code": "IB", "breaks_kg": [0, 45, 100, 300, 500, 1000, 2000]}
+    )
+
+    def priced(request: httpx.Request) -> httpx.Response:
+        weight = request.url.params["weight_kg"]
+        if request.url.params["airline"] != "IB":
+            return httpx.Response(404)
+        if weight == "500":
+            return httpx.Response(200, json=rate("IB", "900.00", chargeable_weight_kg="500"))
+        return httpx.Response(200, json=rate("IB", "1000.00", chargeable_weight_kg="320"))
+
+    respx_mock.get(f"{BASE}/v1/portal/rates").mock(side_effect=priced)
+    async with httpx.AsyncClient() as client:
+        options = await source(client).quote(make_rfq())
+    ib = [o for o in options if o.carrier_code == "IB"]
+    assert len(ib) == 1 and ib[0].total == Decimal("900.00")

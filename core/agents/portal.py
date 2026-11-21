@@ -110,13 +110,14 @@ class PortalPriceSource:
         self._ports: PortalPorts | None = None
         self._ports_at = 0.0
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
+        self._breaks: dict[str, tuple[Decimal, ...]] = {}
 
     async def quote(self, rfq: RFQ) -> list[PriceOption]:
         self.last_errors = []
         deadline = time.monotonic() + self.deadline_s
         lane = await self._lane(rfq, deadline)
         results = await asyncio.gather(
-            *(self._option(rfq, airline.code, deadline) for airline in lane.airlines),
+            *(self._best_option(rfq, airline.code, deadline) for airline in lane.airlines),
             return_exceptions=True,
         )
         options = [r for r in results if isinstance(r, PriceOption)]
@@ -175,7 +176,57 @@ class PortalPriceSource:
                 return lane
         raise SourceUnavailable("lane not on portal")
 
-    async def _option(self, rfq: RFQ, airline: str, deadline: float) -> PriceOption | None:
+    async def _airline_breaks(self, airline: str, deadline: float) -> tuple[Decimal, ...]:
+        if airline not in self._breaks:
+            response = await self._get("/v1/portal/brackets", deadline, airline=airline)
+            breaks: tuple[Decimal, ...] = ()
+            if response.status_code == 200:
+                try:
+                    breaks = tuple(Decimal(str(b)) for b in response.json().get("breaks_kg", []))
+                except (ValueError, ArithmeticError, AttributeError):
+                    breaks = ()
+            self._breaks[airline] = breaks
+        return self._breaks[airline]
+
+    async def _best_option(self, rfq: RFQ, airline: str, deadline: float) -> PriceOption | None:
+        base = await self._option(rfq, airline, deadline)
+        if base is None or base.breakdown is None:
+            return base
+        chargeable = base.breakdown.chargeable_kg
+        try:
+            breaks = await self._airline_breaks(airline, deadline)
+        except Exception as error:
+            log.warning(
+                "portal_breaks_unavailable",
+                extra={"airline": airline, "error": type(error).__name__},
+            )
+            return base
+        higher = [b for b in breaks if b > chargeable]
+        if not higher:
+            return base
+        try:
+            up = await self._option(rfq, airline, deadline, weight_kg=min(higher))
+        except Exception as error:
+            log.warning(
+                "portal_next_break_failed",
+                extra={"airline": airline, "error": type(error).__name__},
+            )
+            return base
+        if up is not None and up.currency == base.currency and up.total < base.total:
+            log.info(
+                "portal_next_break_cheaper",
+                extra={
+                    "airline": airline,
+                    "at": str(min(higher)),
+                    "saves": str(base.total - up.total),
+                },
+            )
+            return up
+        return base
+
+    async def _option(
+        self, rfq: RFQ, airline: str, deadline: float, weight_kg: Decimal | None = None
+    ) -> PriceOption | None:
         async with self._semaphore:
             response = await self._get(
                 "/v1/portal/rates",
@@ -183,7 +234,7 @@ class PortalPriceSource:
                 origin=rfq.origin,
                 destination=rfq.destination,
                 airline=airline,
-                weight_kg=str(rfq.gross_kg),
+                weight_kg=str(weight_kg if weight_kg is not None else rfq.gross_kg),
                 volume_cbm=str(shipment_volume(rfq)),
             )
         if response.status_code != 200:

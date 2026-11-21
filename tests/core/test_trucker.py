@@ -132,3 +132,29 @@ async def test_offer_ignores_unrelated_and_garbage() -> None:
     trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 71", "EUR 10.00"))
     trucker.offer(mail("grautal-trucking@hackloop.mail", "Pickup request 7", "call me"))
     assert await trucker.collect(rfq) is None
+
+
+async def test_collect_returns_cheapest_not_first() -> None:
+    from core.contracts import PickupPrice
+
+    source = EmailTruckerPickupSource.__new__(EmailTruckerPickupSource)
+    now = datetime(2026, 11, 21, 15, 10, tzinfo=UTC)
+    offers = [
+        PickupPrice(
+            source="email",
+            trucker=name,
+            zone="61",
+            total=Decimal(total),
+            currency="EUR",
+            received_at=now,
+        )
+        for name, total in [
+            ("Westfalenroute", "266.03"),
+            ("Nordlicht", "152.01"),
+            ("Bodenseefracht", "119.01"),
+        ]
+    ]
+    source._prices = {432: offers}
+    rfq = type("R", (), {"mail_id": 432})()
+    best = await source.collect(rfq)
+    assert best is not None and best.trucker == "Bodenseefracht" and best.total == Decimal("119.01")

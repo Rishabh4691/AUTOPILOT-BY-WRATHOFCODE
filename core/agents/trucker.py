@@ -197,4 +197,7 @@ class EmailTruckerPickupSource:
 
     async def collect(self, rfq: RFQ) -> PickupPrice | None:
         prices = self._prices.get(rfq.mail_id)
-        return prices[0] if prices else None
+        if not prices:
+            return None
+        currency = prices[0].currency
+        return min((p for p in prices if p.currency == currency), key=lambda p: p.total)
