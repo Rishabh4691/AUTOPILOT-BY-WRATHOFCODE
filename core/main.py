@@ -94,6 +94,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
         tracker=TrackingAgent(),
         tariffs=TariffIntake(client, settings),
+        review_dir=settings.db_path.parent / "review",
     )
 
 
