@@ -211,6 +211,7 @@ class Quote(Frozen):
     rfq_mail_id: int
     thread_root_id: int
     to: str
+    subject: str
     option: PriceOption
     pickup: PickupPrice | None = None
     total: Money

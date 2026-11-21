@@ -13,7 +13,7 @@ run:
 	DRY_RUN=0 $(UV) run python -m core.main
 
 dry:
-	DRY_RUN=1 $(UV) run python -m core.main
+	DRY_RUN=1 DB_PATH=data/dry.db $(UV) run python -m core.main
 
 kit:
 	$(UV) run python scripts/fetch_kit.py
