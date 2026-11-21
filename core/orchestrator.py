@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from core.config import Settings
@@ -51,6 +52,30 @@ def utc_now() -> datetime:
 def reply_subject(subject: str) -> str:
     clean = subject.strip()
     return clean if clean.lower().startswith("re:") else f"Re: {clean}".strip()
+
+
+def review_facts(
+    rfq: RFQ, options: list[PriceOption], pickup: PickupPrice | None
+) -> dict[str, Any]:
+    return {
+        "received_at_epoch": rfq.received_at.timestamp(),
+        "origin": rfq.origin,
+        "destination": rfq.destination,
+        "gross_kg": str(rfq.gross_kg),
+        "volume_cbm": None if rfq.volume_cbm is None else str(rfq.volume_cbm),
+        "pieces": len(rfq.pieces),
+        "door_pickup": rfq.door_pickup,
+        "pickup_zone": rfq.pickup_zone,
+        "preference": rfq.preference.value,
+        "currency": rfq.currency,
+        "pickup_total": None
+        if pickup is None
+        else f"{pickup.total} {pickup.currency} {pickup.trucker}",
+        "options": [
+            f"{o.source} {o.carrier} {o.total} {o.currency} {o.transit_days}d"
+            for o in sorted(options, key=lambda o: (o.total, o.transit_days))
+        ],
+    }
 
 
 def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
@@ -108,6 +133,9 @@ class Orchestrator:
     booker: Any = None
     tracker: Any = None
     tariffs: Any = None
+    review_dir: Path | None = None
+    review_deadline_s: float = 110.0
+    review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
 
     @property
     def policy(self) -> TimingPolicy:
@@ -415,6 +443,7 @@ class Orchestrator:
     ) -> Quote | None:
         usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)
+        self.review_context[rfq.mail_id] = review_facts(rfq, usable, pickup)
         total = option.total
         if pickup is not None and pickup.currency != option.currency:
             converted = convert_money(pickup.total, pickup.currency, option.currency)
@@ -487,6 +516,68 @@ class Orchestrator:
             usage=usage,
         )
 
+    def review_enabled(self) -> bool:
+        return self.review_dir is not None and (self.review_dir.parent / "REVIEW_ON").exists()
+
+    async def await_review(self, quote: Quote) -> Quote | None:
+        if not self.review_enabled() or self.review_dir is None:
+            return quote
+        self.review_dir.mkdir(parents=True, exist_ok=True)
+        draft_path = self.review_dir / f"{quote.rfq_mail_id}.json"
+        decision_path = self.review_dir / f"{quote.rfq_mail_id}.decision.json"
+        facts = self.review_context.pop(quote.rfq_mail_id, {})
+        received = facts.get("received_at_epoch")
+        deadline = (
+            float(received) + self.review_deadline_s if received is not None else time.time() + 60.0
+        )
+        draft = {
+            "rfq": quote.rfq_mail_id,
+            "to": quote.to,
+            "subject": quote.subject,
+            "total": str(quote.total),
+            "currency": quote.currency,
+            "carrier": quote.option.carrier,
+            "transit_days": quote.option.transit_days,
+            "source": quote.option.source,
+            "pickup": None if quote.pickup is None else str(quote.pickup.total),
+            "auto_send_at": deadline,
+            "facts": facts,
+            "body": quote.body,
+        }
+        draft_path.write_text(json.dumps(draft, indent=1, default=str), encoding="utf-8")
+        log.info(
+            "review_pending",
+            extra={
+                "rfq": quote.rfq_mail_id,
+                "total": str(quote.total),
+                "currency": quote.currency,
+                "carrier": quote.option.carrier,
+                "seconds_left": round(deadline - time.time()),
+            },
+        )
+        while time.time() < deadline:
+            if decision_path.exists():
+                try:
+                    decision = json.loads(decision_path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    await asyncio.sleep(0.5)
+                    continue
+                action = str(decision.get("action", "send"))
+                log.info("review_decided", extra={"rfq": quote.rfq_mail_id, "action": action})
+                if action == "hold":
+                    return None
+                body = decision.get("body")
+                updates: dict[str, Any] = {}
+                if isinstance(body, str) and body.strip():
+                    updates["body"] = body
+                if decision.get("total") and decision.get("currency"):
+                    updates["total"] = Decimal(str(decision["total"]))
+                    updates["currency"] = str(decision["currency"])
+                return quote.model_copy(update=updates) if updates else quote
+            await asyncio.sleep(1.0)
+        log.info("review_timeout_autosend", extra={"rfq": quote.rfq_mail_id})
+        return quote
+
     async def send_quote(self, quote: Quote) -> None:
         if self.settings.kill_switch:
             self.hold(quote.rfq_mail_id, "Kill switch is on. Nothing is sent.")
@@ -502,6 +593,14 @@ class Orchestrator:
                 quote.rfq_mail_id,
             )
             return
+        reviewed = await self.await_review(quote)
+        if reviewed is None:
+            self.store.mark_outbox_failed(quote.thread_root_id, Stage.QUOTED, "held by reviewer")
+            self.hold(
+                quote.rfq_mail_id, f"Reviewer held the quote for request {quote.rfq_mail_id}."
+            )
+            return
+        quote = reviewed
         outgoing = OutgoingMail(
             to=quote.to, subject=quote.subject, body=quote.body, in_reply_to=quote.rfq_mail_id
         )
