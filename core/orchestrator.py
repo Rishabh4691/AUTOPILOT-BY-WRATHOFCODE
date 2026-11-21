@@ -626,7 +626,9 @@ class Orchestrator:
             elapsed = self.elapsed_s(rfq.received_at)
             options = self.all_options(rfq, state)
             if pickup is None and rfq.door_pickup and options:
-                late = elapsed >= self.policy.wait_until_s
+                answered = getattr(self.pickup, "all_answered", None)
+                unreadable = elapsed >= 25 and callable(answered) and answered(rfq.mail_id)
+                late = elapsed >= self.policy.wait_until_s or unreadable
                 if late:
                     estimate = getattr(self.pickup, "estimate", None)
                     guess = estimate(rfq) if callable(estimate) else None

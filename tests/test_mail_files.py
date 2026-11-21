@@ -48,3 +48,19 @@ def test_old_word_doc_text():
 def test_docx_by_name_and_macro_variant():
     assert kind("q.docm") == "docx"
     assert kind("q.DOCX") == "docx"
+
+
+def test_spoken_numbers_become_digits():
+    from mail.files import words_to_digits
+
+    said = "gross weight one thousand four hundred ninety four kilos and four point two nine cubic metres"
+    assert words_to_digits(said) == "gross weight 1494 kilos and 4.29 cubic metres"
+    assert words_to_digits("price one hundred ninety-eight point four euros") == "price 198.4 euros"
+    assert words_to_digits("postcode four five two nine nine") == "postcode 45299"
+
+
+def test_custom_speech_command(monkeypatch):
+    from mail import files
+
+    monkeypatch.setenv("STT_CMD", "echo pickup costs 198.40 EUR {wav}")
+    assert files._command_text("x.wav").startswith("pickup costs 198.40 EUR")

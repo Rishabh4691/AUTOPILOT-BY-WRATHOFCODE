@@ -4,6 +4,10 @@ import io
 import logging
 import os
 import re
+import shlex
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from email import message_from_bytes, policy
 
@@ -282,35 +286,147 @@ def warm_speech() -> bool:
         return False
 
 
+def _ffmpeg() -> str | None:
+    return os.getenv("FFMPEG") or shutil.which("ffmpeg")
+
+
+def to_wav(data: bytes, folder: str) -> str | None:
+    ffmpeg = _ffmpeg()
+    if not ffmpeg:
+        return None
+    src, wav = os.path.join(folder, "in.bin"), os.path.join(folder, "out.wav")
+    with open(src, "wb") as fh:
+        fh.write(data)
+    run = subprocess.run(
+        [ffmpeg, "-y", "-loglevel", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-acodec", "pcm_s16le", wav],
+        capture_output=True,
+        timeout=60,
+    )
+    return wav if run.returncode == 0 and os.path.exists(wav) else None
+
+
+def _command_text(wav: str) -> str:
+    custom = os.getenv("STT_CMD")
+    if custom:
+        cmd = [part.replace("{wav}", wav) for part in shlex.split(custom, posix=os.name != "nt")]
+        if not any("{wav}" in part for part in shlex.split(custom, posix=os.name != "nt")):
+            cmd.append(wav)
+    elif os.name == "nt":
+        script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "stt.ps1")
+        cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, wav]
+    else:
+        return ""
+    run = subprocess.run(cmd, capture_output=True, timeout=120)
+    return run.stdout.decode("utf-8", "replace").strip() if run.returncode == 0 else ""
+
+
 def speech_text(data: bytes) -> str:
     try:
         model = _speech_model()
+        segments, _info = model.transcribe(io.BytesIO(data), beam_size=5, vad_filter=True, initial_prompt=SPEECH_HINT)
+        return " ".join(s.text.strip() for s in segments)
     except ImportError:
-        log.warning("speech_unavailable", extra={"hint": "pip install faster-whisper"})
-        return ""
-    segments, _info = model.transcribe(io.BytesIO(data), beam_size=5, vad_filter=True, initial_prompt=SPEECH_HINT)
-    return " ".join(s.text.strip() for s in segments)
+        pass
+    with tempfile.TemporaryDirectory() as folder:
+        wav = to_wav(data, folder)
+        if wav is None:
+            log.warning("speech_unavailable", extra={"hint": "install ffmpeg or faster-whisper"})
+            return ""
+        text = _command_text(wav)
+    if not text:
+        log.warning("speech_unavailable", extra={"hint": "set STT_CMD or run on Windows"})
+    return words_to_digits(text)
+
+
+UNITS = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen "
+    "seventeen eighteen nineteen".split())}
+TENS = {w: 10 * (i + 2) for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split())}
+SCALES = {"hundred": 100, "thousand": 1000, "million": 1_000_000}
+NUMBER_WORD = "|".join([*UNITS, *TENS, *SCALES, "and", "point", "oh"])
+NUMBER_RUN = re.compile(rf"\b(?:{NUMBER_WORD})(?:[\s-]+(?:{NUMBER_WORD}))*\b", re.I)
+
+
+def _words_value(words: list[str]) -> str | None:
+    if "point" in words:
+        i = words.index("point")
+        whole = _words_value(words[:i]) if words[:i] else "0"
+        digits = [str(UNITS.get(w, 0)) for w in words[i + 1 :] if w in UNITS or w == "oh"]
+        return f"{whole}.{''.join(digits)}" if whole is not None and digits else whole
+    words = [w for w in words if w != "and"] if not any(w in SCALES for w in words) else words
+    if words and not any(w in SCALES for w in words):
+        groups, i = [], 0
+        while i < len(words):
+            w = words[i]
+            if w in TENS and i + 1 < len(words) and words[i + 1] in UNITS and UNITS[words[i + 1]] < 10:
+                groups.append(str(TENS[w] + UNITS[words[i + 1]]))
+                i += 2
+                continue
+            groups.append(str(TENS.get(w, UNITS.get(w, 0))))
+            i += 1
+        return "".join(groups)
+    total, current, seen = 0, 0, False
+    for w in words:
+        if w == "and":
+            continue
+        if w in UNITS or w == "oh":
+            current += UNITS.get(w, 0)
+        elif w in TENS:
+            current += TENS[w]
+        elif w == "hundred":
+            current = (current or 1) * 100
+        elif w in SCALES:
+            total += (current or 1) * SCALES[w]
+            current = 0
+        seen = True
+    return str(total + current) if seen else None
+
+
+def words_to_digits(text: str) -> str:
+    def swap(m: re.Match) -> str:
+        raw = m.group(0)
+        lead = re.match(r"(?i)(?:and\s+)+", raw)
+        tail = re.search(r"(?i)(?:\s+and)+$", raw)
+        head, rear = (lead.group(0) if lead else ""), (tail.group(0) if tail else "")
+        core = raw[len(head) : len(raw) - len(rear)] if raw[len(head) :] else ""
+        if not core.strip():
+            return raw
+        if head or rear:
+            return head + swap(re.match(r".+", core, re.S)) + rear
+        words = [w.lower() for w in re.split(r"[\s-]+", m.group(0)) if w]
+        if all(w == "and" for w in words) or (len(words) == 1 and words[0] in ("and", "oh")):
+            return m.group(0)
+        value = _words_value(words)
+        return value if value is not None else m.group(0)
+
+    return NUMBER_RUN.sub(swap, text or "")
 
 
 def video_frames_text(data: bytes, frames: int = 4) -> str:
-    import av
+    from PIL import Image
 
+    ffmpeg = _ffmpeg()
+    if not ffmpeg:
+        return ""
     seen: list[str] = []
-    with av.open(io.BytesIO(data)) as container:
-        stream = next((s for s in container.streams if s.type == "video"), None)
-        if stream is None:
-            return ""
-        duration = float(container.duration or 0) / 1_000_000
-        stamps = [duration * (i + 0.5) / frames for i in range(frames)] if duration else [0.0]
-        for t in stamps:
-            container.seek(int(t * 1_000_000), any_frame=False, backward=True)
-            frame = next(container.decode(stream), None)
-            if frame is None:
-                continue
-            for line in ocr(frame.to_image()).splitlines():
-                line = line.strip()
-                if len(line) > 2 and line not in seen:
-                    seen.append(line)
+    with tempfile.TemporaryDirectory() as folder:
+        src = os.path.join(folder, "in.bin")
+        with open(src, "wb") as fh:
+            fh.write(data)
+        subprocess.run(
+            [ffmpeg, "-y", "-loglevel", "error", "-i", src, "-vf", "fps=1/3,scale=1280:-1", "-frames:v", str(frames * 3),
+             os.path.join(folder, "f%03d.png")],
+            capture_output=True,
+            timeout=60,
+        )
+        shots = sorted(n for n in os.listdir(folder) if n.endswith(".png"))
+        step = max(1, len(shots) // frames)
+        for name in shots[::step][:frames]:
+            with Image.open(os.path.join(folder, name)) as img:
+                for line in ocr(img).splitlines():
+                    line = line.strip()
+                    if len(line) > 2 and line not in seen:
+                        seen.append(line)
     return "\n".join(seen)
 
 
