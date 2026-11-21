@@ -51,7 +51,8 @@ def to_rfq(mail: Mail, x) -> RFQ:
         door_pickup=s.door_pickup,
         pickup_zone=s.pickup_zone if s.door_pickup else None,
         pickup_postcode=s.pickup_postcode if s.door_pickup else None,
-        currency=s.quote_currency or find_currency(clean_body(mail.body)),
+        # Only the new message: a quoted older mail ("Currency USD.") is about another shipment.
+        currency=s.quote_currency or find_currency(fresh_text(clean_body(mail.body))),
         preference=Preference(x.preference),
         preference_assumed=not x.preference_stated,
         ready_date=s.ready_date,
@@ -84,9 +85,11 @@ TOTAL_GROSS = re.compile(r"total\s+gross\s+weight\s*(?:\(kg\))?\s*[:=|]\s*\|?\s*
 TOTAL_VOLUME = re.compile(r"total\s+volume\s*(?:\(cbm\)|\(m3\)|\(m³\))?\s*[:=|]\s*\|?\s*(\d[\d.,]*)", re.I)
 
 
-def _number(text: str) -> Decimal | None:
+def _number(text: str, thousands: bool = False) -> Decimal | None:
     raw = text.strip().rstrip(".")
-    if "," in raw and "." not in raw:
+    if thousands and re.fullmatch(r"\d{1,3}(?:,\d{3})+", raw):
+        raw = raw.replace(",", "")  # "Total gross weight (kg): 1,518" is 1518 kg, not 1.518
+    elif "," in raw and "." not in raw:
         raw = raw.replace(",", ".")
     else:
         raw = raw.replace(",", "")
@@ -102,7 +105,7 @@ def document_totals(text: str) -> dict:
     found: dict = {}
     if m := TOTAL_PIECES.search(text):
         found["pieces"] = int(m.group(1))
-    if (m := TOTAL_GROSS.search(text)) and (v := _number(m.group(1))):
+    if (m := TOTAL_GROSS.search(text)) and (v := _number(m.group(1), thousands=True)):
         found["gross_kg"] = v
     if (m := TOTAL_VOLUME.search(text)) and (v := _number(m.group(1))):
         found["volume_cbm"] = v
@@ -134,9 +137,13 @@ class RulesFirstExtractor:
         if "volume_cbm" in totals:
             update["volume_cbm"] = totals["volume_cbm"]
             update["pieces"] = ()  # the stated total volume replaces per-piece dimensions
-        if "pieces" in totals:
+        count = totals.get("pieces")
+        if count is None and "volume_cbm" in totals and rfq.pieces:
+            # The document only replaces the dimensions; keep the piece count the mail gave.
+            count = sum(p.count for p in rfq.pieces)
+        if count is not None:
             notes = tuple(n for n in rfq.notes if not n.startswith("pieces: "))
-            update["notes"] = (*notes, f"pieces: {totals['pieces']}")
+            update["notes"] = (*notes, f"pieces: {count}")
         if update:
             log.info("attachment_totals_used", extra={"rfq": mail.id, "totals": {k: str(v) for k, v in totals.items()}})
             rfq = rfq.model_copy(update=update)

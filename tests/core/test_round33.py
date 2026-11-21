@@ -57,3 +57,49 @@ def test_document_totals_reads_shuffled_xlsx_labels() -> None:
     text = ("Total pieces: 3 Total gross weight (kg): 715 Total volume (cbm): 2.65 "
             "Dangerous goods: UN1133, Class 3, Adhesives")
     assert document_totals(text) == {"pieces": 3, "gross_kg": Decimal("715"), "volume_cbm": Decimal("2.65")}
+
+
+def _mail(body: str, attachments: bool = True):
+    return parse_mail(
+        {
+            "id": 9101,
+            "from": "kunde@customer.mail",
+            "to": "wrathofcode@hackloop.mail",
+            "subject": "Quote request",
+            "body": body,
+            "in_reply_to": None,
+            "references": [],
+            "received_at": "2026-11-21T10:00:00+00:00",
+            "attachments": [{"id": 1, "filename": "packing_list.xlsx"}] if attachments else [],
+        }
+    )
+
+
+def test_document_gross_with_thousands_comma_is_not_a_decimal() -> None:
+    assert document_totals("Total gross weight (kg): 1,518")["gross_kg"] == Decimal("1518")
+    assert document_totals("Total gross weight (kg): | 3,498")["gross_kg"] == Decimal("3498")
+    assert document_totals("Total gross weight (kg): 12,5")["gross_kg"] == Decimal("12.5")
+
+
+def test_document_volume_keeps_the_piece_count_from_the_mail() -> None:
+    body = (
+        "Please quote FRA to SYD.\n12 pallets 80x60x75 cm, total gross weight 132 kg.\n"
+        "Thanks,\nMira"
+    )
+    doc = (
+        "Commercial packing list\nTotal gross weight (kg): 132\nTotal volume (m3): 4.32\n"
+        "DG: Not restricted"
+    )
+    rfq, _ = asyncio.run(extractor([("packing_list.xlsx", doc)]).extract(_mail(body)))
+    assert rfq.volume_cbm == Decimal("4.32") and not rfq.pieces
+    assert "pieces: 12" in rfq.notes
+
+
+def test_currency_in_quoted_history_is_ignored() -> None:
+    body = (
+        "Please quote FRA to DOH, 3 pallets, 450 kg, 2.1 cbm.\nThanks,\nPiotr\n\n"
+        "-----Original Message-----\nFrom: Sales <sales@forwarder.mail>\nSent: Monday\n\n"
+        "Last time: 999 kg from MUC. Currency USD."
+    )
+    rfq, _ = asyncio.run(extractor([]).extract(_mail(body, attachments=False)))
+    assert rfq.currency in (None, "EUR")
