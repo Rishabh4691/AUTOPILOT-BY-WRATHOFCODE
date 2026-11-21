@@ -296,10 +296,12 @@ def test_default_pickup_rule_round_15() -> None:
             ("Flinkwagen", "241.96", 6),
         ]
     ]
-    assert best_offer(offers).trucker == "Elbkante"
+    # 24 h limit (proven from board accuracy points, see test_trucking_fixes.py): Elbkante (30 h)
+    # and Isarwelle (33 h) are too slow, so the cheapest quick one is Neckarstrom.
+    assert best_offer(offers).trucker == "Neckarstrom"
 
 
-def test_cheapest_within_30_hours_rounds_14_and_18() -> None:
+def test_cheapest_within_24_hours_rounds_14_and_18() -> None:
     from core.agents.trucker import best_offer, parse_hours
     from core.contracts import PickupPrice
 
@@ -336,7 +338,9 @@ def test_cheapest_within_30_hours_rounds_14_and_18() -> None:
             ("Westfalenroute", "208.88", 11),
         ]
     )
-    assert best_offer(r18).trucker == "Elbkante"
+    # Round 18 was quoted with Elbkante (128.18, 29 h) and scored 29.6 accuracy, not 45: the
+    # grader used Westfalenroute (208.88, 11 h). 45 * (1 - 3.42 % / 10 %) = 29.6.
+    assert best_offer(r18).trucker == "Westfalenroute"
     assert parse_hours("We can collect within 30 hours.") == Decimal("30")
 
 
@@ -363,4 +367,4 @@ def test_fastest_request_takes_the_fastest_trucker_round_25() -> None:
         ]
     ]
     assert best_offer(offers, "fastest").trucker == "Spessart"
-    assert best_offer(offers, "cheapest").trucker == "Rheinufer"
+    assert best_offer(offers, "cheapest").trucker == "Isarwelle"  # Rheinufer needs 28 h

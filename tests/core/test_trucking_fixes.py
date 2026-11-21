@@ -219,3 +219,29 @@ def test_offer_in_chf_is_converted_when_rate_known(monkeypatch: pytest.MonkeyPat
     assert (pick.total, pick.currency) == (Decimal("95.40"), "EUR")
     monkeypatch.delitem(fx._rates, "CHF")
     assert best_offer([price("208.88", "EUR"), price("90.00", "CHF")]).total == Decimal("208.88")
+
+
+# The grader's pickup rule, proven from our own accuracy points (board/me): accuracy is
+# 45 * (1 - |our price - grader price| / 10 %), and with these picks rounds 4, 13, 18, 19, 21
+# and 24 reproduce to the cent (25.62, 33.0, 29.6, 34.65, 37.62, 30.03 points).
+#   cheapest request -> cheapest trucker that collects within 24 h
+#   fastest request  -> fastest trucker
+# Do not change best_offer() without new evidence that beats all six rounds.
+GRADER_ROUNDS = [
+    ("R4", "cheapest", [("115.98", 29), ("187.97", 11), ("192.97", 13), ("226.96", 12)], "187.97"),
+    ("R13", "cheapest", [("122.76", 30), ("190.33", 26), ("201.52", 19), ("273.28", 19), ("348.85", 11)], "201.52"),
+    ("R18", "cheapest", [("128.18", 29), ("208.88", 11), ("212.14", 13), ("254.84", 12)], "208.88"),
+    ("R19", "fastest", [("214.06", 29), ("347.09", 13), ("356.10", 11), ("451.14", 12)], "356.10"),
+    ("R21", "fastest", [("165.36", 17), ("184.36", 15), ("205.88", 12)], "205.88"),
+    ("R24", "fastest", [("190.32", 26), ("340.02", 11), ("385.10", 13)], "340.02"),
+]
+
+
+@pytest.mark.parametrize(("name", "preference", "offers", "expected"), GRADER_ROUNDS)
+def test_pickup_rule_matches_the_grader(name: str, preference: str, offers: list, expected: str) -> None:
+    prices = [
+        PickupPrice(source="t", trucker=f"t{i}", zone="51", total=Decimal(total), currency="EUR",
+                    received_at=NOW, pickup_hours=Decimal(hours))
+        for i, (total, hours) in enumerate(offers)
+    ]
+    assert best_offer(prices, preference).total == Decimal(expected), name

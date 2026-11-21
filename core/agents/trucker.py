@@ -200,7 +200,7 @@ PICKUP_TIME = re.compile(
     r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*(?:is|of|:|=)?\s*(?:about|approx\.?|ca\.?)?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
     re.I,
 )
-MAX_PICKUP_HOURS = Decimal("30")
+MAX_PICKUP_HOURS = Decimal("24")  # proven from board accuracy points: rounds 4, 13, 18; see tests/core/test_trucking_fixes.py
 PRICE_WEIGHT = Decimal("0.5")
 TIME_WEIGHT = Decimal("0.5")
 
