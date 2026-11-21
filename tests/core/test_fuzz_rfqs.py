@@ -342,6 +342,9 @@ async def test_fuzz_rfq(mail_id: int) -> None:
             assert got[key] == want, key
 
 
+TARIFFS = Path(__file__).resolve().parents[2] / "data" / "tariffs.json"
+
+
 def _rfq(ready: date, door: bool) -> RFQ:
     return RFQ(
         mail_id=1,
@@ -363,7 +366,7 @@ def _rfq(ready: date, door: bool) -> RFQ:
 
 
 async def test_sheet_not_used_when_door_pickup_departs_after_validity() -> None:
-    kit = Path(__file__).resolve().parents[2] / "data" / "tariffs.json"
+    kit = TARIFFS
     if not kit.exists():
         pytest.skip("no rate sheets")
     sheets = SheetPriceSource()
