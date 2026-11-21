@@ -19,7 +19,7 @@ from mail import lang
 from mail.extract import extract as rules_extract
 from mail.extract import find_first_name, find_ready
 from mail.text import fresh_text, reply_subject
-from mail.writer import arrival_date, capitalize_sentences, money, place, short_day
+from mail.writer import WEEKDAYS, arrival_date, capitalize_sentences, money, place, short_day
 
 log = logging.getLogger("core.booking")
 
@@ -230,6 +230,44 @@ def booking_eta(info: dict, today: date | None = None) -> str:
     return arrival_date(info.get("ready_date"), info.get("transit_days"), today).isoformat()
 
 
+CONFIRM.update({
+    "pt": "Olá {first},\n\nestá reservado. Referência da reserva {ref}, a nossa referência {team}.\n"
+    "{carrier}, {route}{transit}, chegada por volta de {eta}. O preço tudo incluído mantém-se em {price}.\n"
+    "Acompanhamos o envio e avisamos se algo mudar.\n\nCumprimentos,\n{agent}\n{company}",
+    "nl": "Hallo {first},\n\nhet is geboekt. Boekingsreferentie {ref}, onze referentie {team}.\n"
+    "{carrier}, {route}{transit}, aankomst rond {eta}. De all-in prijs blijft {price}.\n"
+    "We houden het in de gaten en laten het weten als er iets verandert.\n\nGroeten,\n{agent}\n{company}",
+    "zh": "{first}，您好！\n\n舱位已经订好。订舱号 {ref}，我们的参考号 {team}。\n"
+    "{carrier}，{route}{transit}，预计 {eta} 左右到达。全包价格仍为 {price}。\n"
+    "我们会一直跟进这票货，如有变化会及时告诉您。\n\n祝好，\n{agent}\n{company}",
+    "ja": "{first}様\n\nご予約が完了しました。予約番号 {ref}、弊社参照番号 {team}。\n"
+    "{carrier}、{route}{transit}、{eta}頃に到着予定です。オールイン価格は {price} のままです。\n"
+    "引き続き貨物を確認し、変更があればご連絡いたします。\n\nよろしくお願いいたします。\n{agent}\n{company}",
+    "ko": "{first}님, 안녕하세요.\n\n예약이 완료되었습니다. 예약 번호 {ref}, 당사 참조 번호 {team}.\n"
+    "{carrier}, {route}{transit}, {eta}경 도착 예정입니다. 올인 가격은 {price} 그대로입니다.\n"
+    "화물을 계속 확인하고 변경 사항이 있으면 알려 드리겠습니다.\n\n감사합니다.\n{agent}\n{company}",
+    "ru": "Здравствуйте, {first}!\n\nГотово, груз забронирован. Номер брони {ref}, наш референс {team}.\n"
+    "{carrier}, {route}{transit}, прибытие примерно {eta}. Цена «всё включено» остаётся {price}.\n"
+    "Мы следим за отправкой и сообщим, если что-то изменится.\n\nС уважением,\n{agent}\n{company}",
+    "tr": "Merhaba {first},\n\nrezervasyon tamam. Rezervasyon numarası {ref}, referansımız {team}.\n"
+    "{carrier}, {route}{transit}, tahmini varış {eta}. Her şey dahil fiyat {price} olarak kalıyor.\n"
+    "Gönderiyi takip ediyoruz, bir değişiklik olursa haber veririz.\n\nSaygılarımızla,\n{agent}\n{company}",
+    "ar": "مرحباً {first}،\n\nتم الحجز. رقم الحجز {ref}، ومرجعنا {team}.\n"
+    "{carrier}، {route}{transit}، الوصول المتوقع حوالي {eta}. السعر الشامل يبقى {price}.\n"
+    "سنتابع الشحنة ونبلغك بأي تغيير.\n\nمع التحية،\n{agent}\n{company}",
+})
+TRANSIT.update({
+    "pt": ", {n} {unit} de trânsito", "nl": ", {n} {unit} onderweg", "zh": "，运输 {n} {unit}",
+    "ja": "、輸送 {n}{unit}", "ko": ", 운송 {n}{unit}", "ru": ", в пути {n} {unit}",
+    "tr": ", {n} {unit} transit", "ar": "، مدة النقل {n} {unit}",
+})
+DAYS.update({
+    "pt": ("dia", "dias"), "nl": ("dag", "dagen"), "zh": ("天", "天"), "ja": ("日", "日"),
+    "ko": ("일", "일"), "ru": ("день", "дн."), "tr": ("gün", "gün"), "ar": ("يوم", "أيام"),
+})
+ROUTE_JOIN = {"pt": " para ", "nl": " naar ", "zh": " 至 ", "ja": " → ", "ko": " → ", "ru": " — ", "tr": " → ", "ar": " إلى "}
+
+
 def confirmation_body(
     booking: dict, rfq: dict, language: str, first: str, agent: str, company: str
 ) -> str:
@@ -244,9 +282,9 @@ def confirmation_body(
         ref=booking.get("booking_reference") or "follows shortly",
         team=booking["team_reference"],
         carrier=carrier_name(booking["carrier"]),
-        route=f"{place(booking['origin'])} to {place(booking['destination'])}",
+        route=f"{place(booking['origin'])}{ROUTE_JOIN.get(language, ' to ')}{place(booking['destination'])}",
         transit=transit,
-        eta=short_day(booking["eta"], language),
+        eta=short_day(booking["eta"], language) if language in WEEKDAYS else str(booking["eta"])[:10],
         price=money(total, currency, language) if total else "as quoted",
         agent=agent,
         company=company,

@@ -187,3 +187,14 @@ async def test_recheck_skips_replies_already_read_as_no(tmp_path):
 def test_manual_script_records_its_quote():
     source = open("scripts/manual_quote.py", encoding="utf-8").read()
     assert "record_sent_quote" in source
+
+
+@pytest.mark.parametrize("language", ["zh", "ja", "ko", "ru", "tr", "ar", "pt", "nl"])
+def test_confirmation_in_the_customer_language(language):
+    from core.agents.booking import CONFIRM, confirmation_body
+    from tests.core.test_booking import CONFIRMED
+
+    body = confirmation_body(CONFIRMED, {"total": "3228.87", "currency": "EUR"}, language, "Sara", "Lena", "WOC")
+    assert language in CONFIRM
+    assert "BK-AB12CD34" in body and "WOC-276" in body and "Sara" in body
+    assert " to " not in body
