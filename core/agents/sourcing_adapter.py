@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import sourcing
 from core.config import Settings
-from core.contracts import RFQ, Breakdown, PriceOption, SourceUnavailable
+from core.contracts import RFQ, Breakdown, PortalDown, PriceOption, SourceUnavailable
 
 log = logging.getLogger("core.agents.sourcing_adapter")
 
@@ -105,6 +105,8 @@ class SourcingPortalPriceSource:
         self.last_notes = list(notes)
         if notes:
             log.info("portal_notes", extra={"rfq": rfq.mail_id, "notes": notes[:5]})
+        if not options and any("PortalUnavailable" in note for note in notes):
+            raise PortalDown(notes[0])
         if not options:
             raise SourceUnavailable(notes[0] if notes else "portal returned no prices")
         return convert_all(options, self.now(), self.name)

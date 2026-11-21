@@ -30,6 +30,7 @@ from core.contracts import (
     OutgoingMail,
     PickupPrice,
     PickupSource,
+    PortalDown,
     PriceOption,
     PriceSource,
     Quote,
@@ -96,7 +97,8 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
 
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
     portal = [option for option in options if option.source == "portal"]
-    return portal or options
+    bids = [option for option in options if option.source == "bid"]
+    return portal or bids or options
 
 
 def convert_money(amount: Decimal, source: str, target: str) -> Decimal | None:
@@ -159,6 +161,7 @@ class Orchestrator:
     review_dir: Path | None = None
     review_deadline_s: float = 110.0
     review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
+    bids: Any = None
 
     @property
     def policy(self) -> TimingPolicy:
@@ -234,6 +237,8 @@ class Orchestrator:
             task = asyncio.create_task(self.tariffs.handle(self, mail), name=f"tariff-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
+        if kind in (MailKind.CARRIER_BID, MailKind.PORTAL_REPLY) and self.bids is not None:
+            self.bids.offer(mail)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:
             offer = getattr(self.pickup, "offer", None)
             if callable(offer):
@@ -343,6 +348,7 @@ class Orchestrator:
 
     async def dangerous_goods_blocked(self, mail: Mail, rfq: RFQ) -> bool:
         from core.agents.attachments import dangerous_goods, has_dg_documents
+        from mail.text import fresh_text
 
         attached = ""
         if self.attachments is not None and mail.attachments:
@@ -350,7 +356,8 @@ class Orchestrator:
                 attached = await self.attachments.text(mail)
             except Exception:
                 log.exception("attachment_read_failed")
-        declared = dangerous_goods(f"{mail.body}\n{attached}")
+        # Quoted history describes older shipments; only the new mail and its attachments count.
+        declared = dangerous_goods(f"{fresh_text(mail.body)}\n{attached}")
         if declared is None or has_dg_documents(mail):
             return False
         if not self.store.claim_outbox(rfq.thread_root_id, Stage.HELD, rfq.mail_id, self.clock()):
@@ -398,6 +405,16 @@ class Orchestrator:
     ) -> None:
         try:
             options = await source.quote(rfq)
+        except PortalDown as error:
+            self.emit(
+                Agent.RFQ,
+                "source",
+                EventStatus.WARN,
+                f"{source.name} answered 503: {error}. Asking the rate desk.",
+                rfq.mail_id,
+            )
+            options = []
+            await self.ask_rate_desk(rfq)
         except SourceUnavailable as error:
             self.emit(
                 Agent.RFQ,
@@ -447,6 +464,7 @@ class Orchestrator:
                     f"Pickup request failed ({type(error).__name__}).",
                     rfq.mail_id,
                 )
+        await self.request_bids(rfq)
         runners = [
             asyncio.create_task(self.run_source(s, rfq, state, started)) for s in self.sources
         ]
@@ -456,12 +474,60 @@ class Orchestrator:
             for runner in runners:
                 runner.cancel()
 
+    async def request_bids(self, rfq: RFQ) -> None:
+        if self.bids is None:
+            return
+        try:
+            if await self.bids.request(rfq):
+                self.emit(
+                    Agent.RFQ,
+                    "bids",
+                    EventStatus.INFO,
+                    f"{rfq.origin}-{rfq.destination} is not on the portal. "
+                    f"Asked {len(self.bids.requests(rfq.mail_id))} airlines for a bid.",
+                    rfq.mail_id,
+                )
+        except Exception as error:
+            log.exception("bid_request_failed")
+            self.emit(
+                Agent.RFQ,
+                "bids",
+                EventStatus.WARN,
+                f"Airline bid requests failed ({type(error).__name__}).",
+                rfq.mail_id,
+            )
+
+    async def ask_rate_desk(self, rfq: RFQ) -> None:
+        if self.bids is None:
+            return
+        try:
+            await self.bids.request_lane(rfq)
+        except Exception:
+            log.exception("lane_bid_request_failed")
+        try:
+            await self.bids.request_rate_desk(rfq)
+        except Exception:
+            log.exception("rate_desk_request_failed")
+
+    def all_options(self, rfq: RFQ, state: SourcingState) -> list[PriceOption]:
+        if self.bids is None:
+            return list(state.options)
+        return [*state.options, *self.bids.options(rfq.mail_id)]
+
+    def pending_sources(self, rfq: RFQ, state: SourcingState) -> frozenset[str]:
+        pending = set(state.pending)
+        priced = [o for o in state.options if o.source == "portal"]
+        if self.bids is not None and not priced and self.bids.waiting(rfq.mail_id):
+            pending.add(self.bids.name)
+        return frozenset(pending)
+
     async def wait_and_build(self, rfq: RFQ, state: SourcingState) -> Quote | None:
         warned = False
         while True:
             pickup = await self.current_pickup(rfq)
             elapsed = self.elapsed_s(rfq.received_at)
-            if pickup is None and rfq.door_pickup and state.options:
+            options = self.all_options(rfq, state)
+            if pickup is None and rfq.door_pickup and options:
                 late = elapsed >= self.policy.wait_until_s
                 if late:
                     estimate = getattr(self.pickup, "estimate", None)
@@ -475,11 +541,11 @@ class Orchestrator:
                             f"Quoting with the cheapest earlier offer for this zone ({guess.total} EUR).",
                             rfq.mail_id,
                         )
-                        return await self.build_quote(rfq, state.options, guess)
+                        return await self.build_quote(rfq, options, guess)
             if (
                 not warned
                 and elapsed >= 180
-                and (not state.options or (rfq.door_pickup and pickup is None))
+                and (not options or (rfq.door_pickup and pickup is None))
             ):
                 warned = True
                 self.emit(
@@ -487,26 +553,26 @@ class Orchestrator:
                     "late",
                     EventStatus.HOLD,
                     f"Request {rfq.mail_id} has no quote after 3 minutes "
-                    f"({'no price' if not state.options else 'no pickup price'}). Take over now.",
+                    f"({'no price' if not options else 'no pickup price'}). Take over now.",
                     rfq.mail_id,
                 )
             verdict = decide(
                 self.policy,
                 elapsed_s=self.elapsed_s(rfq.received_at),
-                pending_sources=frozenset(state.pending),
-                have_option=bool(state.options),
+                pending_sources=self.pending_sources(rfq, state),
+                have_option=bool(options),
                 pending_can_win=True,
                 needs_pickup=rfq.door_pickup,
                 have_pickup=pickup is not None,
             )
             if verdict == "hold":
-                reason = "no price arrived" if not state.options else "no pickup price arrived"
+                reason = "no price arrived" if not options else "no pickup price arrived"
                 self.hold(
                     rfq.mail_id, f"Request {rfq.mail_id} is on hold: {reason} before the deadline."
                 )
                 return None
             if verdict == "send":
-                return await self.build_quote(rfq, state.options, pickup)
+                return await self.build_quote(rfq, options, pickup)
             await asyncio.sleep(self.tick_s)
 
     async def current_pickup(self, rfq: RFQ) -> PickupPrice | None:

@@ -10,10 +10,17 @@ DG_FIELD = re.compile(
     r"towary niebezpieczne|imdg|iata dgr|adr)\s*[:=]\s*(?P<v>[^\n;]{1,80})",
     re.I,
 )
+BODY_CLASS = re.compile(
+    r"(?<!business )(?<!economy )(?<!first )\b(?:class|klasse|classe|clase|klasa)\s*([1-9](?:\.\d)?)\b"
+    r"(?!\s*(?:%|cm|mm|kg|lbs?|pallets?|pcs|pieces))",
+    re.I,
+)
 NEGATIVE = re.compile(r"^\s*(no|none|n/?a|nein|non|keine?|not applicable|-|0)\b", re.I)
 DG_GOODS = re.compile(
     r"\b(adhesives?|glues?|klebstoff\w*|paints?|lacquers?|lacke?|varnish\w*|solvents?|lösungsmittel|thinners?|"
-    r"aerosols?|spray cans?|perfumes?|fragrances?|parfum\w*|lithium[- ]ion|lithium batter\w*|li-?ion|"
+    r"a[eé]ro[sz]ol\w*|spray ?cans?|spraydosen?|sprühdosen?|bombolett\w*|bombes? a[eé]rosol\w*|"
+    r"adh[eé]si(?:f|fs|vos?)|adesiv[io]|colla|klej\w*|pegamentos?|batterie al litio|bater[ií]as? de litio|litowo\w*|"
+    r"perfumes?|fragrances?|parfum\w*|lithium(?![- ]?free)[\w-]*|litio|li-?ion|colles?|"
     r"flammable|entzündlich|inflammable|corrosive|ätzend|resins?|harze?|printing inks?|druckfarben?|"
     r"kraftstoff|petrol|gasoline|diesel fuel|ethanol|isopropanol|compressed gas|gas cylinders?|"
     r"dry ice|trockeneis|safety matches|fireworks|pesticides?|explosives?|oxidi[sz]ers?|peroxides?)\b",
@@ -30,14 +37,20 @@ NEGATED = re.compile(
     r"(?:\b(?:no|not|non|without|free of|kein\w*|nicht|ohne|sans|pas de|sin|senza|bez)\b[^.;,!?\n]{0,25}|\bnon-?)$",
     re.I,
 )
+NOT_A_HAZARD = re.compile(r"(?:quality|qualit\w*|efficiency|energy|insulation|protection|accuracy|tolerance|grade|service|price|size|fire resistance|hardness|strength)\s*$", re.I)
+CLASS_CONTEXT = re.compile(r"\b(?:IATA|IMO|IMDG|ADR|hazard\w*|haz|DGR|gefahr\w*|dangereu\w*|peligros\w*|pericolos\w*|niebezpieczn\w*)\b", re.I)
+ABSENT_AFTER = re.compile(r"[\s\w-]{0,15}?(?:content|contained|inside|batteries)?\s*[:=]\s*(?:none|no|nil|0|n/?a|keine?|nein)\b", re.I)
 DG_CONTEXT = re.compile(r"dangerous|hazard|\bDG\b|gefahrgut|flammable|entzündlich|\bUN\s?\d{4}", re.I)
 
 
 def dg_goods(text: str):
     """First goods keyword that is not negated ("non-flammable", "no lithium batteries")."""
     for m in DG_GOODS.finditer(text or ""):
-        if not NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
-            return m
+        if NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
+            continue
+        if ABSENT_AFTER.match(text[m.end() : m.end() + 40]):
+            continue
+        return m
     return None
 
 
@@ -45,9 +58,11 @@ def body_classes(text: str) -> list[str]:
     """Hazard classes written in the mail itself, e.g. "Class 3 dangerous goods"."""
     out = []
     for line in (text or "").splitlines():
-        for m in CLASS.finditer(line):
-            if DG_CONTEXT.search(line) and not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
-                out.append(m.group(1))
+        for m in BODY_CLASS.finditer(line):
+            before = line[max(0, m.start() - 40) : m.start()]
+            if NEGATED.search(before) or NOT_A_HAZARD.search(before):
+                continue
+            out.append(m.group(1))
     return out
 
 
