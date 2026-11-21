@@ -264,3 +264,13 @@ async def test_portal_503_asks_rate_desk_once_and_uses_reply(tmp_path: Path) -> 
     quote = h.orchestrator.outbox.get_nowait()
     assert quote.option.carrier == "Pampero Air Cargo"
     assert quote.total == Decimal("1800.00")
+
+
+async def test_excluded_airline_gets_no_bid_request_round_42() -> None:
+    sender = FakeSender()
+    source = AirlineBidSource(DIRECTORY, sender, ports(("FRA", "ORD")))
+    excluding = rfq("ULN").model_copy(update={"notes": ("exclude_carrier: Zephyr Steppe Cargo",)})
+    assert await source.request(excluding) is True
+    asked = {to for to, _, _ in sender.sent}
+    assert "zephyr-steppe-cargo@hackloop.mail" not in asked
+    assert asked == {c.email for c in DIRECTORY.airlines_serving("ULN")} - {"zephyr-steppe-cargo@hackloop.mail"}

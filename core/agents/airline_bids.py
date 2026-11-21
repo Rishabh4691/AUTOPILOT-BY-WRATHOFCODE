@@ -98,6 +98,12 @@ class SentRequest:
     answered: bool = False
 
 
+def excluded_airlines(rfq: RFQ) -> list[str]:
+    """Airlines the customer excluded (notes set by mail/exclusions.py). Round 42: we still sent
+    Zephyr Steppe Cargo a bid request after the customer said not to offer it."""
+    return [n.split(":", 1)[1].strip() for n in rfq.notes if n.startswith("exclude_carrier:")]
+
+
 class AirlineBidSource:
     name = "airline_bid"
 
@@ -138,7 +144,12 @@ class AirlineBidSource:
             return False
         self._asked.add(rfq.mail_id)
         sent = 0
+        from mail.exclusions import is_excluded
+
+        banned = excluded_airlines(rfq)
         for contact in self.directory.airlines_serving(rfq.destination):
+            if is_excluded(contact.name, None, banned):
+                continue
             carrier = Carrier(name=contact.name, email=contact.email, kind="airline")
             ref = bid_ref(str(rfq.mail_id), carrier)
             subject, body = self._request_text(rfq, carrier, ref)
@@ -168,7 +179,12 @@ class AirlineBidSource:
             return False
         self._asked.add(rfq.mail_id)
         sent = 0
+        from mail.exclusions import is_excluded
+
+        banned = excluded_airlines(rfq)
         for contact in contacts:
+            if is_excluded(contact.name, None, banned):
+                continue
             carrier = Carrier(name=contact.name, email=contact.email, kind="airline")
             ref = bid_ref(str(rfq.mail_id), carrier)
             subject, body = self._request_text(rfq, carrier, ref)

@@ -213,6 +213,12 @@ MORE_PICKUP_TIMES = (
         r"\babhol(?:zeit|ung)\s*(?:in|:|=)?\s*(?:ca\.?\s*)?(\d+(?:[.,]\d+)?)\s*(stunden?|std\.?|h|tage?n?|tag)\b",
         re.I,
     ),
+    # "pickup takes 25 hours" (round 42), "collection will take 1 day", "pickup is possible in 8 hours"
+    re.compile(
+        r"\b(?:pick[- ]?up|collection)\s+(?:takes|will\s+take|needs|is\s+possible\s+in|is\s+in|within)\s+"
+        r"(?:about\s+|approx\.?\s+|ca\.?\s+)?(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?)\b",
+        re.I,
+    ),
     # "pickup in 18h", "collect in 2 days"
     re.compile(
         r"\b(?:pick[- ]?up|collect(?:ion)?)\s+in\s+(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?)\b", re.I
@@ -236,7 +242,14 @@ def parse_hours(text: str) -> Decimal | None:
         found = pattern.search(text)
         if found:
             return _hours(found.group(1), found.group(2))
-    return Decimal(24) if NEXT_DAY.search(text) else None
+    if NEXT_DAY.search(text):
+        return Decimal(24)
+    # Last resort: the only "N hours" in a trucker reply is its pickup time. A missing time let
+    # a 25 h offer ("pickup takes 25 hours") pass the 24 h rule in round 42.
+    plain = re.findall(r"\b(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|stunden)\b", text, re.I)
+    if len({v for v, _ in plain}) == 1:
+        return _hours(plain[0][0], plain[0][1])
+    return None
 
 
 def pickup_rule() -> str:
