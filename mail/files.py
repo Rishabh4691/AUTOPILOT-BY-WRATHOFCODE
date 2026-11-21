@@ -40,8 +40,10 @@ def kind(filename: str, content_type: str = "", data: bytes = b"") -> str:
         return "pdf"
     if name.endswith((".docx", ".docm", ".dotx", ".dotm")):
         return "docx"
-    if name.endswith((".doc", ".dot")):
+    if name.endswith((".doc", ".dot", ".msg")) or "ms-outlook" in ctype or ctype == "application/msword":
         return "doc"
+    if name.endswith((".pages", ".numbers", ".key")):
+        return "iwork"
     for ext in (".xlsx", ".xlsm", ".xls", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".zip"):
         if name.endswith(ext):
             return ext[1:]
@@ -49,12 +51,17 @@ def kind(filename: str, content_type: str = "", data: bytes = b"") -> str:
         return "html"
     if name.endswith(".eml") or ctype == "message/rfc822":
         return "eml"
+    if name.endswith((".csv", ".tsv")) or ctype in ("text/csv", "text/tab-separated-values"):
+        return "csv"
     if name.endswith(TEXT_EXT) or ctype.startswith("text/"):
         return "text"
     if data[:4] == b"PK\x03\x04":
         return _zip_kind(data)
     if data[:8] == OLE_MAGIC:
-        return "doc" if "WordDocument".encode("utf-16-le") in data[:65536] or b"WordDocument" in data else "xls"
+        wide = data[:200000]
+        if any(m.encode("utf-16-le") in wide or m.encode() in wide for m in ("WordDocument", "__substg1.0_")):
+            return "doc"
+        return "xls"
     if data[:5] == b"{\\rtf":
         return "rtf"
     if data[:3] == b"ID3" or data[:4] in (b"RIFF", b"OggS", b"fLaC"):
@@ -80,6 +87,8 @@ def _zip_kind(data: bytes) -> str:
         return "pptx"
     if "content.xml" in names:
         return "odt"
+    if any(n.lower().endswith("preview.pdf") for n in names):
+        return "iwork"
     return "zip"
 
 
@@ -110,10 +119,28 @@ def file_text(filename: str, data: bytes, content_type: str = "", depth: int = 0
     except Exception as error:
         log.info("attachment_unreadable", extra={"file": filename, "kind": k, "error": type(error).__name__})
         text = ""
-    if not text.strip() and k == "image":
-        text = vision_text(data, content_type or "image/png")
+    if k in ("docx", "xlsx", "xlsm", "pptx", "odt", "ods", "odp") and len(text.strip()) < 40:
+        text = "\n".join(t for t in (text, embedded_images_text(data)) if t.strip())
+    if len(text.strip()) < 15 and k == "image":
+        text = vision_text(*_vision_ready(data, content_type)) or text
     log.info("attachment_read", extra={"file": filename, "kind": k, "chars": len(text)})
     return text.strip()
+
+
+def csv_text(data: bytes) -> str:
+    import csv
+
+    raw = decode(data)
+    try:
+        dialect = csv.Sniffer().sniff(raw[:2000], delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    lines = []
+    for row in csv.reader(io.StringIO(raw), dialect):
+        cells = [c.strip() for c in row if c.strip()]
+        if cells:
+            lines.append(": ".join(cells) if len(cells) == 2 else " | ".join(cells))
+    return "\n".join(lines)
 
 
 def xlsx_text(data: bytes) -> str:
@@ -245,11 +272,61 @@ def ocr(image) -> str:
     return pytesseract.image_to_string(image)
 
 
-def image_text(data: bytes) -> str:
+def _open_image(data: bytes):
     from PIL import Image
 
-    with Image.open(io.BytesIO(data)) as img:
+    try:
+        import pillow_heif
+
+        pillow_heif.register_heif_opener()
+    except ImportError:
+        pass
+    return Image.open(io.BytesIO(data))
+
+
+def image_text(data: bytes) -> str:
+    with _open_image(data) as img:
         return ocr(img)
+
+
+def _vision_ready(data: bytes, content_type: str = "") -> tuple[bytes, str]:
+    ctype = (content_type or "").lower()
+    if ctype in ("image/png", "image/jpeg", "image/gif", "image/webp") or data[:4] == b"\x89PNG" or data[:3] == b"\xff\xd8\xff":
+        return data, ctype or ("image/png" if data[:4] == b"\x89PNG" else "image/jpeg")
+    try:
+        with _open_image(data) as img:
+            out = io.BytesIO()
+            img.convert("RGB").save(out, "PNG")
+            return out.getvalue(), "image/png"
+    except Exception:
+        return data, ctype or "image/png"
+
+
+def embedded_images_text(data: bytes) -> str:
+    out = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        media = [n for n in z.namelist() if re.search(r"(media|Pictures)/[^/]+\.(png|jpe?g|gif|bmp|tiff?|emf|wmf)$", n, re.I)]
+        for name in media[:5]:
+            raw = z.read(name)
+            text = ""
+            try:
+                text = image_text(raw)
+            except Exception:
+                pass
+            if len(text.strip()) < 15:
+                text = vision_text(*_vision_ready(raw)) or text
+            if text.strip():
+                out.append(text)
+    return "\n".join(out)
+
+
+def iwork_text(data: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        preview = next((n for n in z.namelist() if n.lower().endswith("preview.pdf")), None)
+        if preview:
+            return pdf_text(z.read(preview))
+        shots = [n for n in z.namelist() if re.search(r"preview.*\.(jpe?g|png)$", n, re.I)]
+        return image_text(z.read(shots[0])) if shots else ""
 
 
 def pdf_text(data: bytes) -> str:
@@ -260,10 +337,16 @@ def pdf_text(data: bytes) -> str:
         for page in pdf.pages[:10]:
             text = page.extract_text() or ""
             if len(text.strip()) < 20:
+                shot = None
                 try:
-                    text = ocr(page.to_image(resolution=200).original)
+                    shot = page.to_image(resolution=200).original
+                    text = ocr(shot)
                 except Exception as error:
                     log.info("pdf_ocr_failed", extra={"error": type(error).__name__})
+                if len(text.strip()) < 20 and shot is not None and len(pages) < 3:
+                    out = io.BytesIO()
+                    shot.convert("RGB").save(out, "PNG")
+                    text = vision_text(out.getvalue(), "image/png") or text
             pages.append(text)
     return "\n".join(pages)
 
@@ -484,12 +567,14 @@ def vision_text(data: bytes, mime: str) -> str:
 
 READERS = {
     "text": decode,
+    "csv": csv_text,
     "xlsx": xlsx_text,
     "xlsm": xlsx_text,
     "xls": xls_text,
     "ods": odf_text,
     "docx": docx_text,
     "doc": doc_text,
+    "iwork": iwork_text,
     "pptx": pptx_text,
     "odt": odf_text,
     "odp": odf_text,
