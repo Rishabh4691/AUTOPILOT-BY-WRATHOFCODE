@@ -169,7 +169,7 @@ class HumanEmailWriter:
             "id": str(rfq.mail_id),
             "reference": f"WOC-{rfq.mail_id}",
             "first_name": proper(find_first_name(sender, body)),
-            "language": lang.detect(fresh_text(body) or rfq.subject),
+            "language": lang.for_request(rfq.mail_id, fresh_text(body) or rfq.subject),
             "origin": rfq.origin.upper(),
             "destination": rfq.destination.upper(),
             "pieces": piece_count(rfq),

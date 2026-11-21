@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-from . import gateway
+from . import gateway, lang
 from .text import fresh_text, reply_subject
 
 AGENT_NAME = os.getenv("AGENT_NAME") or "Lena Hartmann"
@@ -30,7 +30,7 @@ WEEKDAYS = {
     "it": "lunedì martedì mercoledì giovedì venerdì sabato domenica",
     "pl": "poniedziałek wtorek środa czwartek piątek sobota niedziela",
 }
-LANG_NAMES = {"en": "English", "de": "German", "fr": "French", "es": "Spanish", "it": "Italian", "pl": "Polish", "nl": "Dutch", "pt": "Portuguese"}
+LANG_NAMES = lang.NAMES
 
 
 @dataclass
@@ -696,7 +696,7 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     subject = reply_subject(rfq.get("subject") or f"Air freight quote {rfq['origin']}-{rfq['destination']}")
     pref = preference(rfq.get("preference"))
     prompt = PROMPT.format(
-        language=LANG_NAMES.get(lang, "English"),
+        language=LANG_NAMES.get(rfq.get("language") or lang, LANG_NAMES.get(lang, "English")),
         greeting=GREETING.get(lang, "Hi"),
         pref=pref,
         valid="HOLD" if lang == "en" else "VALID",

@@ -64,3 +64,16 @@ def test_custom_speech_command(monkeypatch):
 
     monkeypatch.setenv("STT_CMD", "echo pickup costs 198.40 EUR {wav}")
     assert files._command_text("x.wav").startswith("pickup costs 198.40 EUR")
+
+
+def test_language_of_any_script_and_attachment_wins():
+    from mail import lang
+    from mail.files import CACHE
+
+    assert lang.detect("您好，请报价空运") == "zh"
+    assert lang.detect("Здравствуйте, просим прислать предложение") == "ru"
+    assert lang.detect("Merhaba, hava kargo için teklif lütfen, teşekkürler") == "tr"
+    assert lang.NAMES["ja"] == "Japanese"
+    CACHE.put(4242, 1, "demande.pdf", "Bonjour, merci de nous envoyer un devis pour 3 colis de fret")
+    assert lang.for_request(4242, "Hello, please find our request attached, thanks") == "fr"
+    assert lang.for_request(4243, "Hello, please find our request attached, thanks") == "en"
