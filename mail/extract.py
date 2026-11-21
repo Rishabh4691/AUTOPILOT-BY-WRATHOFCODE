@@ -791,11 +791,36 @@ NEAREST_ZONE = {
 }
 
 
+def learn_pickups(mails: list[dict]) -> int:
+    """Fill the customer memory from earlier mails (each sender's last pickup postcode).
+
+    Run once at start, so a restart or a new machine still knows where a customer
+    picks up when a later mail only says "our warehouse".
+    """
+    learned = 0
+    zones = kit.pickup_zones()
+    for m in sorted(mails, key=lambda x: int(x.get("id") or 0)):
+        body = fresh_text(str(m.get("body") or ""))
+        if not PICKUP.search(body) or SELF_DELIVERY.search(body):
+            continue
+        postcode = find_postcode(body, zones)
+        if postcode and postcode[:2] in zones:
+            sender = str(m.get("from") or "")
+            before = recall_pickup(sender)
+            remember_pickup(sender, postcode)
+            learned += before != postcode
+    return learned
+
+
+DEFAULT_PICKUP_ZONE = os.getenv("DEFAULT_PICKUP_ZONE", "60")
+
+
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     body = (body or "").replace("’", "'").replace("‘", "'")
     subject = (subject or "").replace("’", "'")
     # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
     text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
+    pickup_guessed = False
     language = lang.detect(fresh_text(body) or subject)
     fast = wants_fast(without_signature(text))
     stated = bool(fast or CHEAP.search(text))
@@ -822,6 +847,10 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
             zone = signed
         elif known and known[:2] in zones:
             postcode, zone = known, known[:2]
+        elif origin is None and DEFAULT_PICKUP_ZONE in zones:
+            # Last resort: a held request scores 0; a quote from the main hub can still win.
+            zone = DEFAULT_PICKUP_ZONE
+            pickup_guessed = True
     if door and zone:
         # Door pickup always departs from the pickup zone's airport, even if the mail names another.
         origin = zones[zone]["airport"]
@@ -889,6 +918,8 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
             problems.append("no dimensions given, chargeable = gross")
         if door and not zone:
             problems.append("door pickup asked but no pickup zone found")
+        if pickup_guessed:
+            problems.append(f"pickup address unknown, assumed zone {zone}")
     return Extracted(
         shipment=shipment,
         first_name=find_first_name(sender, body),

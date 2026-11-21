@@ -152,6 +152,26 @@ async def reprocess(orchestrator: Orchestrator) -> None:
         task.add_done_callback(orchestrator.tasks.discard)
 
 
+async def learn_customer_pickups(client: httpx.AsyncClient, base_url: str) -> int:
+    """Read the whole mailbox once and remember every customer's last pickup postcode."""
+    from mail.extract import learn_pickups
+
+    mails: list[dict] = []
+    since = 0
+    for _ in range(100):
+        r = await client.get(f"{base_url}/v1/mailbox/messages", params={"since_id": since, "limit": 200})
+        if r.status_code != 200:
+            break
+        data = r.json()
+        batch = data.get("messages", [])
+        mails.extend(batch)
+        next_id = int(data.get("next_since_id") or since)
+        if len(batch) < 200 or next_id <= since:
+            break
+        since = next_id
+    return learn_pickups(mails)
+
+
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
     try:
         seeded = seed_live_store(live_store())
@@ -174,6 +194,11 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                     "cursor": store.get_cursor(),
                 },
             )
+            try:
+                learned = await learn_customer_pickups(client, settings.base_url)
+                log.info("customer_pickups_learned", extra={"changed": learned})
+            except Exception:
+                log.exception("customer_pickups_learn_failed")
             backfill = getattr(orchestrator.pickup, "backfill", None)
             if callable(backfill):
                 try:
