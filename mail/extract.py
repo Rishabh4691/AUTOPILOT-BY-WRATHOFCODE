@@ -204,7 +204,7 @@ CUFT = Decimal("0.0283168")
 
 def volume_cbm_of(m) -> Decimal:
     u = (m.group("u") or "").lower().replace(" ", "")
-    v = num(m.group("v"))
+    v = small_num(m.group("v"))
     # "cu ft", "cu.ft", "cubic feet", "ft3", "cft" are cubic feet; "cubic meters" is not.
     return v * CUFT if u.startswith(("cuft", "cu.ft", "cubicf", "ft", "cft")) else v
 
@@ -270,6 +270,18 @@ def num(s: str) -> Decimal:
     if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", s):
         return Decimal(re.sub(r"[.,]", "", s))
     return Decimal(s.replace(",", "."))
+
+
+def small_num(s: str) -> Decimal:
+    """For volumes and tonnes one separator before three digits is a decimal: "1.095 cbm", "2.215 t"."""
+    raw = re.sub(r"[\s'’]", "", s)
+    if re.fullmatch(r"\d{1,2}[.,]\d{3}", raw):
+        return Decimal(raw.replace(",", "."))
+    return num(s)
+
+
+def weight_num(v: str, unit: str) -> Decimal:
+    return small_num(v) if unit.lower() in ("t", "ton", "tons", "tonne", "tonnes", "tonnen") else num(v)
 
 
 def airports():
@@ -443,7 +455,7 @@ def parse_lots(text: str) -> tuple[int, Decimal, Decimal] | None:
         ] or weights
         if gross_hits:
             w = gross_hits[0]
-            kg = _to_kg(num(w.group("v")), w.group("u"))
+            kg = _to_kg(weight_num(w.group("v"), w.group("u")), w.group("u"))
             each = bool(
                 w.group("pre") and re.fullmatch(EACH, w.group("pre").strip(), re.I)
             ) or bool(re.match(rf"\s*{EACH}", w.group("post") or "", re.I))
@@ -485,7 +497,7 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         return num(m.group("v")), "lb" if m.group("u").lower().startswith("lb") else "kg"
     found = []
     for m in WEIGHT.finditer(text):
-        value, unit = weight_kg(num(m.group("v")), m.group("u"))
+        value, unit = weight_kg(weight_num(m.group("v"), m.group("u")), m.group("u"))
         before = text[max(0, m.start() - 40) : m.start()]
         after = text[m.end() : m.end() + 15]
         if NET_NEAR.search(before[-14:]) or NET_NEAR.search(after[:8]):
@@ -528,7 +540,7 @@ def each_times_count(text: str) -> tuple[Decimal | None, str]:
     """Total for "8 drums, 180 kg each" when no dimensions or total weight are given."""
     for m in EACH_WEIGHT.finditer(text):
         if m.group("pre") or m.group("post"):
-            value, unit = weight_kg(num(m.group("v")), m.group("u"))
+            value, unit = weight_kg(weight_num(m.group("v"), m.group("u")), m.group("u"))
             return value * int(m.group("n")), unit
     return None, "kg"
 
@@ -907,10 +919,10 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     vols = [volume_cbm_of(m) for m in VOLUME.finditer(text)]
     if not vols:
         vols = [
-            num(m.group("v"))
+            small_num(m.group("v"))
             for m in UNIT_FIRST_VOLUME.finditer(text)
             if re.search(r"total", text[max(0, m.start() - 12) : m.start()], re.I)
-        ][-1:] or [num(m.group("v")) for m in UNIT_FIRST_VOLUME.finditer(text)][-1:]
+        ][-1:] or [small_num(m.group("v")) for m in UNIT_FIRST_VOLUME.finditer(text)][-1:]
     if len(vols) > 1 and len(LOT.findall(text)) > 1:
         volume = sum(vols, Decimal(0)) if not pieces else None
     else:

@@ -209,6 +209,16 @@ def test_dims_with_axis_letters_or_unit_after_each_number(dims):
 
 
 @needs_kit
+def test_three_decimal_volumes_and_tonnes_are_not_thousands():
+    x = run("Quote FRA to JFK.\n12 pallets, gross weight 465 kg, total volume 1.095 cbm each.")
+    assert x.shipment.volume_cbm == Decimal("13.140")
+    x = run("Quote FRA to JFK.\n8 pieces, gross weight 0.334 t, total volume 0.72 cbm.")
+    assert x.gross_kg == 334
+    x = run("Quote FRA to JFK.\n2 pallets, 1.250 kg, 1.25 cbm")
+    assert x.gross_kg == 1250
+
+
+@needs_kit
 def test_form_with_one_piece_uses_weight_per_piece():
     x = run("Quote CGN to LIM.\nNo. of pieces: 1\nWeight per piece: 94 kg\nDims per piece: 120 x 100 x 150 cm")
     assert x.shipment is not None and x.gross_kg == 94 and x.pieces == 1
