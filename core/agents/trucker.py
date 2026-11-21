@@ -87,6 +87,9 @@ def shipment_lines(rfq: RFQ) -> list[str]:
 
 
 def pickup_postcode(rfq: RFQ) -> str | None:
+    field = getattr(rfq, "pickup_postcode", None)
+    if field:
+        return str(field)
     for note in rfq.notes:
         if note.startswith("postcode: ") and note[10:].isdigit():
             return note[10:]
