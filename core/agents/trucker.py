@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+import httpx
 from pydantic import ValidationError
 
 from core.agents.directory import CarrierDirectory
@@ -243,6 +244,51 @@ class EmailTruckerPickupSource:
                 fh.write(json.dumps(row) + "\n")
         except OSError as error:
             log.warning("pickup_history_write_failed", extra={"error": type(error).__name__})
+
+    async def backfill(self, client: httpx.AsyncClient, base_url: str) -> int:
+        if self.history_path is None or self.history():
+            return 0
+        rows, since = [], 0
+        for _ in range(50):
+            r = await client.get(
+                f"{base_url}/v1/mailbox/messages", params={"since_id": since, "limit": 200}
+            )
+            if r.status_code != 200:
+                break
+            data = r.json()
+            mails = data.get("messages", [])
+            for m in mails:
+                contact = self.directory.by_email(str(m.get("from", "")))
+                subject = str(m.get("subject", ""))
+                zone = re.search(r"zone (\d{2})", subject)
+                ref = re.search(r"pickup request (\d+)", subject, re.I)
+                if contact is None or contact.kind != "trucker" or not zone:
+                    continue
+                parsed = parse_price(str(m.get("body", "")))
+                if parsed is None:
+                    continue
+                z = self.directory.zone(zone.group(1))
+                rows.append(
+                    {
+                        "zone": zone.group(1),
+                        "airport": z.airport if z else None,
+                        "trucker": contact.name,
+                        "total": str(parsed[0]),
+                        "currency": parsed[1],
+                        "rfq": int(ref.group(1)) if ref else None,
+                        "ts": time.time(),
+                    }
+                )
+            next_id = int(data.get("next_since_id") or since)
+            if not mails or next_id <= since:
+                break
+            since = next_id
+        if rows:
+            self.history_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.history_path.open("a", encoding="utf-8") as fh:
+                fh.writelines(json.dumps(row) + "\n" for row in rows)
+        log.info("pickup_history_backfilled", extra={"rows": len(rows)})
+        return len(rows)
 
     def history(self) -> list[dict]:
         if self.history_path is None or not self.history_path.exists():

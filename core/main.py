@@ -161,6 +161,12 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                     "cursor": store.get_cursor(),
                 },
             )
+            backfill = getattr(orchestrator.pickup, "backfill", None)
+            if callable(backfill):
+                try:
+                    await backfill(client, settings.base_url)
+                except Exception:
+                    log.exception("pickup_backfill_failed")
             if orchestrator.booker is not None:
                 try:
                     await orchestrator.booker.recover(orchestrator)
