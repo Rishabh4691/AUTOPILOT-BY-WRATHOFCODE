@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-ink: #0a0d12;
+  --color-panel: #11161d;
+  --color-line: #1e2630;
+  --color-muted: #7d8794;
+}
+
+body {
+  @apply bg-ink text-zinc-200 font-sans antialiased;
+}
+
+@keyframes blip {
+  0%, 100% { opacity: 1 }
+  50% { opacity: .35 }
+}
+
+.blip { animation: blip 1.4s ease-in-out infinite }
