@@ -395,3 +395,23 @@ def test_writer_model_default_is_gpt_4_1():
     root = Path(__file__).resolve().parents[1]
     assert 'or "gpt-4.1"' in (root / "mail" / "config.py").read_text(encoding="utf-8")
     assert "WRITER_MODEL=gpt-4.1-mini" in (root / ".env.example").read_text(encoding="utf-8")
+
+
+def test_check_final_rejects_round_38_glitches() -> None:
+    from mail.writer import check_final
+
+    values = {"TOTAL": "EUR 1,921.60", "CARRIER": "Meridian Freightways"}
+    good = (
+        "Hi Anna,\n\nMeridian Freightways is the fastest way. The all-in price is EUR 1,921.60.\n"
+        "I can hold it for about 14 minutes. Our reference is WOC-9877.\n\n"
+        "Kind regards,\nLena Hartmann\nExport Air Freight, WRATHOFCODE Air Freight"
+    )
+    assert check_final(good, values) == []
+    bad = (
+        "Hi Anna,\n\nWOC-9877 Meridian Freightways is the fastest way. The all-in price is EUR 1,921.60. "
+        "You can hold this booking until for about 14 minutes. Our reference is WOC-9877.\n\nKind regards,"
+    )
+    issues = check_final(bad, values)
+    assert "reference misplaced or repeated" in issues
+    assert "doubled preposition" in issues
+    assert "missing signature" in issues

@@ -633,6 +633,13 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
         total = values.get("TOTAL", "")
         if total and re.search(re.escape(total) + r"\s*EUR\b", body):
             out.append("currency written twice")
+        # Round 38 (gpt-4.1): "WOC-9877 Meridian Freightways is ...", "until for about", no signature.
+        if re.search(r"(?:^|\n)\s*WOC-\d+\s+[A-Z]", body) or len(re.findall(r"WOC-\d+", body)) > 1:
+            out.append("reference misplaced or repeated")
+        if re.search(r"\b(?:until|by)\s+(?:until|for|by)\b|\bfor\s+(?:until|for)\b", body, re.I):
+            out.append("doubled preposition")
+        if "WRATHOFCODE" not in body:
+            out.append("missing signature")
     return out
 
 
