@@ -37,14 +37,20 @@ NEGATED = re.compile(
     r"(?:\b(?:no|not|non|without|free of|kein\w*|nicht|ohne|sans|pas de|sin|senza|bez)\b[^.;,!?\n]{0,25}|\bnon-?)$",
     re.I,
 )
+NOT_A_HAZARD = re.compile(r"(?:quality|qualit\w*|efficiency|energy|insulation|protection|accuracy|tolerance|grade|service|price|size|fire resistance|hardness|strength)\s*$", re.I)
+CLASS_CONTEXT = re.compile(r"\b(?:IATA|IMO|IMDG|ADR|hazard\w*|haz|DGR|gefahr\w*|dangereu\w*|peligros\w*|pericolos\w*|niebezpieczn\w*)\b", re.I)
+ABSENT_AFTER = re.compile(r"[\s\w-]{0,15}?(?:content|contained|inside|batteries)?\s*[:=]\s*(?:none|no|nil|0|n/?a|keine?|nein)\b", re.I)
 DG_CONTEXT = re.compile(r"dangerous|hazard|\bDG\b|gefahrgut|flammable|entzündlich|\bUN\s?\d{4}", re.I)
 
 
 def dg_goods(text: str):
     """First goods keyword that is not negated ("non-flammable", "no lithium batteries")."""
     for m in DG_GOODS.finditer(text or ""):
-        if not NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
-            return m
+        if NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
+            continue
+        if ABSENT_AFTER.match(text[m.end() : m.end() + 40]):
+            continue
+        return m
     return None
 
 
@@ -53,8 +59,10 @@ def body_classes(text: str) -> list[str]:
     out = []
     for line in (text or "").splitlines():
         for m in BODY_CLASS.finditer(line):
-            if not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
-                out.append(m.group(1))
+            before = line[max(0, m.start() - 40) : m.start()]
+            if NEGATED.search(before) or NOT_A_HAZARD.search(before):
+                continue
+            out.append(m.group(1))
     return out
 
 
