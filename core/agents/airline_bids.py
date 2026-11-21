@@ -26,6 +26,7 @@ log = logging.getLogger("core.agents.airline_bids")
 
 RATE_DESK_TAG = "RATEDESK"
 SUBJECT_REF = re.compile(r"\[BID\s+([A-Z0-9_-]+)\]", re.IGNORECASE)
+RATE_REF = re.compile(r"\b(R-[A-Za-z0-9_-]{8,40})\b")
 NOT_SERVED = re.compile(
     r"\b(?:do not|don't|does not|doesn't|cannot|can't)\s+serve\b|\bnot\s+served\b", re.IGNORECASE
 )
@@ -144,7 +145,9 @@ class AirlineBidSource:
             if str(lane.origin).upper() == o and str(lane.destination).upper() == d
             for airline in getattr(lane, "airlines", [])
         }
-        contacts = [c for c in self.directory.airlines_serving(rfq.destination) if c.name.lower() in names]
+        contacts = [
+            c for c in self.directory.airlines_serving(rfq.destination) if c.name.lower() in names
+        ]
         if not contacts:
             return False
         self._asked.add(rfq.mail_id)
@@ -239,9 +242,12 @@ class AirlineBidSource:
         if sent.email == self.rate_desk:
             carrier = self._named_airline(mail.body) or "rate desk"
         try:
+            rate_ref = RATE_REF.search(mail.body or "")
             option = PriceOption(
                 source="bid",
                 carrier=carrier,
+                rate_id=rate_ref.group(1) if rate_ref else None,
+                rate_id_at=mail.received_at if rate_ref else None,
                 total=parsed.total,
                 currency=parsed.currency,
                 transit_days=parsed.transit_days,

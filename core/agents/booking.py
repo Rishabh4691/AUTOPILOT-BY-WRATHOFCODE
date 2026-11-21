@@ -345,10 +345,12 @@ class BookingAgent:
         rate_id = rfq.get("rate_id")
         quoted_at = rfq.get("quoted_at")
         fresh_enough = bool(quoted_at) and time.time() - float(quoted_at) < RATE_FRESH_S
-        if rate_id and fresh_enough:
+        if rate_id:
             done = await self._portal_book(rate_id, team)
             if done:
                 return self._record(orch, rfq, info, done, "portal")
+            if fresh_enough:
+                log.warning("portal_booking_failed_with_fresh_rate", extra={"rfq": rfq_id})
         option = await self._fresh(orch, rfq, info)
         if option is not None and option.rate_id:
             done = await self._portal_book(option.rate_id, team)
@@ -428,9 +430,15 @@ class BookingAgent:
         team = team_reference(str(rfq["id"]))
         body = (
             f"Hello,\n\nplease book the following air freight shipment under our reference {team}.\n"
-            f"Route: {info.get('origin') or ''} to {info.get('destination') or ''}.\n"
-            f"Chargeable weight: {rfq.get('chargeable_kg')} kg.\n"
-            f"Agreed price: {info.get('flight') or rfq.get('total')} {rfq.get('currency') or 'EUR'} all-in.\n"
+            + (f"Rate reference: {rfq.get('rate_id')}.\n" if rfq.get("rate_id") else "")
+            + f"Route: {info.get('origin') or rfq.get('origin') or ''} to "
+            f"{info.get('destination') or rfq.get('destination') or ''}.\n"
+            + (
+                f"Chargeable weight: {rfq.get('chargeable_kg')} kg.\n"
+                if rfq.get("chargeable_kg")
+                else ""
+            )
+            + f"Agreed price: {info.get('flight') or rfq.get('total')} {rfq.get('currency') or 'EUR'} all-in.\n"
             "Please confirm with your booking reference.\n\nBest regards,\nWRATHOFCODE Air Freight"
         )
         if self.outbound is None:

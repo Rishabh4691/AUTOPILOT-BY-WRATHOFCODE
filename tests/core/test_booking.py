@@ -281,3 +281,38 @@ def test_booking_reuses_the_quoted_arrival():
     quoted = arrival_date("2026-11-28", 2, today).isoformat()
     recomputed = booking_eta({"ready_date": "2026-11-28", "transit_days": 2}, today)
     assert recomputed == quoted == "2026-12-01"
+
+
+@respx.mock
+async def test_old_rate_id_is_still_tried_on_the_portal_first(tmp_path: Path) -> None:
+    store = Store(tmp_path / "app.db")
+    quoted(store, rate_id="R-M2SDYd0xvjzvCzMf")
+    store.update_rfq("276", quoted_at=time.time() - 3600)
+    route = respx.post(f"{BASE}/v1/portal/bookings").respond(
+        201,
+        json={
+            "booking_reference": "BK-OLDRATE1",
+            "team_reference": "WOC-276",
+            "rate_id": "R-M2SDYd0xvjzvCzMf",
+            "airline": "Meridian Freightways",
+            "airline_code": "MF",
+            "price": "3228.87",
+            "currency": "EUR",
+            "status": "booked",
+        },
+    )
+    orch = Orch(store)
+    async with httpx.AsyncClient() as client:
+        await agent(client).handle(orch, yes(), MailKind.FOLLOW_UP)
+    assert route.call_count == 1
+    assert (
+        store._conn.execute("SELECT booking_reference FROM bookings").fetchone()[0] == "BK-OLDRATE1"
+    )
+    store.close()
+
+
+def test_bid_reply_keeps_its_rate_reference():
+    from core.agents.airline_bids import RATE_REF
+
+    body = "All-in price: 390.45 EUR\nTransit time: 4 days\nPlease quote reference R-M2SDYd0xvjzvCzMf when booking."
+    assert RATE_REF.search(body).group(1) == "R-M2SDYd0xvjzvCzMf"

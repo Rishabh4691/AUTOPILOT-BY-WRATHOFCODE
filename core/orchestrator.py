@@ -95,6 +95,9 @@ def dg_request_body(rfq: RFQ, declared: str) -> str:
     )
 
 
+BID_CUTOFF_S = 75.0
+
+
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
     portal = [option for option in options if option.source == "portal"]
     bids = [option for option in options if option.source == "bid"]
@@ -504,10 +507,11 @@ class Orchestrator:
             await self.bids.request_lane(rfq)
         except Exception:
             log.exception("lane_bid_request_failed")
-        try:
-            await self.bids.request_rate_desk(rfq)
-        except Exception:
-            log.exception("rate_desk_request_failed")
+        if not any(getattr(source, "name", "") == "ratedesk" for source in self.sources):
+            try:
+                await self.bids.request_rate_desk(rfq)
+            except Exception:
+                log.exception("rate_desk_request_failed")
 
     def all_options(self, rfq: RFQ, state: SourcingState) -> list[PriceOption]:
         if self.bids is None:
@@ -519,6 +523,8 @@ class Orchestrator:
         priced = [o for o in state.options if o.source == "portal"]
         if self.bids is not None and not priced and self.bids.waiting(rfq.mail_id):
             pending.add(self.bids.name)
+        if self.elapsed_s(rfq.received_at) >= BID_CUTOFF_S and self.all_options(rfq, state):
+            pending -= {"ratedesk", getattr(self.bids, "name", "bids")}
         return frozenset(pending)
 
     async def wait_and_build(self, rfq: RFQ, state: SourcingState) -> Quote | None:
