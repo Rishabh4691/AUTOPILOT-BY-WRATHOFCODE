@@ -6,8 +6,20 @@ import httpx
 
 from .config import settings
 
-PRICE_IN = float(os.getenv("LLM_PRICE_IN_PER_M") or 0.10)
-PRICE_OUT = float(os.getenv("LLM_PRICE_OUT_PER_M") or 0.50)
+PRICE_IN = float(os.getenv("LLM_PRICE_IN_PER_M") or 0.05)
+PRICE_OUT = float(os.getenv("LLM_PRICE_OUT_PER_M") or 0.40)
+
+
+def reasoning_effort(model: str) -> str | None:
+    forced = os.getenv("LLM_REASONING_EFFORT")
+    if forced is not None:
+        return forced or None
+    m = model.lower()
+    if m.startswith("gpt-5"):
+        return "minimal"
+    if m.startswith("gpt-6") or m.startswith("o"):
+        return "none" if m.startswith("gpt-6") else "low"
+    return None
 
 
 @dataclass
@@ -24,8 +36,11 @@ class GatewayError(Exception):
     pass
 
 
-async def chat(messages, max_tokens=700, http: httpx.AsyncClient | None = None, timeout=25) -> Reply:
+async def chat(messages, max_tokens=450, http: httpx.AsyncClient | None = None, timeout=25) -> Reply:
     body = {"model": settings.llm_model, "messages": messages, "max_completion_tokens": max_tokens}
+    effort = reasoning_effort(settings.llm_model)
+    if effort:
+        body["reasoning_effort"] = effort
     own = http is None
     http = http or httpx.AsyncClient(timeout=timeout)
     t0 = time.monotonic()

@@ -97,7 +97,9 @@ cd ui && npm install && npm run dev      # http://localhost:5173
 
 Tests: `pytest` (OCR tests for scanned sheets need `brew install tesseract`)
 
-Bot: `python -m mail.bot` (one instance only, `DRY_RUN=1` prints instead of sending)
+Bot (the live one): `python -m core.main`. `DRY_RUN=1` in `.env` logs instead of sending; set `DRY_RUN=0` to go live.
+Only **one** bot may run for the whole team. A lock file stops a second one on the same machine, but nothing stops two laptops: agree who runs it. `touch data/STOP` stops it cleanly.
+Replay one sample without sending: `PYTHONPATH=. python scripts/replay_dry.py tests/core/fixtures/mail/rfq_port_to_port.json`
 
 Before every push: `./scripts/scan_secrets.sh`. Turn on the hook once per clone with `git config core.hooksPath .githooks` and git will refuse any push that fails the scan. Files uploaded on the GitHub website skip this check, so never upload `.env`-style files there.
 
@@ -139,28 +141,23 @@ Shared state: a single SQLite `app.db` (WAL mode) with tables `rfqs` and `events
 _Last updated: Sat 21 Nov 2026_
 
 **Done**
-- [x] Repo, `.gitignore` (no `.env`, `env`, `*.db`), secret scanner
-- [x] README and battle plan in `docs/`
-- [x] Folder skeleton, shared `schema.sql`, LLM budget rules
-- [x] Control room API: agents, RFQs, detail, takeover, SSE stream, fake-data mode
-- [x] Control room UI: agent cards, RFQ list with countdown, detail drawer, take over, failure alarm
-- [x] Mail layer: client, poller, router, email writer (one gateway call), single sender with outbox (`mail/`, `docs/mailbox.md`)
-- [x] Sourcing: tariffs, portal client, bids, booking, tariff ingestion (Aryan, `sourcing/`)
-- [x] Hardening pass: API-down banner, stream resume, missed-deadline state, operator name, 13 API tests, pre-push secret hook
+- [x] Repo, `.gitignore`, secret scanner with pre-push hook
+- [x] Control room: API + UI, live stream, take over, fake-data mode
+- [x] Core bot (Amaan, `core/`): poll, classify, extract, portal prices, trucker pickup, pick cheapest/fastest, one LLM call, reply in thread, outbox guard, supervisor
+- [x] Sourcing (Aryan, `sourcing/`): 10 rate sheets in `data/tariffs.json`, portal client, bids, booking, tariff ingestion
+- [x] Mail layer (Rishabh, `mail/`): client, poller, router, extraction, human email writer, single sender
+- [x] Sheet prices feed the core bot (`core/agents/sheets.py`), so sheet-only airlines are quoted
+- [x] Human email writer in the core bot (`core/agents/human_writer.py`): greeting by name, customer's language, one price, numbers set by code
+- [x] One bot per machine (shared `data/bot.lock`)
 
-**In progress**
-- [ ] `mvp_bot.py`: first RFQ priced from sheets and quoted end to end (Amaan)
-- [ ] RFQ extraction (`mail/extract.py`), then wire extract + pricing + writer + sender into one quote path
-- [ ] Wire the real bot into `data/app.db` events (everyone)
-- [ ] Remove `env.env` (real key) from the repo and get a fresh key before submission
-
-**Next**
-- [ ] Carrier bids + 50/50 price-speed pick
-- [ ] Accept + booking confirmation in thread, tracking agent (`mail/tracking.py`)
-- [ ] Automatic tariff ingestion
-- [ ] Board watcher on `/board` + phone alarms
-- [ ] Edit and send from the takeover drawer, radar view
-- [ ] Pitch, rehearsal ×3, backup video (Sun 10:00 to 12:00)
+**Missing (by priority)**
+- [ ] Accept -> book by rate ID -> confirmation in thread (core ignores "yes" today; `sourcing.book_option` + `mail.sender` are ready)
+- [ ] Tracking answers from the CRM (+10 each)
+- [ ] Airline bid requests and replies in the price race (`sourcing/bids.py` is ready, core only asks truckers)
+- [ ] Tariff mails into `data/tariffs.json` (`sourcing.ingest_tariff_mail` is ready, core ignores tariff mails)
+- [ ] Board watcher on `/v1/board/me` with alarms for rejected quotes
+- [ ] OCR misreads three cells of the Danube JPG sheet (3 tests in `tests/sourcing`)
+- [ ] Pitch, rehearsal x3, backup video (Sun 10:00 to 12:00)
 
 ## For the team
 

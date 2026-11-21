@@ -80,7 +80,7 @@ async def test_llm_email_has_exactly_one_total_and_real_numbers():
     assert e.body.startswith("Hi Anna,")
     assert "3 pieces" in e.body
     assert e.subject == "Re: Air freight quote MUC-JFK"
-    assert e.cost_usd == pytest.approx(600 * 0.10 / 1e6 + 200 * 0.50 / 1e6)
+    assert e.cost_usd == pytest.approx(600 * 0.05 / 1e6 + 200 * 0.40 / 1e6)
 
 
 @pytest.mark.parametrize("bad", [
@@ -183,3 +183,10 @@ def test_second_price_is_caught():
 @pytest.mark.parametrize("asked,want", [(None, "cheapest"), ("", "cheapest"), ("cheapest", "cheapest"), ("best price", "cheapest"), ("fastest", "fastest"), ("urgent", "fastest"), ("express", "fastest")])
 def test_default_preference_is_cheapest(asked, want):
     assert preference(asked) == want
+
+
+async def test_duplicate_unit_and_blank_lines_are_cleaned():
+    draft = GOOD.replace("with [PIECES],", "with [PIECES] pieces,").replace("Hi [FIRST],\n", "Hi [FIRST],\n  \n\n")
+    e = await write_quote_email(RFQ, PRICE, http=gw(draft))
+    assert "3 pieces pieces" not in e.body and "3 pieces," in e.body
+    assert "\n\n\n" not in e.body and not any(l != l.rstrip() for l in e.body.splitlines())

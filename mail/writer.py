@@ -72,7 +72,7 @@ def valid_text(price: dict, lang: str) -> str:
             return d.strftime("%d.%m. %H:%M UTC") if lang != "en" else d.strftime("%d %b %H:%M UTC")
         except ValueError:
             return str(v)
-    return {"de": "heute", "fr": "aujourd'hui", "es": "hoy", "it": "oggi", "pl": "dziś"}.get(lang, "today")
+    return {"de": "heute Abend", "fr": "ce soir", "es": "esta noche", "it": "stasera", "pl": "dziś wieczorem"}.get(lang, "the end of today")
 
 
 INCLUDED = {
@@ -212,7 +212,12 @@ SIGNOFF = {"en": "Cheers,", "de": "Viele Grüße", "fr": "Bien à vous,", "es": 
 def fill(text: str, values: dict) -> str:
     for k, v in values.items():
         text = text.replace(f"[{k}]", v)
-    return re.sub(r" +,", ",", text)
+    unit = values.get("PIECES", "").split(" ", 1)[-1]
+    if unit:
+        text = re.sub(rf"({re.escape(values['PIECES'])})\s+(?:{re.escape(unit)}|pieces?|pcs|kolli|colis|bultos|colli|szt\.?)\b\.?", r"\1", text, flags=re.I)
+    text = re.sub(r" +,", ",", text)
+    text = "\n".join(line.rstrip() for line in text.splitlines())
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def problems(draft: str, values: dict) -> list[str]:

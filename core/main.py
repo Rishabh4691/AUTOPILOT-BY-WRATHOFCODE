@@ -15,16 +15,18 @@ import httpx
 from core.agents.classifier import RuleClassifier
 from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
+from core.agents.human_writer import HumanEmailWriter
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
 from core.agents.portal import PortalPriceSource
+from core.agents.sheets import SheetPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
-from core.agents.writer import LlmEmailWriter
 from core.config import Settings, auth_headers, load_settings
 from core.contracts import MailboxClient
-from core.llm import GatewayLlmClient, TokenBudget
+from core.llm import GatewayLlmClient
 from core.orchestrator import Orchestrator
 from core.outbound import DirectoryMailSender
 from core.store import SqliteEventSink, Store
+from mail.poller import AlreadyRunning, single_instance
 
 log = logging.getLogger("core.main")
 
@@ -69,13 +71,12 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
         extractor=RegexRfqExtractor(settings, llm),
-        sources=[PortalPriceSource(client, settings, lambda: datetime.now(UTC))],
+        sources=[
+            PortalPriceSource(client, settings, lambda: datetime.now(UTC)),
+            SheetPriceSource(),
+        ],
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
-        writer=LlmEmailWriter(
-            llm,
-            budget_factory=lambda rfq: TokenBudget(settings.max_tokens_per_rfq),
-            max_output_tokens=settings.llm_max_output_tokens,
-        ),
+        writer=HumanEmailWriter(client),
         events=SqliteEventSink(store),
     )
 
@@ -148,8 +149,16 @@ async def supervise() -> None:
 
 def main() -> int:
     configure_logging()
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(supervise())
+    try:
+        lock = single_instance(load_settings().db_path.with_name("bot.lock"))
+    except AlreadyRunning as error:
+        log.error("bot_already_running", extra={"detail": str(error)})
+        return 1
+    try:
+        with contextlib.suppress(KeyboardInterrupt):
+            asyncio.run(supervise())
+    finally:
+        lock.close()
     return 0
 
 
