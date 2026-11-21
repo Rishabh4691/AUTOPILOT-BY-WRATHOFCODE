@@ -219,6 +219,16 @@ def test_three_decimal_volumes_and_tonnes_are_not_thousands():
 
 
 @needs_kit
+def test_ea_cbm_first_and_collected_or_available_dates():
+    assert run("Quote FRA to JFK. 4 cartons 60x40x50 cm, 25 kg ea.").gross_kg == 100
+    x = run("Quote FRA to JFK. 6 pcs, G.W. 1234 kg, CBM 9.2")
+    assert x.shipment.volume_cbm == Decimal("9.2") and x.chargeable_kg == 1536.5
+    for line in ["Can be collected from 28.11.2026.", "Available from 2026-11-28."]:
+        x = run(f"Quote FRA to JFK, 2 pallets, 300 kg, 1.5 cbm.\n{line}")
+        assert str(x.shipment.ready_date) == "2026-11-28"
+
+
+@needs_kit
 def test_form_with_one_piece_uses_weight_per_piece():
     x = run("Quote CGN to LIM.\nNo. of pieces: 1\nWeight per piece: 94 kg\nDims per piece: 120 x 100 x 150 cm")
     assert x.shipment is not None and x.gross_kg == 94 and x.pieces == 1

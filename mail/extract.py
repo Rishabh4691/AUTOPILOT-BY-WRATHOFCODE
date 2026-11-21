@@ -150,7 +150,7 @@ SFX = r"(?:\s*(?:cm|mm|in)\b)?"
 DIMS = re.compile(
     rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?P<each0>each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
     rf"{PFX}(?P<l>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<w>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
-    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
+    rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|ea\b|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
     re.I,
 )
 WEIGHT = re.compile(
@@ -213,7 +213,7 @@ COUNT_ONLY = re.compile(
     r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
     re.I,
 )
-READY_KW = r"(?:ready|pick-?up|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*)"
+READY_KW = r"(?:ready|pick-?up|collected|available|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*)"
 READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})[./](\d{1,2})[./](\d{4}))"
 READY = re.compile(rf"\b{READY_KW}\D{{0,40}}?{READY_DATE}", re.I)
 READY_AFTER = re.compile(rf"{READY_DATE}[^\d\n]{{0,25}}?\b{READY_KW}", re.I)
@@ -232,7 +232,7 @@ UNIT_FIRST_WEIGHT = re.compile(
     rf"(?:gross )?weight\s*\((?P<u>kg|kgs|lbs?)\)\s*[:=]?\s*(?P<v>{NUM})", re.I
 )
 UNIT_FIRST_VOLUME = re.compile(
-    rf"(?:volume|volumen|vol\.)\s*(?:\((?:cbm|m3|m³)\)|cbm|m3|m³|mc)\s*[:=]?\s*(?P<v>{NUM})", re.I
+    rf"(?:(?:volume|volumen|vol\.)\s*(?:\((?:cbm|m3|m³)\)|cbm|m3|m³|mc)|\bcbm)\s*[:=]?\s*(?P<v>{NUM})", re.I
 )
 KG_FIRST_WEIGHT = re.compile(
     rf"(?:gross|lordo|brutto|bruto|brut|weight|peso|gewicht|poids|waga)\s*(?:weight)?\s*:?\s*(?P<u>kgs?|lbs?)\.?\s*(?P<v>{NUM})\b",
@@ -503,7 +503,7 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         if NET_NEAR.search(before[-14:]) or NET_NEAR.search(after[:8]):
             continue
         each = re.search(
-            r"each|per piece|/\s*pc|je\b|chacun|cada|ciascuno|cadaun[oa]|każd", after + before[-12:], re.I
+            r"each|\bea\b|per piece|/\s*pc|je\b|chacun|cada|ciascuno|cadaun[oa]|każd", after + before[-12:], re.I
         )
         gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
         found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
