@@ -23,6 +23,7 @@ from core.agents.extractor import RegexRfqExtractor
 from core.agents.human_writer import HumanEmailWriter
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
 from core.agents.portal import PortalPriceSource
+from core.agents.ratedesk import RateDeskSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.sourcing_adapter import SourcingPortalPriceSource
@@ -87,6 +88,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         sources=[
             portal_source,
             SheetPriceSource(),
+            RateDeskSource(client, settings, sender, lambda: datetime.now(UTC)),
         ],
         pickup=EmailTruckerPickupSource(
             directory,

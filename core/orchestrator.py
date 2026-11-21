@@ -224,6 +224,11 @@ class Orchestrator:
             task = asyncio.create_task(self.booker.handle(self, mail, kind), name=f"book-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
+        if kind is MailKind.PORTAL_REPLY:
+            for source in self.sources:
+                on_mail = getattr(source, "on_mail", None)
+                if callable(on_mail):
+                    on_mail(mail)
         if self.tracker is not None and kind is MailKind.TRACKING:
             task = asyncio.create_task(self.tracker.handle(self, mail), name=f"track-{mail.id}")
             self.tasks.add(task)
