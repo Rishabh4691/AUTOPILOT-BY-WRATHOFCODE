@@ -52,8 +52,8 @@ def body_classes(text: str) -> list[str]:
     """Hazard classes written in the mail itself, e.g. "Class 3 dangerous goods"."""
     out = []
     for line in (text or "").splitlines():
-        for m in CLASS.finditer(line):
-            if DG_CONTEXT.search(line) and not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
+        for m in BODY_CLASS.finditer(line):
+            if not NEGATED.search(line[max(0, m.start() - 40) : m.start()]):
                 out.append(m.group(1))
     return out
 
@@ -145,11 +145,7 @@ def check(body: str, attachments: list[tuple[str, str]]) -> DgCheck:
             if not NEGATIVE.match(value):
                 reasons.append(f"'{m.group(1)}: {value[:40]}' in {where}")
                 classes += CLASS.findall(value)
-        if where == "mail":
-            for m in BODY_CLASS.finditer(text):
-                classes.append(m.group(1))
-                reasons.append(f"class {m.group(1)} in {where}")
-        else:
+        if where != "mail":
             classes += CLASS.findall(text)
             if DOCS.search(text[:400]):
                 docs = True
