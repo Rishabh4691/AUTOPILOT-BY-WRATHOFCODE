@@ -96,7 +96,7 @@ def is_acceptance(text: str) -> bool:
 def thread_state(db, mail: Mail) -> dict:
     thread = mail.thread_id
     quoted = db.execute(
-        "SELECT rfq_id FROM outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','sending') ORDER BY id LIMIT 1",
+        "SELECT rfq_id FROM outbox WHERE thread_id=? AND stage='quote' AND state IN ('sent','sending','dry_run','unknown') ORDER BY id LIMIT 1",
         (thread,),
     ).fetchone()
     rfq = db.execute("SELECT id, status FROM rfqs WHERE thread_id=? ORDER BY received_at LIMIT 1", (str(thread),)).fetchone()

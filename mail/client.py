@@ -53,10 +53,11 @@ class Mail(BaseModel):
 
 
 class MailboxError(Exception):
-    def __init__(self, status, detail):
+    def __init__(self, status, detail, maybe_sent=False):
         super().__init__(f"{status}: {detail}")
         self.status = status
         self.detail = detail
+        self.maybe_sent = maybe_sent
 
 
 class MailClient:
@@ -84,9 +85,9 @@ class MailClient:
             try:
                 r = await self.http.request(method, url, **kw)
             except httpx.TransportError as e:
-                retry = safe or isinstance(e, httpx.ConnectError)
-                if not retry or attempt == MAX_RETRIES:
-                    raise MailboxError(0, f"{type(e).__name__}: {e}") from e
+                never_arrived = isinstance(e, httpx.ConnectError)
+                if not (safe or never_arrived) or attempt == MAX_RETRIES:
+                    raise MailboxError(0, f"{type(e).__name__}: {e}", maybe_sent=not safe and not never_arrived) from e
                 await asyncio.sleep(0.5 * 2**attempt)
                 continue
             if r.status_code == 429 or (safe and r.status_code >= 500):
@@ -97,7 +98,7 @@ class MailClient:
                 await asyncio.sleep(min(wait, 10))
                 continue
             if r.status_code >= 400:
-                raise MailboxError(r.status_code, r.text[:300])
+                raise MailboxError(r.status_code, r.text[:300], maybe_sent=not safe and r.status_code >= 500)
             return r
         raise MailboxError(0, "unreachable")
 

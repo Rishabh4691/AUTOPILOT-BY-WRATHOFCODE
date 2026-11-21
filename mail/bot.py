@@ -4,11 +4,13 @@ from typing import Awaitable, Callable
 
 from . import poller, router, store
 from .client import Mail
+from .sender import Sender
 
 log = logging.getLogger("autopilot.bot")
 
 Agent = Callable[[Mail, router.Route], Awaitable[None]]
 AGENTS: dict[str, Agent] = {}
+SENDER: Sender | None = None
 OWNER = {"rfq": "rfq", "followup": "rfq", "accept": "booking", "booking_confirm": "booking", "tracking": "tracking", "tariff": "tariff"}
 
 
@@ -31,11 +33,16 @@ async def handle(mail: Mail):
     await fn(mail, r)
 
 
+def start(client):
+    global SENDER
+    SENDER = Sender(client)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     try:
-        asyncio.run(poller.main(handle))
+        asyncio.run(poller.main(handle, on_start=start))
     except poller.AlreadyRunning as e:
         raise SystemExit(str(e))
     except KeyboardInterrupt:

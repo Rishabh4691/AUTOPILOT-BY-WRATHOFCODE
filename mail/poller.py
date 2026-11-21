@@ -168,10 +168,12 @@ class Poller:
             await asyncio.gather(*self.running.values(), return_exceptions=True)
 
 
-async def main(handler: Handler = log_only):
+async def main(handler: Handler = log_only, on_start=None):
     lock = single_instance()
     try:
         async with MailClient() as client:
+            if on_start:
+                on_start(client)
             print(f"polling every {settings.poll_seconds}s, dry_run={settings.dry_run}, db={settings.db_path}")
             await Poller(client, handler).run()
     finally:
