@@ -148,6 +148,11 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                     "cursor": store.get_cursor(),
                 },
             )
+            if orchestrator.booker is not None:
+                try:
+                    await orchestrator.booker.recover(orchestrator)
+                except Exception:
+                    log.exception("booking_recover_failed")
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
             await reprocess(orchestrator)
             try:

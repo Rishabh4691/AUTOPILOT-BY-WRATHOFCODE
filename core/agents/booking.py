@@ -186,6 +186,35 @@ class BookingAgent:
                 mail.thread_root_id,
             )
 
+    async def recover(self, orch: Any, within_s: float = 1800) -> int:
+        cutoff = datetime.now(UTC) - timedelta(seconds=within_s)
+        rows = orch.store._conn.execute(
+            "SELECT s.id FROM seen_messages s JOIN rfqs r ON r.thread_id = CAST(s.thread_root_id AS TEXT) "
+            "WHERE s.kind = ? AND r.status IN (?, ?) AND s.received_at >= ? ORDER BY s.id",
+            (
+                MailKind.FOLLOW_UP.value,
+                Stage.QUOTED.value,
+                Stage.ACCEPTED.value,
+                cutoff.isoformat(),
+            ),
+        ).fetchall()
+        done = 0
+        for (mail_id,) in rows:
+            try:
+                mail = await orch.mailbox.read_one(int(mail_id))
+            except Exception:
+                continue
+            await self.handle(orch, mail, MailKind.FOLLOW_UP)
+            done += 1
+        if done:
+            orch.emit(
+                Agent.BOOKING,
+                "recover",
+                EventStatus.INFO,
+                f"Re-checked {done} replies for missed bookings.",
+            )
+        return done
+
     def confirmed(self, orch: Any, mail: Mail) -> None:
         ref = BOOKING_REF.search(f"{mail.subject} {mail.body}")
         if not ref:
