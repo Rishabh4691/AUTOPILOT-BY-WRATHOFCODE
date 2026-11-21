@@ -33,3 +33,6 @@ dist/
 .idea/
 .vscode/
 fake.db*
+
+env.env
+*.env
