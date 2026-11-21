@@ -439,9 +439,48 @@ def tidy(text: str) -> str:
     return re.sub(r",\s*,", ",", text)
 
 
+OPTIONAL_SLOTS = ("PICKUP_LINE", "VOLUME_NOTE")
+
+
+def optional_slots(prompt: str, values: dict) -> str:
+    present = []
+    for slot in OPTIONAL_SLOTS:
+        if str(values.get(slot, "")).strip():
+            present.append(f"[{slot}]")
+            continue
+        prompt = prompt.replace(f" [{slot}]", "")
+        prompt = prompt.replace(f" ([{slot}] as written, if it is not empty)", "")
+        prompt = prompt.replace(f"[{slot}] as written; ", "")
+        prompt = prompt.replace(f"[{slot}]", "")
+    if present:
+        prompt += (
+            f"\n{' and '.join(present)} {'is a complete sentence' if len(present) == 1 else 'are complete sentences'}: "
+            "put each one on its own right after a full stop, never inside or in the middle of a sentence."
+        )
+    return prompt
+
+
+def empty_inline(draft: str, values: dict) -> list[str]:
+    out = []
+    for k, v in values.items():
+        if str(v).strip():
+            continue
+        for line in draft.splitlines():
+            if f"[{k}]" in line and line.strip().strip(".") != f"[{k}]":
+                out.append(f"empty [{k}] inside a sentence")
+                break
+    return out
+
+
 def fill(text: str, values: dict) -> str:
+    empty = {k for k, v in values.items() if not str(v).strip()}
+    text = "\n".join(
+        line for line in text.splitlines() if not (line.strip().strip(".") in {f"[{k}]" for k in empty})
+    )
     for k, v in values.items():
         text = text.replace(f"[{k}]", v)
+    text = re.sub(r"(?<=\S) {2,}(?=\S)", " ", text)
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     unit = values.get("PIECES", "").split(" ", 1)[-1]
     if unit:
         extra = r"pieces?|pcs|pallets?|cartons?|boxes|crates?|kolli|stücke?|stk|paletten?|colis|palettes?|bultos|palés|colli|bancali|szt\.?|palet\w*"
@@ -638,14 +677,15 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         agent=AGENT_NAME,
         company=COMPANY,
     )
+    prompt = optional_slots(prompt, values)
     try:
         reply = await gateway.chat([{"role": "user", "content": prompt}], http=http)
     except gateway.GatewayError as e:
         return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(e))
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
-    draft = fix_greeting(reply.text.strip().strip("`").strip(), lang)
-    issues = problems(draft, values, rfq.get("customer_text", ""))
+    draft = tidy(fix_greeting(reply.text.strip().strip("`").strip(), lang))
+    issues = empty_inline(draft, values) + problems(draft, values, rfq.get("customer_text", ""))
     body = fill(draft, values)
     if not issues:
         issues = check_final(body, values, lang)

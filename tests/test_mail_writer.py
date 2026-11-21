@@ -191,7 +191,7 @@ async def test_dashes_and_curly_quotes_never_reach_the_customer():
     assert not re.search("[—–“”‘’„]", e.body)
     curly = GOOD.replace("we'll", "we’ll")
     e = await write_quote_email(RFQ, PRICE, http=gw(curly))
-    assert e.fallback_reason and "curly" in e.fallback_reason
+    assert e.fallback_reason is None and "we'll" in e.body
     assert not re.search("[—–“”‘’„]", e.body)
 
 
@@ -356,3 +356,9 @@ def test_closing_line_varies_by_reference_but_is_stable():
 def test_friendly_customer_gets_a_matching_signoff():
     rfq = {**RFQ, "customer_text": "Thanks a lot and have a lovely day!\nPetra"}
     assert "Have a lovely day too,\n" in template("en", facts(rfq, PRICE)[1])
+
+
+async def test_empty_optional_sentence_never_breaks_a_line():
+    draft = GOOD.replace("Speak soon.", "[VOLUME_NOTE]")
+    e = await write_quote_email({**RFQ, "chargeable_kg": 450}, PRICE, http=gw(draft))
+    assert "  " not in e.body and "[VOLUME_NOTE]" not in e.body

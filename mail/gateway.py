@@ -12,6 +12,7 @@ PRICES = {
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-5-mini": (0.25, 2.00),
     "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4.1": (2.00, 8.00),
     "gpt-6-luna": (0.10, 0.50),
 }
 
@@ -49,7 +50,7 @@ class GatewayError(Exception):
     pass
 
 
-async def chat(messages, max_tokens=450, http: httpx.AsyncClient | None = None, timeout=25) -> Reply:
+async def chat(messages, max_tokens=500, http: httpx.AsyncClient | None = None, timeout=25) -> Reply:
     body = {"model": settings.llm_model, "messages": messages, "max_completion_tokens": max_tokens}
     effort = reasoning_effort(settings.llm_model)
     if effort:
