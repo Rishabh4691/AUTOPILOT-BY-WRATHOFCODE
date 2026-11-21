@@ -34,7 +34,8 @@ def test_excluded_airline_gets_no_bid_request() -> None:
     assert excluded_airlines(rfq(())) == []
 
 
-def test_round42_pickup_takes_25_hours_is_read_and_skipped() -> None:
+def test_round42_pickup_takes_25_hours_is_read_and_skipped(monkeypatch) -> None:
+    monkeypatch.setenv("PICKUP_RULE", "fast_cheapest")  # the pre-brief rule this test covers
     assert parse_hours("Our all-in price is 165.10 EUR, and pickup takes 25 hours.") == Decimal("25")
     assert parse_hours("valid until 21 Nov 2026 19:25 UTC") is None
     offers = [("165.10", parse_hours("pickup takes 25 hours")), ("195.10", Decimal("17")),

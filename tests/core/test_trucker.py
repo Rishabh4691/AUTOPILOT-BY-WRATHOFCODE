@@ -367,4 +367,4 @@ def test_fastest_request_takes_the_fastest_trucker_round_25() -> None:
         ]
     ]
     assert best_offer(offers, "fastest").trucker == "Spessart"
-    assert best_offer(offers, "cheapest").trucker == "Isarwelle"  # Rheinufer needs 28 h
+    assert best_offer(offers, "cheapest").trucker == "Spessart"  # balanced 50/50 (brief)

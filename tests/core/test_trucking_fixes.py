@@ -148,7 +148,8 @@ class Fake:
 
 
 # T5: an offer that does not state its pickup time must not be dropped.
-def test_offer_without_pickup_time_is_kept() -> None:
+def test_offer_without_pickup_time_is_kept(monkeypatch) -> None:
+    monkeypatch.setenv("PICKUP_RULE", "fast_cheapest")  # the pre-brief rule this test covers
     def price(total: str, hours: str | None) -> PickupPrice:
         return PickupPrice(source="t", trucker=total, zone="51", total=Decimal(total), currency="EUR",
                            received_at=NOW, pickup_hours=None if hours is None else Decimal(hours))
@@ -245,3 +246,24 @@ def test_pickup_rule_matches_the_grader(name: str, preference: str, offers: list
         for i, (total, hours) in enumerate(offers)
     ]
     assert best_offer(prices, preference).total == Decimal(expected), name
+
+
+# The brief: "Among carrier bids, the right one is the most balanced: price and speed weigh
+# 50/50." Rounds 44-50 (cheapest requests) were scored with that trucker, not the cheapest.
+BALANCED_ROUNDS = [
+    ("R44", [("246.58", 23), ("146.46", 26), ("114.90", 31)], "114.90"),
+    ("R46", [("202.81", 7), ("187.81", 13), ("146.45", 15), ("77.71", 31), ("92.42", 33)], "202.81"),
+    ("R47", [("225.91", 12), ("194.80", 16)], "225.91"),
+    ("R49", [("301.70", 16), ("429.30", 6), ("446.05", 9), ("196.10", 23), ("173.60", 31)], "429.30"),
+    ("R50", [("140.27", 15), ("109.77", 27), ("202.16", 4), ("121.95", 21)], "202.16"),
+]
+
+
+@pytest.mark.parametrize(("name", "offers", "expected"), BALANCED_ROUNDS)
+def test_cheapest_request_takes_the_most_balanced_trucker(name: str, offers: list, expected: str) -> None:
+    prices = [
+        PickupPrice(source="t", trucker=f"t{i}", zone="51", total=Decimal(total), currency="EUR",
+                    received_at=NOW, pickup_hours=Decimal(hours))
+        for i, (total, hours) in enumerate(offers)
+    ]
+    assert best_offer(prices, "cheapest").total == Decimal(expected), name

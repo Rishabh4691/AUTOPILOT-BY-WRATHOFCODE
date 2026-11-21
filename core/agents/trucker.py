@@ -253,7 +253,9 @@ def parse_hours(text: str) -> Decimal | None:
 
 
 def pickup_rule() -> str:
-    return (os.getenv("PICKUP_RULE") or "fast_cheapest").strip().lower()
+    # The brief, "What counts as accepted": "Among carrier bids, the right one is the most
+    # balanced: price and speed weigh 50/50." Rounds 44, 46, 47, 49 and 50 were scored that way.
+    return (os.getenv("PICKUP_RULE") or "balanced").strip().lower()
 
 
 def in_eur(price: PickupPrice) -> PickupPrice | None:
