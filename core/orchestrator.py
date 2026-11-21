@@ -666,9 +666,27 @@ class Orchestrator:
             return None
         return await self.pickup.collect(rfq)
 
+    def already_quoted(self, rfq_id: int) -> bool:
+        row = self.store._conn.execute(
+            "SELECT status FROM rfqs WHERE id=?", (str(rfq_id),)
+        ).fetchone()
+        return bool(row) and row[0] in (Stage.QUOTED.value, Stage.ACCEPTED.value, Stage.BOOKED.value)
+
     async def build_quote(
         self, rfq: RFQ, options: list[PriceOption], pickup: PickupPrice | None
     ) -> Quote | None:
+        if self.already_quoted(rfq.mail_id):
+            # Round 27: a late re-pricing overwrote the sent quote's carrier, price and rate id,
+            # so the booking went to another airline with an expired rate. The quote the
+            # customer has is final; never re-price it.
+            self.emit(
+                Agent.RFQ,
+                "requote_skipped",
+                EventStatus.INFO,
+                f"Request {rfq.mail_id} already has a sent quote; not pricing it again.",
+                rfq.mail_id,
+            )
+            return None
         options, dropped = fit_limits(options, rfq)
         for reason in dropped:
             self.emit(Agent.RFQ, "limits", EventStatus.INFO, f"Skipped {reason}.", rfq.mail_id)
@@ -880,6 +898,11 @@ class Orchestrator:
             status=Stage.QUOTED.value,
             quoted_at=self.clock(),
             email_body=quote.body,
+            # What the customer saw is what we book: carrier, total and rate id of the sent quote.
+            carrier=quote.option.carrier,
+            total=quote.total,
+            currency=quote.currency,
+            rate_id=quote.option.rate_id,
         )
         verb = "Would send" if self.settings.dry_run else "Sent"
         self.emit(

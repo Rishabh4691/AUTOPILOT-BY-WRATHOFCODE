@@ -361,3 +361,18 @@ async def test_send_retries_through_a_network_blip(tmp_path: Path) -> None:
     await drain(h)
     assert len(h.mailbox.sent) == 1
     assert calls["n"] == 2
+
+
+async def test_sent_quote_is_never_repriced_or_overwritten(tmp_path: Path) -> None:
+    # Round 27: a late re-pricing overwrote carrier, price and rate id after the quote was sent,
+    # so the booking went to another airline with an expired rate.
+    h = harness(tmp_path)
+    h.mailbox.batches = [[mail(1)]]
+    await h.orchestrator.poll_once()
+    await drain(h)
+    row = h.store._conn.execute("SELECT status, carrier, total FROM rfqs WHERE id='1'").fetchone()
+    assert row[0] == Stage.QUOTED.value
+    rfq, _ = await h.extractor.extract(mail(1))
+    again = await h.orchestrator.build_quote(rfq, [], None)
+    assert again is None
+    assert h.store._conn.execute("SELECT status, carrier, total FROM rfqs WHERE id='1'").fetchone() == row
