@@ -335,15 +335,15 @@ def story(rfq: dict, values: dict) -> dict:
 TEMPLATES = {
     "en": """Hi [FIRST],
 
-[CARRIER] is the [PREF] way to get your [CARGO] from [ORIGIN_CITY] to [DEST_CITY].
-[HANDOVER][ANSWERS]
+Thanks for the details. For your [CARGO] from [ORIGIN_CITY] to [DEST_CITY] I would go with [CARRIER], the [PREF] choice on this lane. [HANDOVER][ANSWERS]
 
-The all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
-I can hold it [HOLD]. [CLOSING] Our reference is [REF].
+Your all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
+
+I can hold this rate [HOLD]. [CLOSING] Our reference is [REF].
 
 [SIGNOFF]
 {agent}
-Export Air Freight, {company}""",
+{company}""",
     "de": """Hallo [FIRST],
 
 danke für die Anfrage, unsere Referenz ist [REF].
@@ -410,11 +410,11 @@ PROMPT = """You write one reply email for an air freight forwarder. Write it in 
 Voice: an experienced freight agent writing quickly between calls. Warm but direct. Lead with what they asked for. Mix short and longer sentences; never make every line the same length. Plain words, contractions where natural.
 No filler openers ("Thanks for reaching out", "I hope you're well"), no closers like "let me know if you have any questions" or "feel free to". No dashes of any kind, use commas or full stops. Straight quotes only.
 Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this finds you well", "do not hesitate", "kindly", emojis, bullet points, markdown.
-Body is 5 to 8 short lines in two or three small paragraphs. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
+Body is three short paragraphs of flowing sentences; never break a line inside a paragraph. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
 [PIECES] already includes its unit word, never add "pieces", "pallets" or similar after it. Write every word in {language}, including the words for gross and chargeable weight.
 Use these placeholders exactly as written; never write any digit, date or price yourself:
 [REF] [ROUTE] [ORIGIN_CITY] [DEST_CITY] [CARGO] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [{valid}] [PREF] [PICKUP_LINE] [VOLUME_NOTE]
-Write flowing sentences like a person, never a list of facts, never arrows, never "piece(s)", never "UTC". Must contain, in your own words: that [CARRIER] is the [PREF] way to get their [CARGO] from [ORIGIN_CITY] to [DEST_CITY]; how it reaches the airport ([PICKUP_LINE] as written, if it is not empty) and that it should arrive around [ARRIVAL]; the all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; you can hold it [{valid}]; a short line that a yes is all you need to book it; our reference is [REF].
+Write flowing sentences like a person, never a list of facts, never arrows, never "piece(s)", never "UTC". Must contain, in your own words: a first-person recommendation in the style of "For your [CARGO] from [ORIGIN_CITY] to [DEST_CITY] I would go with [CARRIER], the [PREF] choice" (never "[CARRIER] is the [PREF] way to get"); how it reaches the airport ([PICKUP_LINE] as written, if it is not empty) and that it should arrive around [ARRIVAL]; the all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; you can hold it [{valid}]; a short line that a yes is all you need to book it; our reference is [REF].
 {questions}
 If they said something friendly or personal, answer it briefly and naturally; you may mention their goods, their buyer or their town in plain words. Match their tone: casual if they are casual, a touch more formal if they are formal. Start every sentence with a capital letter, including the first one after the greeting. Do not say it is already booked.
 One reply, one decision: give only this single carrier and this single price. Never mention alternatives, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively", "or", "best fit" or "routing".

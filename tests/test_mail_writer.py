@@ -110,7 +110,7 @@ def test_every_template_has_one_total(lang, total):
     assert not check_final(body, values)
     assert body.count(total) == 1
     assert not re.search(r"\[[A-Z]+\]", body)
-    assert 8 <= len([l for l in body.splitlines() if l.strip()]) <= 14
+    assert 7 <= len([l for l in body.splitlines() if l.strip()]) <= 14
 
 
 def test_template_without_first_name():
