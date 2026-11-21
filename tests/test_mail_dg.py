@@ -111,3 +111,17 @@ async def test_bad_docs_draft_falls_back_but_still_counts_the_call(bad):
 async def test_gateway_down_sends_template():
     body, cost, used, why = await write_docs_request(UN1133, "en", "Klaus", "WOC-2268", "Lena", "WRATHOFCODE Air Freight", http=gw(status=503))
     assert not used and cost == 0 and "Shipper's Declaration" in body
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize("value", ["Not restricted", "Not applicable", "Non-DG", "non hazardous", "General cargo", "NR", "Kein Gefahrgut", "No"])
+def test_negative_dg_fields_are_not_dangerous(value):
+    assert not check("5 pieces of furniture samples", [("SLI.pdf", f"Goods description: furniture samples\nDangerous goods: {value}")]).dangerous
+
+
+def test_live_round_33_not_restricted_is_not_dg():
+    text = "Goods description: furniture samples\nTotal pieces: 5\nDangerous goods: Not restricted"
+    assert not check("It's 5 pieces of furniture samples, 292 kg.", [("SLI_53351.pdf", text)]).dangerous
+    assert check("adhesives", [("PL.xlsx", "Dangerous goods: UN1133, Class 3, Adhesives")]).dangerous

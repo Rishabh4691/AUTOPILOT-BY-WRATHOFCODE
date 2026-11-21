@@ -15,7 +15,12 @@ BODY_CLASS = re.compile(
     r"(?!\s*(?:%|cm|mm|kg|lbs?|pallets?|pcs|pieces))",
     re.I,
 )
-NEGATIVE = re.compile(r"^\s*(no|none|n/?a|nein|non|keine?|not applicable|-|0)\b", re.I)
+NEGATIVE = re.compile(
+    r"^\s*(no|none|n/?a|n/?r|nr|nein|non|keine?|not (applicable|restricted|dangerous|hazardous|regulated)|"
+    r"non[- ]?(dg|dangerous|hazardous|haz|restricted|regulated)|general cargo|unrestricted|nicht (gefährlich|eingeschränkt)|"
+    r"kein gefahrgut|ungefährlich|non dangereu\w*|no peligros\w*|non pericolos\w*|niebezpieczn\w* nie|false|-|0)\b",
+    re.I,
+)
 DG_GOODS = re.compile(
     r"\b(adhesives?|glues?|klebstoff\w*|paints?|lacquers?|lacke?|varnish\w*|solvents?|lösungsmittel|thinners?|"
     r"a[eé]ro[sz]ol\w*|spray ?cans?|spraydosen?|sprühdosen?|bombolett\w*|bombes? a[eé]rosol\w*|"
