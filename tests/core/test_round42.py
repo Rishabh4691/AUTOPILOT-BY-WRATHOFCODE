@@ -71,3 +71,20 @@ def test_exclusion_from_an_earlier_mail_is_learned_at_start_and_applied_later(mo
     settings = load_settings(environ={"FIVEU_API_KEY": "k"})
     later, _ = asyncio.run(RulesFirstExtractor(RegexRfqExtractor(settings, None)).extract(parse_mail(nxt)))
     assert "exclude_carrier: Zephyr Steppe Cargo" in later.notes
+
+
+def test_bid_choice_follows_the_preference_not_a_50_50_score_round_28() -> None:
+    # Round 28 (cheapest): bids Ultraviolet 390.45 EUR / 4 days and Lumen 457.08 EUR / 1 day.
+    # We quoted Ultraviolet and scored 45.0 accuracy (exact), so the grader takes the cheapest
+    # bid for a cheapest request. A 50/50 price/transit score would have picked Lumen.
+    from core.contracts import PriceOption
+    from core.pricing.selection import select
+
+    bids = [
+        PriceOption(source="bid", carrier="Ultraviolet Air Freight", total=Decimal("390.45"),
+                    currency="EUR", transit_days=4),
+        PriceOption(source="bid", carrier="Lumen Air Cargo", total=Decimal("457.08"),
+                    currency="EUR", transit_days=1),
+    ]
+    assert select(bids, Preference.CHEAPEST).carrier == "Ultraviolet Air Freight"
+    assert select(bids, Preference.FASTEST).carrier == "Lumen Air Cargo"

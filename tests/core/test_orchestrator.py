@@ -222,6 +222,34 @@ async def test_rfq_gets_one_reply_in_thread_with_cheapest_total(tmp_path: Path) 
     assert h.store.outbox_status(1, Stage.QUOTED) == "sent"
 
 
+async def test_rfq_is_held_when_every_priced_carrier_is_excluded(tmp_path: Path) -> None:
+    h = harness(tmp_path)
+    rfq = RFQ(
+        mail_id=1,
+        thread_root_id=1,
+        customer=CUSTOMER,
+        subject="Quote request FRA to ORD",
+        origin="FRA",
+        destination="ORD",
+        pieces=(),
+        gross_kg=Decimal("100"),
+        door_pickup=False,
+        preference=Preference.CHEAPEST,
+        preference_assumed=False,
+        received_at=NOW,
+        notes=("exclude_carrier: Cheap Air",),
+    )
+    option = PriceOption(
+        source="portal", carrier="Cheap Air", total=Decimal("250"), currency="EUR", transit_days=2
+    )
+
+    quote = await h.orchestrator.build_quote(rfq, [option], None)
+
+    assert quote is None
+    assert h.writer.calls == 0
+    assert any(e.status.value == "hold" for e in h.sink.events)
+
+
 async def test_own_mail_is_never_answered(tmp_path: Path) -> None:
     h = harness(tmp_path)
     h.mailbox.batches = [[mail(1, sender="wrathofcode@hackloop.mail")]]

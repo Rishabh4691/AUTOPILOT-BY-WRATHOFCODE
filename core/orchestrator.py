@@ -108,7 +108,7 @@ def drop_excluded(rfq: RFQ, options: list[PriceOption]) -> list[PriceOption]:
     if not banned:
         return options
     kept = [o for o in options if not is_excluded(o.carrier, o.carrier_code, banned)]
-    return kept or options
+    return kept
 
 
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
@@ -700,6 +700,13 @@ class Orchestrator:
                 rfq.mail_id,
             )
         options = drop_excluded(rfq, options)
+        if not options:
+            self.hold(
+                rfq.mail_id,
+                f"Request {rfq.mail_id} has no priced airline left after applying "
+                "the customer's exclusions.",
+            )
+            return None
         options = portal_first(options)
         usable = in_currency(options, quote_currency(rfq, options))
         option = select(usable, rfq.preference)

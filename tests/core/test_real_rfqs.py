@@ -149,6 +149,7 @@ def test_excluded_airline_is_never_quoted_or_named_round_42(tmp_path, monkeypatc
         PriceOption(source="bid", carrier="Lagoon Isles Airways", total=Decimal("3210"), currency="EUR", transit_days=3),
     ]
     assert [o.carrier for o in drop_excluded(rfq, options)] == ["Lagoon Isles Airways"]
+    assert drop_excluded(rfq, [options[0]]) == []
     later = with_exclusions(rfq.model_copy(update={"notes": ()}), "New request, cheapest please.", "p@meyer.mail")
     assert [o.carrier for o in drop_excluded(later, options)] == ["Lagoon Isles Airways"]
     text = "Hi Petra,\n\nI left Zephyr Steppe Cargo out. Lagoon Isles Airways is the cheapest.\n\nKind regards"
