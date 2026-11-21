@@ -38,3 +38,4 @@ dist/
 fake.db*
 
 data/bot.lock
+env.env
