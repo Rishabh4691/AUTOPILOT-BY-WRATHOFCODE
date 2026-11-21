@@ -21,6 +21,7 @@ CASES = [
     (67, 18684, "r67-request.pdf", ("DUS", "RUH", Decimal("1728"), Decimal("6.31"), True, "40", "cheapest")),
     (75, 21129, "r75-request.pdf", ("STR", "EZE", Decimal("169"), Decimal("0.56"), True, "72", "fastest")),
     (72, 20161, None, ("CGN", "LIM", Decimal("704"), Decimal("3.08"), True, "50", "cheapest")),
+    (82, 23198, None, ("HAM", "SGN", Decimal("641.0031295129"), Decimal("2.690096000"), False, None, "fastest")),
 ]
 
 

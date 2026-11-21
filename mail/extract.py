@@ -146,15 +146,15 @@ CITIES = {
 NUM = r"\d+(?:[.,]\d+)?"
 # "L120 x W80 x H100 cm" and "120cm x 80cm x 100cm"
 PFX = r"(?:\b[LWBH]\s*[:=]?\s*)?"
-SFX = r"(?:\s*(?:cm|mm|in)\b)?"
+SFX = r"(?:\s*(?:cm|mm|in)\b|\s*[\"”″])?"
 DIMS = re.compile(
     rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|cases?)\s*(?:of|à|a|de|di|da|zu je|je|@|:|,|-)?\s*(?:(?P<each0>each|je|à|chacun\w*|cada uno|cada|ciascun\w*|cadaun[oa]|każd\w*)\s*:?\s*)?\(?\s*)?"
-    rf"{PFX}(?P<l>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<w>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?\)?"
+    rf"{PFX}(?P<l>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<w>{NUM}){SFX}\s*(?:x|×|\*|by)\s*{PFX}(?P<h>{NUM})\s*(?P<unit>cm|mm|m|inch(?:es)?|in|[\"”″])?\)?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|cadaun[oa]|każd\w*|per (?:piece|pallet|unit|carton|box|crate|case|colli|skid))\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|ea\b|per piece|/\s*pc|je|chacun|cada|ciascuno|cadaun[oa]|każd\w*)?)?",
     re.I,
 )
 WEIGHT = re.compile(
-    rf"(?P<v>\d{{1,3}}(?:[  ,.']\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b",
+    rf"(?P<v>\d{{1,3}}(?:[  ,.']\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|(?:metric |short |long )?(?:tons?|tonnes?)|mt|t|tonnen|grams?|grammes?|gramm|g)\b",
     re.I,
 )
 NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b", re.I)
@@ -167,8 +167,14 @@ def weight_kg(value: Decimal, unit: str) -> tuple[Decimal, str]:
     u = unit.lower()
     if u.startswith(("lb", "pound")):
         return value, "lb"
-    if u in ("t", "ton", "tons", "tonne", "tonnes", "tonnen"):
+    if u.startswith("short"):
+        return value * Decimal("907.18474"), "kg"
+    if u.startswith("long"):
+        return value * Decimal("1016.0469088"), "kg"
+    if u.startswith("metric") or u in ("t", "mt", "ton", "tons", "tonne", "tonnes", "tonnen"):
         return value * 1000, "kg"
+    if u in ("g", "gram", "grams", "gramme", "grammes", "gramm"):
+        return value / 1000, "kg"
     return value, "kg"
 
 
@@ -215,7 +221,7 @@ SELF_DELIVERY = re.compile(
 )
 LOT = re.compile(r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]", re.I)
 VOLUME = re.compile(
-    rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|mc|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft)(?![a-z])",
+    rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|mc|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft|litres?|liters?|ltrs?|liter)(?![a-z])",
     re.I,
 )
 CUFT = Decimal("0.0283168")
@@ -225,6 +231,8 @@ def volume_cbm_of(m) -> Decimal:
     u = (m.group("u") or "").lower().replace(" ", "")
     v = small_num(m.group("v"))
     # "cu ft", "cu.ft", "cubic feet", "ft3", "cft" are cubic feet; "cubic meters" is not.
+    if u.startswith(("lit", "ltr")):
+        return v / 1000
     return v * CUFT if u.startswith(("cuft", "cu.ft", "cubicf", "ft", "cft")) else v
 
 
@@ -371,7 +379,7 @@ def find_pieces(text: str) -> list[Piece]:
             l, w, h, unit = l / 10, w / 10, h / 10, "cm"
         elif unit == "m":
             l, w, h, unit = l * 100, w * 100, h * 100, "cm"
-        elif unit.startswith("in") or unit == '"':
+        elif unit.startswith("in") or unit in ('"', "”", "″"):
             unit = "in"
         else:
             unit = "cm"
@@ -531,7 +539,7 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
             continue
         each = re.search(
             r"each|\bea\b|per piece|/\s*pc|je\b|chacun|cada|ciascuno|cadaun[oa]|każd", after + before[-12:], re.I
-        )
+        ) and not re.match(r"\s*(?:total|in total|insgesamt|gesamt|au total|en total|in totale|łącznie)\b", after, re.I)
         gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
         found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
     if not found:
