@@ -728,7 +728,8 @@ def find_postcode(text: str, zones: dict) -> str | None:
 
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
-    text = f"{subject}\n{fresh_text(body)}"
+    # A forwarded/replied subject ("RE: FW: MUC - JFK / 300 KGS") describes another shipment.
+    text = fresh_text(body) if FORWARDED.match(subject or "") else f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)
     fast = wants_fast(text)
     stated = bool(fast or CHEAP.search(text))
@@ -780,6 +781,15 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
             re.I,
         )
         counted = int(label.group(1)) if label else 0
+    first_vol = next(VOLUME.finditer(text), None)
+    if (
+        volume is not None
+        and len(vols) == 1
+        and counted > 1
+        and first_vol is not None
+        and re.match(rf"\s*{EACH}", text[first_vol.end() : first_vol.end() + 20], re.I)
+    ):
+        volume = volume * counted
     if lots and lots[1] > 0:
         volume = lots[2] if lots[2] > 0 else volume
         counted = lots[0]

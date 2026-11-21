@@ -6,3 +6,4 @@
 - Round 4: 10 fake RFQs, 3 failed. Fixed door pickup keeping an explicit "from FRA" instead of the pickup zone airport, German "holt die Ware ab"/"abholbereit" not seen as pickup, "3 x (LxWxH), weight per pallet N kg" lot counts.
 - Round 5: 7 fake RFQs, 6 failed. Fixed reference numbers taken as pickup postcode, "not urgent"/"no es urgente" read as fastest, dd/mm/yyyy ready dates, "Kilogramm", Italian "da"/"cadauno" lot phrasing.
 - Round 6: 8 fake RFQs, 2 failed. Fixed "Gross weight (kg): 812" / "Volume (cbm): 3.3" without a total label, ready dates written with month names (30 November 2026, 28 de noviembre de 2026, Nov 26, 2026).
+- Round 7: 6 fake RFQs, 4 failed. Fixed weight taken from a "RE: FW:" subject, fallback DG check reading quoted history, Outlook history without an address ("From: Sales Team" + "Sent:", underscore line) not cut, "1.2 cbm each" not multiplied by the piece count.

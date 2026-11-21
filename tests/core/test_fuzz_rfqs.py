@@ -254,6 +254,54 @@ EXPECTED: dict[int, dict[str, object]] = {
         "ready": "2026-11-30",
         "dg": False,
     },
+    9081: {
+        "origin": "HAM",
+        "dest": "SIN",
+        "gross": 210.0,
+        "vol": 0.8,
+        "charge": 210.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-25",
+        "dg": False,
+    },
+    9083: {
+        "origin": "FRA",
+        "dest": "DXB",
+        "gross": 380.0,
+        "vol": 1.8,
+        "charge": 380.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-26",
+        "dg": False,
+    },
+    9086: {
+        "origin": "STR",
+        "dest": "BKK",
+        "gross": 260.0,
+        "vol": 1.1,
+        "charge": 260.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-27",
+        "dg": False,
+    },
+    9092: {
+        "origin": "DUS",
+        "dest": "NBO",
+        "gross": 600.0,
+        "vol": 4.8,
+        "charge": 802.0,
+        "door": False,
+        "pref": "cheapest",
+        "cur": "EUR",
+        "ready": "2026-11-26",
+        "dg": False,
+    },
 }
 
 
@@ -271,7 +319,7 @@ async def test_fuzz_rfq(mail_id: int) -> None:
     mail = parse_mail(raw)
     got: dict[str, object] = {"dg": check(fresh_text(mail.body), []).dangerous}
     if expected.get("dg") is False:
-        assert dangerous_goods(mail.body) is None
+        assert dangerous_goods(fresh_text(mail.body)) is None
     if set(expected) - {"dg"}:
         settings = load_settings(environ={"FIVEU_API_KEY": "k"})
         rfq, _ = await RulesFirstExtractor(RegexRfqExtractor(settings, None)).extract(mail)
