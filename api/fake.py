@@ -1,10 +1,13 @@
 import asyncio
 import json
+import logging
 import random
 import time
 import uuid
 
 from .db import connect
+
+log = logging.getLogger("autopilot.fake")
 
 CUSTOMERS = [
     ("Lena Hoffmann", "Bosch Rexroth", "de"),
@@ -18,7 +21,7 @@ CARRIERS = ["Lufthansa Cargo", "Qatar Cargo", "Cathay Cargo", "Emirates SkyCargo
 SOURCES = ["rate sheet", "portal", "carrier bid"]
 
 
-def log(db, agent, rfq_id, step, status, message, duration_ms=None, cost=0.0, data=None):
+def event(db, agent, rfq_id, step, status, message, duration_ms=None, cost=0.0, data=None):
     db.execute(
         "INSERT INTO events (ts, agent, rfq_id, step, status, message, duration_ms, llm_cost_usd, data_json) VALUES (?,?,?,?,?,?,?,?,?)",
         (time.time(), agent, rfq_id, step, status, message, duration_ms, cost, json.dumps(data) if data else None),
@@ -64,24 +67,23 @@ async def run_rfq(speed):
             "INSERT INTO rfqs (id, thread_id, customer, subject, received_at, status, preference, origin, destination) VALUES (?,?,?,?,?,?,?,?,?)",
             (rid, rid, f"{name} ({company})", f"Air quote {origin}-{dest}", t0, "NEW", pref, origin, dest),
         )
-        log(db, "router", rid, "route", "ok", f"Customer RFQ from {company}", random.randint(40, 300))
+        event(db, "router", rid, "route", "ok", f"Customer RFQ from {company}", random.randint(40, 300))
 
-    async def step(status, agent, name_, ok_msg, delay, **kw):
+    async def step(status, agent, name, msg, delay, kind="info"):
         await asyncio.sleep(delay / speed)
         with connect() as db:
             db.execute("UPDATE rfqs SET status=? WHERE id=?", (status, rid))
-            log(db, agent, rid, name_, kw.pop("st", "info"), ok_msg, **kw)
+            event(db, agent, rid, name, kind, msg)
 
-    await step("EXTRACTED", "rfq", "extract", f"{origin}→{dest}, {kg} kg chargeable, wants {pref}", 3, st="start")
+    await step("EXTRACTED", "rfq", "extract", f"{origin}→{dest}, {kg} kg chargeable, wants {pref}", 3, kind="start")
     await step("SOURCING", "rfq", "source", "Asked portal and 3 carriers for rates", 4)
     await asyncio.sleep(random.uniform(20, 70) / speed)
 
     lines, total = price(kg)
     carrier = random.choice(CARRIERS)
     with connect() as db:
-        human = db.execute("SELECT human_takeover FROM rfqs WHERE id=?", (rid,)).fetchone()[0]
-        if human:
-            log(db, "rfq", rid, "hold", "info", "Held for human, autopilot paused")
+        if db.execute("SELECT human_takeover FROM rfqs WHERE id=?", (rid,)).fetchone()[0]:
+            event(db, "rfq", rid, "hold", "info", "Held for human, autopilot paused")
             return
         breakdown = {
             "lines": lines,
@@ -98,32 +100,32 @@ async def run_rfq(speed):
             "UPDATE rfqs SET status='PRICED', chargeable_kg=?, carrier=?, total=?, currency='EUR', breakdown_json=? WHERE id=?",
             (kg, carrier, total, json.dumps(breakdown), rid),
         )
-        log(db, "rfq", rid, "price", "info", f"Best: {carrier} EUR {total:,.2f}", data={"total": total})
+        event(db, "rfq", rid, "price", "info", f"Best: {carrier} EUR {total:,.2f}", data={"total": total})
 
     await asyncio.sleep(4 / speed)
     duration = int((time.time() - t0) * 1000 * speed)
     with connect() as db:
         if fails:
             db.execute("UPDATE rfqs SET status='FAILED' WHERE id=?", (rid,))
-            log(db, "rfq", rid, "quote", "fail", "Quote rejected: price above best by 7%", duration)
+            event(db, "rfq", rid, "quote", "fail", "Quote rejected: price above best by 7%", duration)
             return
         body = email(name, origin, dest, kg, carrier, total, pref)
         db.execute(
             "UPDATE rfqs SET status='QUOTED', quoted_at=?, email_body=?, rate_id=? WHERE id=?",
             (time.time(), body, f"R-{uuid.uuid4().hex[:8]}", rid),
         )
-        log(db, "rfq", rid, "quote", "ok", f"Quote sent: EUR {total:,.2f}", duration, round(random.uniform(0.00012, 0.00026), 6))
+        event(db, "rfq", rid, "quote", "ok", f"Quote sent: EUR {total:,.2f}", duration, round(random.uniform(0.00012, 0.00026), 6))
 
     if random.random() < 0.6:
         await asyncio.sleep(random.uniform(15, 40) / speed)
         with connect() as db:
             db.execute("UPDATE rfqs SET status='ACCEPTED' WHERE id=?", (rid,))
-            log(db, "router", rid, "route", "ok", "Customer accepted the quote", random.randint(40, 200))
-            log(db, "booking", rid, "book", "start", f"Booking {carrier}")
+            event(db, "router", rid, "route", "ok", "Customer accepted the quote", random.randint(40, 200))
+            event(db, "booking", rid, "book", "start", f"Booking {carrier}")
         await asyncio.sleep(3 / speed)
         with connect() as db:
             db.execute("UPDATE rfqs SET status='BOOKED' WHERE id=?", (rid,))
-            log(db, "booking", rid, "book", "ok", f"Booked on {carrier}", random.randint(1500, 6000))
+            event(db, "booking", rid, "book", "ok", f"Booked on {carrier}", random.randint(1500, 6000))
 
 
 async def side_traffic(speed):
@@ -131,19 +133,39 @@ async def side_traffic(speed):
         await asyncio.sleep(random.uniform(25, 60) / speed)
         with connect() as db:
             if random.random() < 0.7:
-                log(db, "router", None, "route", "ok", "Tracking question", random.randint(40, 200))
+                event(db, "router", None, "route", "ok", "Tracking question", random.randint(40, 200))
                 ok = random.random() < 0.92
-                log(db, "tracking", None, "answer", "ok" if ok else "fail",
+                event(db, "tracking", None, "answer", "ok" if ok else "fail",
                     "Answered: shipment departed, ETA tomorrow" if ok else "No booking found for reference",
                     random.randint(400, 3500))
             else:
                 airline = random.choice(CARRIERS)
-                log(db, "router", None, "route", "ok", f"Tariff sheet from {airline}", random.randint(40, 200))
-                log(db, "tariff", None, "ingest", "ok", f"Loaded new {airline} tariff, 142 lanes", random.randint(2000, 9000))
+                event(db, "router", None, "route", "ok", f"Tariff sheet from {airline}", random.randint(40, 200))
+                event(db, "tariff", None, "ingest", "ok", f"Loaded new {airline} tariff, 142 lanes", random.randint(2000, 9000))
+
+
+_tasks = set()
+
+
+def spawn(coro):
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+
+    def done(t):
+        _tasks.discard(t)
+        if not t.cancelled() and t.exception():
+            log.exception("fake task failed", exc_info=t.exception())
+
+    task.add_done_callback(done)
+    return task
 
 
 async def run(speed=6.0, every=360):
-    asyncio.create_task(side_traffic(speed))
-    while True:
-        asyncio.create_task(run_rfq(speed))
-        await asyncio.sleep(every / speed)
+    spawn(side_traffic(speed))
+    try:
+        while True:
+            spawn(run_rfq(speed))
+            await asyncio.sleep(every / speed)
+    finally:
+        for t in list(_tasks):
+            t.cancel()

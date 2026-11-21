@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS rfqs (
 CREATE TABLE IF NOT EXISTS events (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   ts           REAL NOT NULL,
-  agent        TEXT NOT NULL CHECK (agent IN ('router','rfq','booking','tracking','tariff')),
+  agent        TEXT NOT NULL,
   rfq_id       TEXT,
   step         TEXT NOT NULL,
   status       TEXT NOT NULL,
