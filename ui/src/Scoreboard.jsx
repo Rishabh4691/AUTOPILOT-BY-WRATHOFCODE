@@ -51,15 +51,21 @@ export default function Scoreboard() {
   const answered = rounds.filter((r) => r.seconds != null).map((r) => r.seconds).sort((a, b) => a - b)
   const median = answered.length ? answered[Math.floor(answered.length / 2)] : null
   const third = d.ranking?.find((r) => r.rank === 3)
+  const bonus = rounds.filter((r) => r.verdict === 'accepted' && (r.factor ?? 0) > 1)
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-7">
         <Stat label="Rank" value={`#${d.rank}`} tone={d.rank <= 3 ? 'text-emerald-300' : 'text-white'} />
         <Stat label="Points" value={d.total} />
         <Stat label="Gap to #3" value={third && d.rank > 3 ? `${(third.total - d.total).toFixed(1)}` : '—'} tone="text-amber-300" />
         <Stat label="Accepted" value={`${accepted}/${rounds.length}`} />
         <Stat label="Booked" value={booked} />
+        <Stat
+          label="Bonus rounds"
+          value={bonus.length ? bonus.map((r) => `#${r.round_no} x${r.factor}`).join(' ') : '0'}
+          tone={bonus.length ? 'text-amber-300' : 'text-white'}
+        />
         <Stat label="Median answer" value={median == null ? '—' : `${Math.round(median)} s`} />
       </div>
 
@@ -79,6 +85,8 @@ export default function Scoreboard() {
                 <th className="px-4 py-2 font-medium">Answer</th>
                 <th className="px-4 py-2 font-medium">Verdict</th>
                 <th className="px-4 py-2 font-medium">Booked</th>
+                <th className="px-4 py-2 font-medium">Teams ok</th>
+                <th className="px-4 py-2 font-medium">Multiplier</th>
                 <th className="px-4 py-2 font-medium">Where points went</th>
               </tr>
             </thead>
@@ -100,6 +108,18 @@ export default function Scoreboard() {
                     </span>
                   </td>
                   <td className="px-4 py-2 text-xs">{r.booked === true ? 'yes' : r.booked === false ? <span className="text-rose-300">no</span> : '—'}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{r.teams_accepted != null ? `${r.teams_accepted}/${r.teams_answered ?? '?'}` : '—'}</td>
+                  <td className="px-4 py-2 font-mono text-xs">
+                    {r.factor != null ? (
+                      <span className={r.factor > 1 ? 'rounded-md bg-amber-500/20 px-2 py-0.5 font-semibold text-amber-200' : 'text-muted'}>x{r.factor}</span>
+                    ) : r.factor_preview != null ? (
+                      <span className={r.factor_preview > 1 ? 'text-amber-300' : 'text-muted'} title="preview from the teams accepted so far">
+                        x{r.factor_preview}?
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-xs text-zinc-300">{r.lost?.length ? r.lost.join('; ') : <span className="text-emerald-300">full time points</span>}</td>
                 </tr>
               ))}

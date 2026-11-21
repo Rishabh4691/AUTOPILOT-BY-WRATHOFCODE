@@ -161,7 +161,28 @@ def time_points(seconds):
     return round(15 * (360 - seconds) / 240, 2)
 
 
-def shape_rounds(me: dict) -> list[dict]:
+def round_factors(everyone: dict) -> dict[int, dict]:
+    """5U's few-winners multiplier per round, and a preview from the accepted count while a round is open."""
+    rule = (everyone.get("rules") or {}).get("few_winners") or {}
+    factors = [float(f) for f in rule.get("factors") or []]
+    start = int(rule.get("from_round") or 10**9)
+    out = {}
+    for r in everyone.get("rounds") or []:
+        n, accepted = int(r.get("round_no") or 0), int(r.get("accepted") or 0)
+        official = r.get("factor")
+        preview = factors[accepted - 1] if n >= start and 1 <= accepted <= len(factors) else 1.0
+        out[n] = {
+            "teams_accepted": accepted,
+            "teams_answered": r.get("answered"),
+            "factor": float(official) if official not in (None, "") else None,
+            "factor_preview": preview if n >= start else None,
+            "round_status": r.get("status"),
+        }
+    return out
+
+
+def shape_rounds(me: dict, everyone: dict | None = None) -> list[dict]:
+    factors = round_factors(everyone or {})
     rows = []
     for r in me.get("requests", []):
         sent, answered = _parse_ts(r.get("sent_at")), _parse_ts(r.get("answered_at"))
@@ -177,7 +198,11 @@ def shape_rounds(me: dict) -> list[dict]:
             lost.append(f"slow answer ({int(secs)} s): {15 - tp:.1f} time points lost")
         if verdict == "accepted" and r.get("booked") is False:
             lost.append("accepted but not booked in time: no tracking bonus possible")
-        rows.append({**r, "seconds": secs, "time_points": tp, "lost": lost})
+        extra = factors.get(int(r.get("round_no") or 0), {})
+        mult = extra.get("factor") if extra.get("factor") is not None else extra.get("factor_preview")
+        if verdict == "accepted" and mult and mult > 1:
+            lost.insert(0, f"x{mult:g} few-winners bonus ({extra.get('teams_accepted')} teams accepted)")
+        rows.append({**r, **extra, "seconds": secs, "time_points": tp, "lost": lost})
     return rows
 
 
@@ -202,7 +227,8 @@ async def board():
         "rank": me.get("rank"),
         "total": me.get("total"),
         "scores_revealed": me.get("scores_revealed"),
-        "rounds": shape_rounds(me),
+        "rounds": shape_rounds(me, everyone),
+        "few_winners": (everyone.get("rules") or {}).get("few_winners"),
         "bookings": me.get("bookings", []),
         "ranking": everyone.get("ranking", [])[:15],
         "overview": everyone.get("overview", {}),
