@@ -1,0 +1,40 @@
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.eml
+secrets/
+
+# --- runtime data ---
+app.db
+app.db-*
+*.db
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# --- start kit download (re-fetch with scripts) ---
+data/kit/
+start-kit.zip
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- node / ui ---
+node_modules/
+dist/
+.vite/
+
+# --- os / editor ---
+.DS_Store
+.idea/
+.vscode/
