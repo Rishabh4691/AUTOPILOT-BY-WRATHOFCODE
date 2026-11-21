@@ -6,8 +6,21 @@ import httpx
 
 from .config import settings
 
-PRICE_IN = float(os.getenv("LLM_PRICE_IN_PER_M") or 0.05)
-PRICE_OUT = float(os.getenv("LLM_PRICE_OUT_PER_M") or 0.40)
+PRICES = {
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-4.1-nano": (0.10, 0.40),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-5-mini": (0.25, 2.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-6-luna": (0.10, 0.50),
+}
+
+
+def price_per_m(model: str) -> tuple[float, float]:
+    if os.getenv("LLM_PRICE_IN_PER_M") and os.getenv("LLM_PRICE_OUT_PER_M"):
+        return float(os.environ["LLM_PRICE_IN_PER_M"]), float(os.environ["LLM_PRICE_OUT_PER_M"])
+    key = next((k for k in sorted(PRICES, key=len, reverse=True) if model.lower().startswith(k)), None)
+    return PRICES.get(key, (0.40, 1.60))
 
 
 def reasoning_effort(model: str) -> str | None:
@@ -68,7 +81,7 @@ async def chat(messages, max_tokens=450, http: httpx.AsyncClient | None = None, 
         text=text.strip(),
         prompt_tokens=p,
         completion_tokens=c,
-        cost_usd=round(p * PRICE_IN / 1e6 + c * PRICE_OUT / 1e6, 8),
+        cost_usd=round(p * price_per_m(settings.llm_model)[0] / 1e6 + c * price_per_m(settings.llm_model)[1] / 1e6, 8),
         ms=int((time.monotonic() - t0) * 1000),
         model=data.get("model") or settings.llm_model,
     )
