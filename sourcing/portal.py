@@ -364,7 +364,7 @@ async def get_portal_options(
     try:
         lane = await portal.lane(s.origin, s.destination)
     except PortalError as e:
-        return [], [f"portal ports failed: {e}"]
+        return [], [f"portal ports failed: {type(e).__name__}: {e}"]
     if lane is None:
         return [], [f"portal has no lane {s.origin}-{s.destination}: price by email to the airline"]
 

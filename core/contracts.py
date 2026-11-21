@@ -260,6 +260,10 @@ class SourceUnavailable(Exception):
     pass
 
 
+class PortalDown(SourceUnavailable):
+    """The portal answered 503: ask the rate desk instead."""
+
+
 @runtime_checkable
 class MailboxClient(Protocol):
     async def poll(self, since_id: int) -> tuple[list[Mail], int]: ...

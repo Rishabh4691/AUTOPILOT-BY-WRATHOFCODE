@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from core.agents.airline_bids import AirlineBidSource
 from core.agents.attachments import AttachmentReader
 from core.agents.booking import BookingAgent
 from core.agents.classifier import RuleClassifier
@@ -76,6 +77,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
     sender = DirectoryMailSender(client, settings, directory)
     portal = PortalPriceSource(client, settings, lambda: datetime.now(UTC))
     dg = DgGuard(client, settings)
+    portal_source = SourcingPortalPriceSource(settings, lambda: datetime.now(UTC))
     return Orchestrator(
         settings=settings,
         store=store,
@@ -83,7 +85,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         classifier=RuleClassifier(settings, directory),
         extractor=RulesFirstExtractor(RegexRfqExtractor(settings, llm), attachments=dg.texts),
         sources=[
-            SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
+            portal_source,
             SheetPriceSource(),
         ],
         pickup=EmailTruckerPickupSource(
@@ -100,6 +102,9 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         tariffs=TariffIntake(client, settings),
         attachments=AttachmentReader(client),
         review_dir=settings.db_path.parent / "review",
+        bids=AirlineBidSource(
+            directory, sender, portal_source.portal.ports, rate_desk=settings.rate_desk_address
+        ),
     )
 
 
