@@ -187,6 +187,21 @@ PICKUP = re.compile(
     r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|abgehol\w*|hol\w* (?:sie )?(?:die|unsere) ware[^.\n]{0,60}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać|ophal\w*|afhal\w*|opgehaald|recolha|recolher|coleta|coletar)\b",
     re.I,
 )
+PICKUP_INTL = re.compile(
+    r"提货|上门|取货|揽收|卡车|引き取り|引取り|集荷|ピックアップ|トラック|픽업|집하|수거|트럭|"
+    r"استلام|شاحنة|من مستودعنا|من موقعنا|איסוף|משאית|पिकअप|ट्रक|उठाने|รับสินค้า|รถบรรทุก|"
+    r"(?<!\w)(?:забор груза|забрать|заберите|забор с|грузовик\w*|подача машины|παραλαβή|φορτηγό|"
+    r"lấy hàng|xe tải|teslim alma|kamyon\w*|depomuzdan|coleta|recolha|recolher|ophalen|afhalen|"
+    r"upphämtning|afhentning|henting|nouto|vyzvednutí|vyzdvihnutie|ridicare|felvétel\w*|preuzimanje|prevzem|"
+    r"penjemputan|truk)(?!\w)",
+    re.I,
+)
+COUNT_INTL = re.compile(
+    r"(?P<n>\d{1,4})\s*(?:件|个|個|箱|托盘|托|板|ケース|パレット|梱包|개|박스|팔레트|"
+    r"мест[аo]?|шт\.?|паллет\w*|ящик\w*|قطع[ةه]?|طرد|קרטונים|חבילות|κιβώτια|τεμάχια|टुकड़े|पैकेज|"
+    r"ชิ้น|kiện|thùng|parça|koli|palet)",
+    re.I,
+)
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
 # Round 72 (Chinese) lost as too_low: "安排卡车上门提货" was not read as a door pickup. CJK has no
 # word boundaries, so these match anywhere.
@@ -919,7 +934,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     lots = parse_lots(text)
     if lots and lots[1] > 0:
         pieces, gross, wunit = [], lots[1], "kg"
-    door = bool(PICKUP.search(text) or PICKUP_CJK.search(text)) and not (
+    door = bool(PICKUP.search(text) or PICKUP_CJK.search(text) or PICKUP_INTL.search(text)) and not (
         SELF_DELIVERY.search(text) or SELF_DELIVERY_CJK.search(text)
     )
     postcode = find_postcode(text, kit.pickup_zones()) if door else None
@@ -955,7 +970,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
         volume = vols[0] if vols and not pieces else None
     counted = sum(p.count for p in pieces) or sum(
         int(m.group("n")) for m in COUNT_ONLY.finditer(text)
-    )
+    ) or sum(int(m.group("n")) for m in COUNT_INTL.finditer(text))
     if not counted:
         label = re.search(
             r"(?:total )?(?:pieces|pcs|packages|colli|kolli|stück|anzahl)\s*[:=]\s*(\d{1,4})\b",
