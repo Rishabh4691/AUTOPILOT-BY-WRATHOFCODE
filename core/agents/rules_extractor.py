@@ -79,9 +79,9 @@ def site_unknown(body: str, rfq: RFQ) -> bool:
     return True
 
 
-TOTAL_PIECES = re.compile(r"total\s+(?:pieces|pcs|packages|colli)\s*(?:\(\w+\))?\s*[:=]\s*(\d{1,4})\b", re.I)
-TOTAL_GROSS = re.compile(r"total\s+gross\s+weight\s*(?:\(kg\))?\s*[:=]\s*(\d[\d.,]*)", re.I)
-TOTAL_VOLUME = re.compile(r"total\s+volume\s*(?:\(cbm\)|\(m3\)|\(m³\))?\s*[:=]\s*(\d[\d.,]*)", re.I)
+TOTAL_PIECES = re.compile(r"total\s+(?:pieces|pcs|packages|colli)\s*(?:\(\w+\))?\s*[:=|]\s*\|?\s*(\d{1,4})\b", re.I)
+TOTAL_GROSS = re.compile(r"total\s+gross\s+weight\s*(?:\(kg\))?\s*[:=|]\s*\|?\s*(\d[\d.,]*)", re.I)
+TOTAL_VOLUME = re.compile(r"total\s+volume\s*(?:\(cbm\)|\(m3\)|\(m³\))?\s*[:=|]\s*\|?\s*(\d[\d.,]*)", re.I)
 
 
 def _number(text: str) -> Decimal | None:

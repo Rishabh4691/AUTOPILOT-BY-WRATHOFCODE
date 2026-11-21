@@ -16,7 +16,7 @@ BODY_CLASS = re.compile(
     re.I,
 )
 NEGATIVE = re.compile(
-    r"^\s*(no|none|n/?a|n/?r|nr|nein|non|keine?|not (applicable|restricted|dangerous|hazardous|regulated)|"
+    r"^[\s:|=\-]*(no|none|n/?a|n/?r|nr|nein|non|keine?|not (applicable|restricted|dangerous|hazardous|regulated)|"
     r"non[- ]?(dg|dangerous|hazardous|haz|restricted|regulated)|general cargo|unrestricted|nicht (gefährlich|eingeschränkt)|"
     r"kein gefahrgut|ungefährlich|non dangereu\w*|no peligros\w*|non pericolos\w*|niebezpieczn\w* nie|false|-|0)\b",
     re.I,

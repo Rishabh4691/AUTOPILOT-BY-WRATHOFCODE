@@ -109,3 +109,18 @@ def test_rfq_4930_signature_city_without_zone_maps_to_nearest_zone(
     result = extract_module.extract(str(raw["subject"]), str(raw["body"]), str(raw["from"]), "4930")
     assert result.shipment is not None
     assert result.shipment.origin == "MUC"
+
+
+def test_xlsx_pipe_packing_list_round_35() -> None:
+    import mail.dg as dg
+    from core.agents.rules_extractor import TOTAL_GROSS, TOTAL_VOLUME
+
+    sheet = (
+        "Total pieces: | 19\nTotal gross weight (kg): | 1751\n"
+        "Total volume (cbm): | 11.97\nDangerous goods: | Not restricted"
+    )
+    assert TOTAL_GROSS.search(sheet).group(1) == "1751"  # type: ignore[union-attr]
+    assert TOTAL_VOLUME.search(sheet).group(1) == "11.97"  # type: ignore[union-attr]
+    assert not dg.check("", [("s.xlsx", sheet)]).dangerous
+    assert not dg.check("", [("s.xlsx", "Dangerous goods: : Not restricted")]).dangerous
+    assert dg.check("", [("s.xlsx", "Dangerous goods: | UN1263 paint")]).dangerous
