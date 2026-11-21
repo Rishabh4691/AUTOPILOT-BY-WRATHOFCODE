@@ -27,11 +27,22 @@ CITIES = {
 NUM = r"\d+(?:[.,]\d+)?"
 DIMS = re.compile(
     rf"(?:(?P<count>\d+)\s*(?:x|×|\*|pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|colli|kolli|colis|bultos|paletten?|palettes?|paczk\w*|szt\.?|ctns?|skids?|stk\.?|stück|st\.)\s*(?:of|à|a|de|di|zu je|je|@|:|,|-)?\s*)?"
-    rf"(?P<l>{NUM})\s*(?:x|×|\*)\s*(?P<w>{NUM})\s*(?:x|×|\*)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
+    rf"(?P<l>{NUM})\s*(?:x|×|\*|by)\s*(?P<w>{NUM})\s*(?:x|×|\*|by)\s*(?P<h>{NUM})\s*(?P<unit>cm|mm|m|in|inch(?:es)?|\")?"
     rf"(?:[^\n\d]{{0,25}}?(?P<pre>\b(?:each|je|à|chacun|cada|uno|ciascuno|każd\w*)\s*)?(?P<pw>{NUM})\s*(?P<pwu>kgs?|lbs?|pounds?)\s*(?P<each>each|per piece|/\s*pc|je|chacun|cada|ciascuno|każd\w*)?)?",
     re.I,
 )
-WEIGHT = re.compile(rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|lbs?|pounds?)\b", re.I)
+WEIGHT = re.compile(rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b", re.I)
+NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b", re.I)
+GROSS_NEAR = re.compile(r"\b(gross|brutto|bruto|lordo|brut|gesamtgewicht|total weight|poids brut|peso bruto)\b", re.I)
+
+
+def weight_kg(value: Decimal, unit: str) -> tuple[Decimal, str]:
+    u = unit.lower()
+    if u.startswith(("lb", "pound")):
+        return value, "lb"
+    if u in ("t", "ton", "tons", "tonne", "tonnes", "tonnen"):
+        return value * 1000, "kg"
+    return value, "kg"
 TOTAL_HINT = re.compile(r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I)
 FAST = re.compile(r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|urgente?|lo antes posible|más rápido|il più veloce|prima possibile|najszybc\w*|pilne)\b", re.I)
 CHEAP = re.compile(r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b", re.I)
@@ -44,7 +55,14 @@ SELF_DELIVERY = re.compile(
     re.I,
 )
 LOT = re.compile(r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]", re.I)
-VOLUME = re.compile(rf"(?P<v>{NUM})\s*(?:cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi)\b", re.I)
+VOLUME = re.compile(rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft)(?![a-z])", re.I)
+CUFT = Decimal("0.0283168")
+
+
+def volume_cbm_of(m) -> Decimal:
+    u = (m.group("u") or "").lower().replace(" ", "")
+    v = num(m.group("v"))
+    return v * CUFT if u.startswith(("cu", "cubicf", "ft", "cft")) else v
 COUNT_ONLY = re.compile(
     r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?)\b",
     re.I,
@@ -136,14 +154,88 @@ def find_pieces(text: str) -> list[Piece]:
     return out
 
 
+LOT_LINE = re.compile(r"^\s*(?:lot|position|pos\.?|item|partie|teil(?:sendung)?|line)\s*\d+\s*[:)\-.]\s*(?P<rest>.+)$", re.I | re.M)
+BULLET_LINE = re.compile(r"^\s*[-*•]\s*(?P<rest>\d.+)$", re.M)
+EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cada|ciascun\w*|każd\w*|pro stück)"
+TOGETHER = r"(?:together|total|in total|combined|insgesamt|zusammen|gesamt|au total|en total|in totale|łącznie)"
+LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?[a-zäöüéèàçñ]+", re.I)
+LOT_WEIGHT = re.compile(
+    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
+    re.I,
+)
+LOT_VOLUME = re.compile(
+    rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|cft)(?![a-z])",
+    re.I,
+)
+LOT_DIMS = re.compile(
+    rf"(?:(?P<pre>{EACH})\s*)?(?P<l>{NUM})\s*(?:[x×*]|by)\s*(?P<w>{NUM})\s*(?:[x×*]|by)\s*(?P<h>{NUM})\s*(?P<u>cm|mm|m|in|inch(?:es)?)?",
+    re.I,
+)
+
+
+def _to_kg(v: Decimal, unit: str) -> Decimal:
+    value, u = weight_kg(v, unit)
+    return value * Decimal("0.45359237") if u == "lb" else value
+
+
+def _dims_cbm(m) -> Decimal:
+    unit = (m.group("u") or "cm").lower()
+    f = {"mm": Decimal("0.1"), "m": Decimal("100"), "in": Decimal("2.54"), "inch": Decimal("2.54"), "inches": Decimal("2.54")}.get(unit, Decimal("1"))
+    return num(m.group("l")) * f * num(m.group("w")) * f * num(m.group("h")) * f / Decimal("1000000")
+
+
+def parse_lots(text: str) -> tuple[int, Decimal, Decimal] | None:
+    lines = [m.group("rest") for m in LOT_LINE.finditer(text)] or [m.group("rest") for m in BULLET_LINE.finditer(text)]
+    if len(lines) < 2:
+        return None
+    pieces, gross, cbm = 0, Decimal(0), Decimal(0)
+    for line in lines:
+        c = LOT_COUNT.search(line)
+        count = int(c.group(1)) if c else 1
+        before_dims = LOT_DIMS.search(line)
+        if c and before_dims and before_dims.start() <= c.start(1):
+            count = 1
+        weights = [
+            w for w in LOT_WEIGHT.finditer(line)
+            if not NET_NEAR.search(w.group("post")[:8] or "")
+            and not NET_NEAR.search(line[max(0, w.start() - 10) : w.start()])
+            and not re.search(r"\(\s*$", line[: w.start()])
+        ]
+        gross_hits = [
+            w for w in weights
+            if GROSS_NEAR.search(w.group("post") or "") or GROSS_NEAR.search(line[max(0, w.start() - 12) : w.start()])
+        ] or weights
+        if gross_hits:
+            w = gross_hits[0]
+            kg = _to_kg(num(w.group("v")), w.group("u"))
+            each = bool(w.group("pre") and re.fullmatch(EACH, w.group("pre").strip(), re.I)) or bool(re.match(rf"\s*{EACH}", w.group("post") or "", re.I))
+            gross += kg * count if each else kg
+        d = LOT_DIMS.search(line)
+        v = LOT_VOLUME.search(line)
+        if d:
+            together = bool(re.search(rf"{TOGETHER}\s*$", line[: d.start()], re.I))
+            cbm += _dims_cbm(d) * (1 if together else count)
+        elif v:
+            each = bool(v.group("pre") and re.fullmatch(EACH, v.group("pre").strip(), re.I))
+            cbm += volume_cbm_of(v) * (count if each else 1)
+        pieces += count
+    return pieces, gross, cbm
+
+
 def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
     found = []
     for m in WEIGHT.finditer(text):
-        unit = "lb" if m.group("u").lower().startswith(("lb", "pound")) else "kg"
+        value, unit = weight_kg(num(m.group("v")), m.group("u"))
         before = text[max(0, m.start() - 40) : m.start()]
         after = text[m.end() : m.end() + 15]
+        if NET_NEAR.search(before[-14:]) or NET_NEAR.search(after[:8]):
+            continue
         each = re.search(r"each|per piece|/\s*pc|je\b|chacun|cada|ciascuno|każd", after + before[-12:], re.I)
-        found.append((num(m.group("v")), unit, bool(TOTAL_HINT.search(before)), bool(each)))
+        gross = bool(GROSS_NEAR.search(before[-22:]) or GROSS_NEAR.search(after[:10]))
+        found.append((value, unit, bool(TOTAL_HINT.search(before)) or gross, bool(each), gross))
+    explicit = [f for f in found if f[4] and not f[3]]
+    if len(explicit) == 1:
+        return explicit[0][0], explicit[0][1]
     totals = [f for f in found if f[2] and not f[3]]
     if len(totals) > 1 and len(LOT.findall(text)) > 1 and len({f[1] for f in totals}) == 1:
         return sum((f[0] for f in totals), Decimal(0)), totals[0][1]
@@ -224,6 +316,9 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     origin, dest = find_route(text)
     pieces = find_pieces(text)
     gross, wunit = find_gross(text, pieces)
+    lots = parse_lots(text)
+    if lots and lots[1] > 0:
+        pieces, gross, wunit = [], lots[1], "kg"
     door = bool(PICKUP.search(text)) and not SELF_DELIVERY.search(text)
     postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
     zones = kit.pickup_zones()
@@ -231,12 +326,15 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     if door and origin is None and zone:
         origin = zones[zone]["airport"]
 
-    vols = [num(m.group("v")) for m in VOLUME.finditer(text)]
+    vols = [volume_cbm_of(m) for m in VOLUME.finditer(text)]
     if len(vols) > 1 and len(LOT.findall(text)) > 1:
         volume = sum(vols, Decimal(0)) if not pieces else None
     else:
         volume = vols[0] if vols and not pieces else None
     counted = sum(p.count for p in pieces) or sum(int(m.group("n")) for m in COUNT_ONLY.finditer(text))
+    if lots and lots[1] > 0:
+        volume = lots[2] if lots[2] > 0 else volume
+        counted = lots[0]
     missing = [k for k, v in (("origin", origin), ("destination", dest)) if not v]
     if gross is None and not (pieces and all(p.weight is not None for p in pieces)):
         missing.append("gross weight")
