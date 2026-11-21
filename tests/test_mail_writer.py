@@ -80,7 +80,7 @@ async def test_llm_email_has_exactly_one_total_and_real_numbers():
 @pytest.mark.parametrize("bad", [
     GOOD.replace("[TOTAL]", "EUR 999.00"),
     GOOD.replace("[TOTAL], which", "[TOTAL] or maybe [TOTAL], which"),
-    GOOD.replace("[PIECES],", "3 pieces,"),
+    GOOD.replace("[PIECES],", "17 pieces,"),  # a number that is neither ours nor the customer's
     GOOD.replace("Speak soon.", "We are pleased to inform you of this offer."),
     GOOD + " 🚀",
     "- [TOTAL]\n- [REF]",
@@ -415,3 +415,23 @@ def test_check_final_rejects_round_38_glitches() -> None:
     assert "reference misplaced or repeated" in issues
     assert "doubled preposition" in issues
     assert "missing signature" in issues
+
+
+def test_harmless_words_no_longer_force_the_template() -> None:
+    from mail.writer import check_final, problems
+
+    values = {"TOTAL": "EUR 2,782.10", "CARRIER": "Ibisair Cargo", "REF": "WOC-1", "FIRST": "Klaus"}
+    draft = (
+        "Hi [FIRST],\n\n[WARM] For your goods I would go with [CARRIER]. Transit is five days, "
+        "give or take a day, and we can collect within 24 hours.\n\nYour all-in price is [TOTAL]. "
+        "Reply yes and I'll get it booked. Our reference is [REF].\n\nCheers,\nLena Hartmann\n"
+        "WRATHOFCODE Air Freight"
+    )
+    values["WARM"] = "Thanks for the details."
+    customer = "Please collect within 24 hours if you can."
+    assert problems(draft, values, customer) == []
+    body = draft
+    for key, value in values.items():
+        body = body.replace(f"[{key}]", value)
+    assert check_final(body, values) == []
+    assert "says booked" in problems(draft.replace("get it booked", "it is already booked"), values, customer)

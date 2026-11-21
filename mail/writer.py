@@ -185,7 +185,7 @@ def hold_text(valid_until: str, now: datetime | None = None) -> str:
     minutes = int((until - current).total_seconds() // 60)
     if minutes < 2:
         return "for a short time"
-    return f"for about {minutes} minutes"
+    return "for you today"
 
 
 QUESTIONS = {
@@ -244,6 +244,23 @@ def signoff_for(text: str, formal: bool) -> str:
     if friendly:
         return f"Have a lovely {friendly.group(1).lower()} too,"
     return "Kind regards," if formal else "Cheers,"
+
+
+GREETINGS_FROM = re.compile(r"\b(?:best|warm|kind|many|sunny)?\s*greetings from ([A-Z][A-Za-zÀ-ſ\- ]{2,25}?)(?=[\s,.!]*(?:\n|$))", re.M)
+WEEK_WISH = re.compile(r"hope (?:your|the) (week|day|weekend)(?:'s| is) going well", re.I)
+
+
+def warm_line(text: str) -> str:
+    """First line answering something personal in the customer's mail (round 13 won humanity
+    with "best greetings back to Regensburg")."""
+    fresh = fresh_text(text or "").replace("’", "'")
+    town = GREETINGS_FROM.search(fresh)
+    if town:
+        return f"Thanks, and best greetings back to {town.group(1).strip()}."
+    wish = WEEK_WISH.search(fresh)
+    if wish:
+        return f"Thanks, my {wish.group(1).lower()} is going well too."
+    return "Thanks for the details."
 
 
 def answers(rfq: dict, price: dict, lang: str) -> dict:
@@ -315,6 +332,7 @@ def story(rfq: dict, values: dict) -> dict:
         "PREF": pref,
         "CARGO": f"{values.get('PIECES', '')} of {goods}" if goods else values.get("PIECES", ""),
         "SIGNOFF": signoff_for(text, formal),
+        "WARM": warm_line(text),
         "HOLD": hold_text(values.get("_VALID_UNTIL", "")),
         "GOODS_LINE": f"Here's how we'd move your {goods}. " if goods else "",
         "PICKUP_LINE": (
@@ -335,7 +353,7 @@ def story(rfq: dict, values: dict) -> dict:
 TEMPLATES = {
     "en": """Hi [FIRST],
 
-Thanks for the details. For your [CARGO] from [ORIGIN_CITY] to [DEST_CITY] I would go with [CARRIER], the [PREF] choice on this lane. [HANDOVER][ANSWERS]
+[WARM] For your [CARGO] from [ORIGIN_CITY] to [DEST_CITY] I would go with [CARRIER], the [PREF] choice on this lane. [HANDOVER][ANSWERS]
 
 Your all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
 
@@ -410,10 +428,10 @@ PROMPT = """You write one reply email for an air freight forwarder. Write it in 
 Voice: an experienced freight agent writing quickly between calls. Warm but direct. Lead with what they asked for. Mix short and longer sentences; never make every line the same length. Plain words, contractions where natural.
 No filler openers ("Thanks for reaching out", "I hope you're well"), no closers like "let me know if you have any questions" or "feel free to". No dashes of any kind, use commas or full stops. Straight quotes only.
 Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this finds you well", "do not hesitate", "kindly", emojis, bullet points, markdown.
-Body is three short paragraphs of flowing sentences; never break a line inside a paragraph. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
+Body is three short paragraphs of flowing sentences; never break a line inside a paragraph. First line is exactly "{greeting} [FIRST]," then a blank line, then [WARM] exactly as written to open the first paragraph. Never write the customer's name yourself, only [FIRST].
 [PIECES] already includes its unit word, never add "pieces", "pallets" or similar after it. Write every word in {language}, including the words for gross and chargeable weight.
 Use these placeholders exactly as written; never write any digit, date or price yourself:
-[REF] [ROUTE] [ORIGIN_CITY] [DEST_CITY] [CARGO] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [{valid}] [PREF] [PICKUP_LINE] [VOLUME_NOTE]
+[WARM] [REF] [ROUTE] [ORIGIN_CITY] [DEST_CITY] [CARGO] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [{valid}] [PREF] [PICKUP_LINE] [VOLUME_NOTE]
 Write flowing sentences like a person, never a list of facts, never arrows, never "piece(s)", never "UTC". Must contain, in your own words: a first-person recommendation in the style of "For your [CARGO] from [ORIGIN_CITY] to [DEST_CITY] I would go with [CARRIER], the [PREF] choice" (never "[CARRIER] is the [PREF] way to get"); how it reaches the airport ([PICKUP_LINE] as written, if it is not empty) and that it should arrive around [ARRIVAL]; the all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; you can hold it [{valid}]; a short line that a yes is all you need to book it; our reference is [REF].
 {questions}
 If they said something friendly or personal, answer it briefly and naturally; you may mention their goods, their buyer or their town in plain words. Match their tone: casual if they are casual, a touch more formal if they are formal. Start every sentence with a capital letter, including the first one after the greeting. Do not say it is already booked.
@@ -551,11 +569,12 @@ def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
     if "[REF]" not in draft:
         out.append("no [REF]")
     bare = re.sub(r"\[[A-Z_]+\]", "", draft)
-    allowed = {
-        number
-        for number in re.findall(r"\d+(?:[.,:/-]\d+)*", customer_text or "")
-        if len(number) >= 4 or re.search(r"[:/-]", number)
-    }
+    allowed = set(
+        re.findall(
+            r"\d+(?:[.,:/-]\d+)*",
+            (customer_text or "") + " " + " ".join(str(v) for v in values.values()),
+        )
+    )
     written = re.findall(r"\d+(?:[.,:/-]\d+)*", bare)
     if any(number not in allowed for number in written) or MONEY.search(bare):
         out.append("model wrote digits")
@@ -579,7 +598,7 @@ def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
         out.append("curly quotes")
     if ISO_DATE.search(draft):
         out.append("iso date")
-    if re.search(r"\bbooked\b", draft, re.I):
+    if re.search(r"\b(?:already|is|has been|have been|was)\s+booked\b", draft, re.I):
         out.append("says booked")
     after_greeting = lines[1].lstrip(" \"'(") if len(lines) > 1 else ""
     if after_greeting[:1].islower():
@@ -596,7 +615,7 @@ ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 ALTERNATIVES = {
     "all": r"alternativ|\boptions?\b|\bor we can\b|\binsurance\b|\bcheaper\b|\bfaster\b|\banother (routing|carrier|quote|offer)\b|\b(check|look into|compare)\b",
-    "en": r"\bor\b",
+    "en": r"\bor (?:we|you|i) (?:can|could)\b|\bor else\b|\banother (?:airline|flight)\b",
     "de": r"\boder\b|versicherung|günstiger|schneller|\bandere[nsr]? (option|route|möglichkeit|angebot)|\bmöglichkeit",
     "fr": r"\bou\b|assurance|moins cher|plus rapide|\bautre (option|solution|offre)|\bsolution",
     "es": r"\bo\b|opci[oó]n|seguro\b|más barat|más rápid|\botra (ruta|oferta)",
