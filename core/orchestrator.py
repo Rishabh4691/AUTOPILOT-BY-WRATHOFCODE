@@ -77,6 +77,7 @@ class Orchestrator:
     tasks: set[asyncio.Task[None]] = field(default_factory=set)
     booker: Any = None
     tracker: Any = None
+    tariffs: Any = None
 
     @property
     def policy(self) -> TimingPolicy:
@@ -137,6 +138,10 @@ class Orchestrator:
             task.add_done_callback(self.tasks.discard)
         if self.tracker is not None and kind is MailKind.TRACKING:
             task = asyncio.create_task(self.tracker.handle(self, mail), name=f"track-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+        if self.tariffs is not None and kind is MailKind.TARIFF and mail.attachments:
+            task = asyncio.create_task(self.tariffs.handle(self, mail), name=f"tariff-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
         if kind is MailKind.TRUCKER_BID and self.pickup is not None:

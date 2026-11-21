@@ -23,6 +23,7 @@ from core.agents.portal import PortalPriceSource
 from core.agents.rules_extractor import RulesFirstExtractor
 from core.agents.sheets import SheetPriceSource
 from core.agents.sourcing_adapter import SourcingPortalPriceSource
+from core.agents.tariff_intake import TariffIntake, live_store, seed_live_store
 from core.agents.tracking import TrackingAgent
 from core.agents.trucker import EmailTruckerPickupSource
 from core.config import Settings, auth_headers, load_settings
@@ -87,6 +88,7 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
         tracker=TrackingAgent(),
+        tariffs=TariffIntake(client, settings),
     )
 
 
@@ -133,6 +135,12 @@ async def reprocess(orchestrator: Orchestrator) -> None:
 
 
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
+    try:
+        seeded = seed_live_store(live_store())
+        if seeded:
+            log.info("tariffs_seeded", extra={"added": seeded})
+    except Exception:
+        log.exception("tariff_seed_failed")
     store = Store(settings.db_path)
     try:
         async with httpx.AsyncClient(

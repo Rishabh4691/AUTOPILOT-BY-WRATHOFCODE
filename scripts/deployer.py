@@ -35,6 +35,7 @@ def bot_env() -> dict[str, str]:
     env = dict(os.environ)
     env["DRY_RUN"] = "0"
     env["PYTHONUTF8"] = "1"
+    env["TARIFFS_PATH"] = str(ROOT / "data" / "tariffs.live.json")
     return env
 
 
