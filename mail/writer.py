@@ -14,7 +14,9 @@ MONEY = re.compile(r"(?:(?:EUR|USD|GBP|CHF|PLN|€|\$|£)\s?\d[\d.,\s]*\d|\d[\d.
 STIFF = re.compile(
     r"dear sir|madam|we are pleased|i hope this (e-?mail|message|finds)|do not hesitate|please find below|kindly|"
     r"sehr geehrte|wir freuen uns, ihnen|madame, monsieur|nous avons le plaisir|estimad[oa]s? señor|egregi|"
-    r"as an ai|language model",
+    r"as an ai|language model|i hope this|hope you'?re (doing )?well|let me know if you have any|feel free to|"
+    r"thanks for reaching out|we are delighted|delighted to|seamless|pivotal|delve|testament|"
+    r"rest assured|at your earliest convenience|should you have any|please be advised",
     re.I,
 )
 EMOJI = re.compile("[\U0001F300-\U0001FAFF☀-➿⬀-⯿️]")
@@ -188,9 +190,11 @@ Pozdrawiam,
 }
 
 PROMPT = """You write one reply email for an air freight forwarder. Write it in {language}.
-Voice: a friendly, experienced human freight agent writing quickly between calls. Warm, direct, modern. Use contractions where natural.
+Voice: an experienced freight agent writing quickly between calls. Warm but direct. Lead with what they asked for. Mix short and longer sentences; never make every line the same length. Plain words, contractions where natural.
+No filler openers ("Thanks for reaching out", "I hope you're well"), no closers like "let me know if you have any questions" or "feel free to". No dashes of any kind, use commas or full stops. Straight quotes only.
 Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this finds you well", "do not hesitate", "kindly", emojis, bullet points, markdown.
-Body is 6 to 10 short lines. Greet with "{greeting} [FIRST]," on the first line, then a blank line. [PIECES] already includes its unit word.
+Body is 5 to 8 short lines in two or three small paragraphs. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
+[PIECES] already includes its unit word, never add "pieces", "pallets" or similar after it. Write every word in {language}, including the words for gross and chargeable weight.
 Use these placeholders exactly as written; never write any digit or price yourself:
 [REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID]
 Must contain, in your own words: thanks, and that our reference is [REF]; [ROUTE]; [PIECES], [GROSS] gross and [CHARGEABLE] chargeable; [CARRIER], [TRANSIT] and arrival [ARRIVAL]; one all-in price [TOTAL] (exactly once); what it includes: [INCLUDED]; valid until [VALID]; tell them to just reply yes and we'll book it.
@@ -208,15 +212,39 @@ GREETING = {"en": "Hi", "de": "Hallo", "fr": "Bonjour", "es": "Hola", "it": "Cia
 SIGNOFF = {"en": "Cheers,", "de": "Viele Grüße", "fr": "Bien à vous,", "es": "Un saludo,", "it": "Un saluto,", "pl": "Pozdrawiam,"}
 
 
+DASHES = re.compile(r"\s*[\u2014\u2013]\s*")
+QUOTES = str.maketrans({"\u201c": '"', "\u201d": '"', "\u201e": '"', "\u00ab": '"', "\u00bb": '"',
+                        "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2026": "..."})
+
+
+def tidy(text: str) -> str:
+    text = text.translate(QUOTES)
+    text = DASHES.sub(", ", text)
+    return re.sub(r",\s*,", ",", text)
+
+
 def fill(text: str, values: dict) -> str:
     for k, v in values.items():
         text = text.replace(f"[{k}]", v)
     unit = values.get("PIECES", "").split(" ", 1)[-1]
     if unit:
-        text = re.sub(rf"({re.escape(values['PIECES'])})\s+(?:{re.escape(unit)}|pieces?|pcs|kolli|colis|bultos|colli|szt\.?)\b\.?", r"\1", text, flags=re.I)
-    text = re.sub(r" +,", ",", text)
+        extra = r"pieces?|pcs|pallets?|cartons?|boxes|crates?|kolli|stücke?|stk|paletten?|colis|palettes?|bultos|palés|colli|bancali|szt\.?|palet\w*"
+        text = re.sub(rf"({re.escape(values['PIECES'])})(?:\s+(?:{re.escape(unit)}|{extra})\b\.?)+", r"\1", text, flags=re.I)
+    text = tidy(re.sub(r" +,", ",", text))
     text = "\n".join(line.rstrip() for line in text.splitlines())
     return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+GREET_LINE = re.compile(r"^\s*[^\n]{0,40}?,\s*$")
+
+
+def fix_greeting(draft: str, lang: str) -> str:
+    lines = draft.strip().splitlines()
+    if lines and GREET_LINE.match(lines[0]):
+        lines[0] = f"{GREETING.get(lang, 'Hi')} [FIRST],"
+    else:
+        lines = [f"{GREETING.get(lang, 'Hi')} [FIRST],", ""] + lines
+    return "\n".join(lines)
 
 
 def problems(draft: str, values: dict) -> list[str]:
@@ -237,7 +265,7 @@ def problems(draft: str, values: dict) -> list[str]:
     if re.search(r"^\s*[-*•#]", draft, re.M):
         out.append("markdown or bullets")
     lines = [l for l in draft.splitlines() if l.strip()]
-    if not 6 <= len(lines) <= 16:
+    if not 5 <= len(lines) <= 16:
         out.append(f"{len(lines)} lines")
     return out
 
@@ -306,7 +334,7 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(e))
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
-    draft = reply.text.strip().strip("`").strip()
+    draft = fix_greeting(reply.text.strip().strip("`").strip(), lang)
     issues = problems(draft, values)
     body = fill(draft, values)
     if not issues:
