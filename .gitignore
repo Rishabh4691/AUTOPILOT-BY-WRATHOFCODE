@@ -45,3 +45,6 @@ data/STOP
 data/dry.db
 data/tariffs.live.json
 data/pickup_history.jsonl
+data/customers.json
+data/REVIEW_ON
+data/review/

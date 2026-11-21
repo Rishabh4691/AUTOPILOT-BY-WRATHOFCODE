@@ -84,3 +84,17 @@ def test_first_name_is_found_in_every_real_rfq() -> None:
     for rfq_id, name in expected.items():
         raw = load(f"real_rfq_{rfq_id}.json")
         assert find_first_name(str(raw["from"]), str(raw["body"])) == name, rfq_id
+
+
+def test_door_pickup_without_address_uses_customer_memory(tmp_path: Path, monkeypatch) -> None:
+    import mail.extract as extract_module
+
+    monkeypatch.setattr(extract_module, "MEMORY_PATH", tmp_path / "customers.json")
+    first = load("real_rfq_2978.json")
+    extract_module.extract(str(first["subject"]), str(first["body"]), str(first["from"]), "2978")
+    later = load("real_rfq_3638.json")
+    result = extract_module.extract(str(later["subject"]), str(later["body"]), str(later["from"]), "3638")
+    assert result.shipment is not None
+    assert result.shipment.origin == "HAM"
+    assert result.shipment.destination == "SGN"
+    assert result.shipment.pickup_zone == "24"

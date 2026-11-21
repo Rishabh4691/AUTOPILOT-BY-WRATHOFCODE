@@ -1,4 +1,7 @@
+import json
+import os
 import re
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -520,12 +523,44 @@ def find_first_name(sender: str, text: str) -> str:
     return ""
 
 
+FORWARDED = re.compile(r"^\s*(?:(?:re|fw|fwd|aw|wg|tr)\s*:\s*)+", re.I)
+MEMORY_PATH = Path(os.getenv("CUSTOMER_MEMORY_PATH") or Path(__file__).resolve().parents[1] / "data" / "customers.json")
+
+
+def _load_memory() -> dict[str, str]:
+    try:
+        data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
+        return {str(k): str(v) for k, v in data.items()}
+    except (OSError, ValueError):
+        return {}
+
+
+def remember_pickup(sender: str, postcode: str) -> None:
+    key = sender_email(sender)
+    if not key or not re.fullmatch(r"\d{5}", postcode or ""):
+        return
+    memory = _load_memory()
+    if memory.get(key) == postcode:
+        return
+    memory[key] = postcode
+    try:
+        MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        MEMORY_PATH.write_text(json.dumps(memory, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def recall_pickup(sender: str) -> str | None:
+    return _load_memory().get(sender_email(sender))
+
+
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     text = f"{subject}\n{fresh_text(body)}"
     language = lang.detect(fresh_text(body) or subject)
     stated = bool(FAST.search(text) or CHEAP.search(text))
     pref = "fastest" if FAST.search(text) and not CHEAP.search(text) else preference(None)
-    origin, dest = find_route(text)
+    route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
+    origin, dest = find_route(route_text)
     pieces = find_pieces(text)
     gross, wunit = find_gross(text, pieces)
     lots = parse_lots(text)
@@ -535,6 +570,12 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
     zones = kit.pickup_zones()
     zone = postcode[:2] if postcode and postcode[:2] in zones else None
+    if door and zone and postcode:
+        remember_pickup(sender, postcode)
+    elif door and not zone:
+        known = recall_pickup(sender)
+        if known and known[:2] in zones:
+            postcode, zone = known, known[:2]
     if door and zone:
         zone_airport = zones[zone]["airport"]
         explicit = origin is not None and re.search(
