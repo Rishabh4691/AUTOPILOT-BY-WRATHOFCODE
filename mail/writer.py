@@ -91,16 +91,16 @@ INCLUDED = {
 
 
 CITY = {
-    "FRA": "Frankfurt", "MUC": "Munich", "HAM": "Hamburg", "DUS": "Duesseldorf", "CGN": "Cologne",
+    "FRA": "Frankfurt", "MUC": "Munich", "HAM": "Hamburg", "DUS": "Düsseldorf", "CGN": "Cologne",
     "STR": "Stuttgart", "NUE": "Nuremberg", "BER": "Berlin", "HAJ": "Hanover", "LEJ": "Leipzig",
     "ORD": "Chicago", "JFK": "New York", "LAX": "Los Angeles", "MIA": "Miami", "ATL": "Atlanta",
-    "DFW": "Dallas", "YYZ": "Toronto", "MEX": "Mexico City", "GRU": "Sao Paulo", "EZE": "Buenos Aires",
-    "BOG": "Bogota", "LIM": "Lima", "SCL": "Santiago", "DXB": "Dubai", "DOH": "Doha", "RUH": "Riyadh",
+    "DFW": "Dallas", "YYZ": "Toronto", "MEX": "Mexico City", "GRU": "São Paulo", "EZE": "Buenos Aires",
+    "BOG": "Bogotá", "LIM": "Lima", "SCL": "Santiago", "DXB": "Dubai", "DOH": "Doha", "RUH": "Riyadh",
     "TLV": "Tel Aviv", "CAI": "Cairo", "JNB": "Johannesburg", "NBO": "Nairobi", "LOS": "Lagos",
     "DEL": "Delhi", "BOM": "Mumbai", "SIN": "Singapore", "KUL": "Kuala Lumpur", "BKK": "Bangkok",
     "SGN": "Ho Chi Minh City", "HKG": "Hong Kong", "PVG": "Shanghai", "PEK": "Beijing", "ICN": "Seoul",
     "NRT": "Tokyo", "TPE": "Taipei", "MNL": "Manila", "SYD": "Sydney", "MEL": "Melbourne",
-    "ASU": "Asuncion", "KTM": "Kathmandu", "PPT": "Papeete", "TNR": "Antananarivo", "ULN": "Ulaanbaatar",
+    "ASU": "Asunción", "KTM": "Kathmandu", "PPT": "Papeete", "TNR": "Antananarivo", "ULN": "Ulaanbaatar",
 }
 
 

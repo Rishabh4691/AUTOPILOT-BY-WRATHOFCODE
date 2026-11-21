@@ -18,19 +18,6 @@ from core.contracts import RFQ, Mail, PickupPrice
 from core.pricing.weight import volume_cbm
 
 PICKUP_GRACE_S = 8.0
-MAX_PICKUP_HOURS = 24.0
-PICKUP_HOURS = re.compile(
-    r"(?:pick ?up|collection|abholung|enlèvement|recogida|ritiro)\s*(?:time|within|in|zeit|délai|plazo)?\s*[:=]?\s*"
-    r"(?:within\s*)?(\d{1,3}(?:[.,]\d)?)\s*(?:h\b|hours?|hrs?|stunden|heures|horas|ore)",
-    re.I,
-)
-
-
-def pickup_hours(text: str) -> float | None:
-    m = PICKUP_HOURS.search(text or "")
-    return float(m.group(1).replace(",", ".")) if m else None
-
-
 PICKUP_WAIT_S = 50.0
 
 log = logging.getLogger("core.agents.trucker")
@@ -137,6 +124,40 @@ def request_body(rfq: RFQ, zone: str, area: str, airport: str) -> str:
     )
 
 
+PICKUP_TIME = re.compile(
+    r"\b(?:pickup|pick-up|collection|abholung|transit|lead)\s*time\s*[:=]?\s*(\d+(?:[.,]\d+)?)\s*(hours?|hrs?|h|days?|d|stunden|tage?)\b",
+    re.I,
+)
+PRICE_WEIGHT = Decimal("0.5")
+TIME_WEIGHT = Decimal("0.5")
+
+
+def parse_hours(text: str) -> Decimal | None:
+    match = PICKUP_TIME.search(text or "")
+    if not match:
+        return None
+    value = Decimal(match.group(1).replace(",", "."))
+    unit = match.group(2).lower()
+    return value * 24 if unit.startswith(("day", "d", "tag")) and not unit.startswith("dh") else value
+
+
+def best_offer(prices: list[PickupPrice]) -> PickupPrice:
+    pool = [p for p in prices if p.currency == "EUR"] or prices
+    timed = [p for p in pool if p.pickup_hours is not None and p.pickup_hours > 0]
+    if len(timed) != len(pool) or not timed:
+        return min(pool, key=lambda p: p.total)
+    cheapest = min(p.total for p in timed)
+    fastest = min(p.pickup_hours for p in timed if p.pickup_hours is not None)
+    return min(
+        timed,
+        key=lambda p: (
+            PRICE_WEIGHT * p.total / cheapest
+            + TIME_WEIGHT * (p.pickup_hours or fastest) / fastest,
+            p.total,
+        ),
+    )
+
+
 class EmailTruckerPickupSource:
     name = "trucker_email"
 
@@ -152,7 +173,6 @@ class EmailTruckerPickupSource:
         self.now = now
         self.history_path = history_path
         self._asked: dict[int, set[str]] = {}
-        self._hours: dict[tuple[int, str], float | None] = {}
         self._answered: dict[int, set[str]] = {}
         self._first_price_at: dict[int, float] = {}
         self._zones: dict[int, str] = {}
@@ -226,22 +246,21 @@ class EmailTruckerPickupSource:
                 total=parsed[0],
                 currency=parsed[1],
                 received_at=mail.received_at,
+                pickup_hours=parse_hours(mail.body),
             )
         except ValidationError:
             log.info("trucker_offer_invalid", extra={"rfq": rfq_id, "mail": mail.id})
             return
-        hours = pickup_hours(mail.body)
-        self._hours[(rfq_id, price.trucker)] = hours
         self._prices.setdefault(rfq_id, []).append(price)
         self._first_price_at.setdefault(rfq_id, time.monotonic())
-        self.remember(price, rfq_id, hours)
+        self.remember(price, rfq_id)
         log.info("trucker_offer_stored", extra={"rfq": rfq_id, "mail": mail.id})
 
     def all_answered(self, rfq_id: int) -> bool:
         asked = self._asked.get(rfq_id, set())
         return bool(asked) and asked <= self._answered.get(rfq_id, set())
 
-    def remember(self, price: PickupPrice, rfq_id: int, hours: float | None = None) -> None:
+    def remember(self, price: PickupPrice, rfq_id: int) -> None:
         if self.history_path is None:
             return
         zone = self.directory.zone(price.zone)
@@ -252,7 +271,6 @@ class EmailTruckerPickupSource:
             "total": str(price.total),
             "currency": price.currency,
             "rfq": rfq_id,
-            "hours": hours,
             "ts": time.time(),
         }
         try:
@@ -292,7 +310,6 @@ class EmailTruckerPickupSource:
                         "trucker": contact.name,
                         "total": str(parsed[0]),
                         "currency": parsed[1],
-                        "hours": pickup_hours(str(m.get("body", ""))),
                         "rfq": int(ref.group(1)) if ref else None,
                         "ts": time.time(),
                     }
@@ -321,11 +338,7 @@ class EmailTruckerPickupSource:
 
     def estimate(self, rfq: RFQ) -> PickupPrice | None:
         zone_code = (rfq.pickup_zone or "").strip() or self.fallback_zone(rfq)
-        rows = [
-            r
-            for r in self.history()
-            if r.get("currency") == "EUR" and (r.get("hours") or 0) <= MAX_PICKUP_HOURS
-        ]
+        rows = [r for r in self.history() if r.get("currency") == "EUR"]
         same_zone = [Decimal(r["total"]) for r in rows if r.get("zone") == zone_code]
         same_airport = [Decimal(r["total"]) for r in rows if r.get("airport") == rfq.origin]
         pool = same_zone or same_airport
@@ -351,14 +364,4 @@ class EmailTruckerPickupSource:
             waited < PICKUP_GRACE_S or since_rfq < PICKUP_WAIT_S
         ):
             return None
-        fast = [
-            p
-            for p in prices
-            if (getattr(self, "_hours", {}).get((rfq.mail_id, p.trucker)) or 0) <= MAX_PICKUP_HOURS
-        ]
-        if fast and len(fast) < len(prices):
-            log.info(
-                "slow_pickups_skipped",
-                extra={"rfq": rfq.mail_id, "kept": len(fast), "of": len(prices)},
-            )
-        return min(fast or prices, key=lambda p: (p.currency != "EUR", p.total))
+        return best_offer(prices)

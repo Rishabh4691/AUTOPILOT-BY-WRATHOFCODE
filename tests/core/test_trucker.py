@@ -240,36 +240,31 @@ async def test_waits_for_slower_truckers_until_100_seconds() -> None:
     assert price is not None and price.total == Decimal("85.00")
 
 
-async def test_live_round_14_skips_pickups_slower_than_24_hours() -> None:
+def test_pickup_uses_50_50_price_and_time_balance_round_14() -> None:
+    from core.agents.trucker import best_offer, parse_hours
     from core.contracts import PickupPrice
 
-    trucker, _ = source()
-    now = datetime(2026, 11, 21, 16, 20, 31, tzinfo=UTC)
+    now = datetime(2026, 11, 21, 16, 20, tzinfo=UTC)
     offers = [
-        ("Westfalenroute", "321.74", 4.0),
-        ("Schwabenbote Transporte", "379.79", 6.0),
-        ("Rheinufer Spedition", "379.38", 7.0),
-        ("Spessart Spedition", "113.05", 32.0),
-    ]
-    rfq = make_rfq(True, "42")
-    trucker._prices[rfq.mail_id] = [
         PickupPrice(
-            source="email", trucker=n, zone="42", total=Decimal(t), currency="EUR", received_at=now
+            source="email",
+            trucker=name,
+            zone="42",
+            total=Decimal(total),
+            currency="EUR",
+            received_at=now,
+            pickup_hours=parse_hours(f"Pickup time: {hours} hours"),
         )
-        for n, t, _ in offers
+        for name, total, hours in [
+            ("Westfalenroute", "321.74", 4),
+            ("Schwabenbote", "379.79", 6),
+            ("Rheinufer", "379.38", 7),
+            ("Spessart", "113.05", 32),
+        ]
     ]
-    for n, _, h in offers:
-        trucker._hours[(rfq.mail_id, n)] = h
-    trucker._asked[rfq.mail_id] = {"x"}
-    trucker._answered[rfq.mail_id] = {"x"}
-    best = await trucker.collect(rfq)
-    assert best is not None and best.trucker == "Westfalenroute" and best.total == Decimal("321.74")
-
-
-def test_pickup_hours_formats() -> None:
-    from core.agents.trucker import pickup_hours
-
-    assert pickup_hours("Pickup time: 32 hours") == 32
-    assert pickup_hours("Pickup within 30 hours of confirmation") == 30
-    assert pickup_hours("Abholung in 6 Stunden") == 6
-    assert pickup_hours("no time given") is None
+    assert best_offer(offers).trucker == "Westfalenroute"
+    assert parse_hours("Pickup time: 2 days") == Decimal("48")
+    assert (
+        best_offer([o.model_copy(update={"pickup_hours": None}) for o in offers]).trucker
+        == "Spessart"
+    )

@@ -449,7 +449,9 @@ NAME = re.compile(r"[A-ZÀ-ÝĄĆĘŁŃÓŚŹŻ][a-zà-ÿąćęłńóśźż'-]{1
 NOT_A_NAME = re.compile(
     r"\b(gmbh|ag|ltd|llc|inc|bv|sa|srl|spa|sas|sp\. z|co|kg|team|logistics|logistik|freight|cargo|export|"
     r"purchasing|procurement|manager|head|director|department|abteilung|einkauf|medtech|group|company|"
-    r"hi|hello|hey|dear|hallo|bonjour|hola|ciao|buongiorno|thanks|danke|merci|gracias|grazie)\b",
+    r"hi|hello|hey|dear|hallo|bonjour|hola|ciao|buongiorno|thanks|danke|merci|gracias|grazie|"
+    r"cordialement|regards|cheers|best|kind|sincerely|greetings|grüße|gruesse|gruß|viele|beste|mit|"
+    r"freundlichen|saludos|atentamente|saluti|cordiali|distinti|pozdrawiam|pozdrowienia|salutations|bien)\b",
     re.I,
 )
 
@@ -465,8 +467,32 @@ def _person(line: str) -> str:
     return ""
 
 
+HISTORY = re.compile(r"^\s*(?:-{2,}\s*original message|-{2,}\s*ursprüngliche nachricht|from:|von:|sent:|on .{0,80} wrote:|am .{0,80} schrieb|>)", re.I)
+CLOSING = re.compile(
+    r"\b(?:thanks?|thank you|cheers|regards|greetings|grüße|gruesse|gruß|danke|merci|saludos|saluti|pozdrawiam|"
+    r"have a (?:lovely|nice|great|good) (?:day|week|weekend))\b",
+    re.I,
+)
+
+
+def without_history(text: str) -> str:
+    kept = []
+    for line in (text or "").splitlines():
+        if HISTORY.match(line):
+            break
+        kept.append(line)
+    return "\n".join(kept)
+
+
 def find_first_name(sender: str, text: str) -> str:
+    text = without_history(text)
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    closing = [i for i, line in enumerate(lines) if len(line) <= 90 and CLOSING.search(line)]
+    if closing:
+        for line in lines[closing[-1] + 1 : closing[-1] + 3]:
+            name = _person(line)
+            if name:
+                return name
     for i, line in enumerate(lines):
         if SIGNOFF.match(line) and i + 1 < len(lines):
             name = _person(lines[i + 1])

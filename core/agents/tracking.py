@@ -9,6 +9,7 @@ from typing import Any
 from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
 from mail.text import fresh_text, reply_subject
+from mail.writer import capitalize_sentences, place
 
 log = logging.getLogger("core.tracking")
 
@@ -140,19 +141,19 @@ class TrackingAgent:
         if eta:
             depart = (date.fromisoformat(eta[:10]) - timedelta(days=transit)).isoformat()
         customer = (booking.get("customer") or "").split("@")[0].replace("-", " ").title()
-        return ANSWER[language].format(
+        return capitalize_sentences(ANSWER[language].format(
             who=f"the shipment for {customer}"
             if language == "en"
             else f"der Sendung für {customer}",
             status=status_text,
             ref=booking.get("booking_reference") or "pending",
             team=booking.get("team_reference"),
-            route=f"{booking.get('origin')} → {booking.get('destination')}",
+            route=f"{place(str(booking.get('origin')))} to {place(str(booking.get('destination')))}",
             depart=day(depart, language),
             eta=day(eta, language),
             agent=self.agent_name,
             company=self.company,
-        )
+        ))
 
     async def handle(self, orch: Any, mail: Mail) -> None:
         question = f"{mail.subject}\n{fresh_text(mail.body)}"
