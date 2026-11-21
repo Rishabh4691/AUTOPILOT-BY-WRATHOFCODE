@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from decimal import Decimal
 
 import httpx
@@ -31,6 +32,32 @@ def piece_count(rfq: RFQ) -> int:
         if note.startswith("pieces: ") and note[8:].isdigit():
             return int(note[8:])
     return 1
+
+
+GOODS = (
+    re.compile(r"\b(?:pieces?|pcs|cartons?|pallets?|drums?|cases?|boxes|crates?|units?|kolli)\s+of\s+([a-z][a-z \-]{2,40}?)(?=[,.;)]|\s+with\b|\s+weighing\b|\s+at\b|$)", re.I | re.M),
+    re.compile(r"\bfor\s+(?:our|the|some)\s+([a-z][a-z \-]{2,40}?)(?=[?,.;)]|\s+from\b|\s+to\b|$)", re.I | re.M),
+    re.compile(r"\bfor\s+([a-z][a-z \-]{2,40}?)\?", re.I),
+    re.compile(r"\bgoods(?:\s+description)?\s*[:=]\s*([A-Za-z][A-Za-z \-]{2,40})", re.I),
+)
+TOWN = re.compile(r"\b(\d{5})\s*\(?([A-ZÄÖÜ][A-Za-zäöüß\- ]{2,30}?)\)?(?=[,.\n]|\s+Germany|$)")
+
+
+def goods_of(body: str) -> str:
+    for pattern in GOODS:
+        match = pattern.search(body or "")
+        if match:
+            words = match.group(1).strip().lower()
+            if not re.search(r"\b(air|freight|quote|price|option|shipment|cargo)\b", words):
+                return words
+    return ""
+
+
+def pickup_town(body: str, postcode: str | None) -> str:
+    for match in TOWN.finditer(body or ""):
+        if postcode is None or match.group(1) == postcode:
+            return f"{match.group(1)} {match.group(2).strip()}"
+    return ""
 
 
 class HumanEmailWriter:
@@ -89,6 +116,9 @@ class HumanEmailWriter:
             "preference": rfq.preference.value,
             "subject": rfq.subject,
             "customer_text": body,
+            "door_pickup": rfq.door_pickup,
+            "goods": goods_of(body),
+            "pickup_town": pickup_town(body, rfq.pickup_postcode) if rfq.door_pickup else "",
         }
         price = {
             "total": float(total),
@@ -97,6 +127,7 @@ class HumanEmailWriter:
             "transit_days": option.transit_days,
             "valid_until": option.valid_until.isoformat() if option.valid_until else None,
             "includes": self._includes(option, rfq.door_pickup),
+            "ready_date": rfq.ready_date.isoformat() if rfq.ready_date else None,
         }
         email = await write_quote_email(rfq_dict, price)
         usage = None

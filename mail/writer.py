@@ -60,7 +60,11 @@ def arrival_day(price: dict, lang: str, today: date | None = None) -> str:
     if raw:
         d = datetime.fromisoformat(str(raw)[:10]).date()
     else:
-        d = (today or date.today()) + timedelta(days=1 + int(price.get("transit_days") or 0))
+        start = today or date.today()
+        ready = price.get("ready_date")
+        if ready:
+            start = max(start, datetime.fromisoformat(str(ready)[:10]).date())
+        d = start + timedelta(days=1 + int(price.get("transit_days") or 0))
     name = WEEKDAYS.get(lang, WEEKDAYS["en"]).split()[d.weekday()]
     return f"{name} {d.day:02d}.{d.month:02d}" if lang != "en" else f"{name} {d.strftime('%d %b')}"
 
@@ -86,6 +90,25 @@ INCLUDED = {
 }
 
 
+CITY = {
+    "FRA": "Frankfurt", "MUC": "Munich", "HAM": "Hamburg", "DUS": "Duesseldorf", "CGN": "Cologne",
+    "STR": "Stuttgart", "NUE": "Nuremberg", "BER": "Berlin", "HAJ": "Hanover", "LEJ": "Leipzig",
+    "ORD": "Chicago", "JFK": "New York", "LAX": "Los Angeles", "MIA": "Miami", "ATL": "Atlanta",
+    "DFW": "Dallas", "YYZ": "Toronto", "MEX": "Mexico City", "GRU": "Sao Paulo", "EZE": "Buenos Aires",
+    "BOG": "Bogota", "LIM": "Lima", "SCL": "Santiago", "DXB": "Dubai", "DOH": "Doha", "RUH": "Riyadh",
+    "TLV": "Tel Aviv", "CAI": "Cairo", "JNB": "Johannesburg", "NBO": "Nairobi", "LOS": "Lagos",
+    "DEL": "Delhi", "BOM": "Mumbai", "SIN": "Singapore", "KUL": "Kuala Lumpur", "BKK": "Bangkok",
+    "SGN": "Ho Chi Minh City", "HKG": "Hong Kong", "PVG": "Shanghai", "PEK": "Beijing", "ICN": "Seoul",
+    "NRT": "Tokyo", "TPE": "Taipei", "MNL": "Manila", "SYD": "Sydney", "MEL": "Melbourne",
+    "ASU": "Asuncion", "KTM": "Kathmandu", "PPT": "Papeete", "TNR": "Antananarivo", "ULN": "Ulaanbaatar",
+}
+
+
+def place(code: str) -> str:
+    city = CITY.get((code or "").upper())
+    return f"{city} ({code})" if city else str(code)
+
+
 def facts(rfq: dict, price: dict) -> tuple[str, dict]:
     lang = rfq.get("language") if rfq.get("language") in WEEKDAYS else "en"
     names = INCLUDED[lang]
@@ -100,7 +123,7 @@ def facts(rfq: dict, price: dict) -> tuple[str, dict]:
     values = {
         "FIRST": (rfq.get("first_name") or "").strip() or {"de": "zusammen", "fr": "", "es": "", "it": "", "pl": ""}.get(lang, "there"),
         "REF": str(rfq["reference"]),
-        "ROUTE": f"{rfq['origin']} → {rfq['destination']}",
+        "ROUTE": f"{place(rfq['origin'])} to {place(rfq['destination'])}",
         "PIECES": f"{pieces} {unit[0] if pieces == 1 else unit[1]}",
         "GROSS": kg(rfq["gross_kg"], lang),
         "CHARGEABLE": kg(rfq["chargeable_kg"], lang),
@@ -108,21 +131,47 @@ def facts(rfq: dict, price: dict) -> tuple[str, dict]:
         "TRANSIT": transit,
         "ARRIVAL": arrival_day(price, lang),
         "TOTAL": money(price["total"], price["currency"], lang),
-        "INCLUDED": ", ".join(inc),
+        "INCLUDED": ", ".join(inc) if lang != "en" or len(inc) < 2 else ", ".join(inc[:-1]) + " and " + inc[-1],
         "VALID": valid_text(price, lang),
     }
+    values.update(story(rfq, values))
     return lang, values
+
+
+def story(rfq: dict, values: dict) -> dict:
+    goods = str(rfq.get("goods") or "").strip()
+    town = str(rfq.get("pickup_town") or "").strip()
+    origin_city = CITY.get(str(rfq.get("origin") or "").upper(), str(rfq.get("origin") or ""))
+    gross = float(rfq.get("gross_kg") or 0)
+    chargeable = float(rfq.get("chargeable_kg") or 0)
+    pref = "fastest" if str(rfq.get("preference") or "").startswith("fast") else "cheapest"
+    return {
+        "PREF": pref,
+        "GOODS_LINE": f"Here's how we'd move your {goods}. " if goods else "",
+        "PICKUP_LINE": (
+            f" We'll collect it from your site in {town} and truck it to {origin_city} airport first."
+            if rfq.get("door_pickup") and town
+            else " We'll collect it from your site and truck it to the airport first."
+            if rfq.get("door_pickup")
+            else ""
+        ),
+        "VOLUME_NOTE": (
+            f" The airline bills it on {values['CHARGEABLE']} rather than {values['GROSS']} because of the volume."
+            if gross and chargeable > gross * 1.02
+            else ""
+        ),
+    }
 
 
 TEMPLATES = {
     "en": """Hi [FIRST],
 
-thanks for your request, our reference is [REF].
-[ROUTE], [PIECES], [GROSS] gross, [CHARGEABLE] chargeable.
-Best fit is [CARRIER]: [TRANSIT] transit, arriving around [ARRIVAL].
-All-in price: [TOTAL].
-That covers [INCLUDED].
-The rate holds until [VALID]. Just reply yes and we'll book it.
+thanks for getting in touch. [GOODS_LINE]For the [PREF] routing I'd put your [PIECES] ([GROSS]) on [CARRIER] from [ROUTE]. Transit is [TRANSIT], so it should land around [ARRIVAL].[PICKUP_LINE]
+
+Your all-in price is [TOTAL], covering [INCLUDED].[VOLUME_NOTE]
+
+I can hold this rate until [VALID].
+If it works for you, just reply yes and I'll book it straight away. Our reference is [REF].
 
 Cheers,
 {agent}
@@ -196,8 +245,8 @@ Never use: "Dear Sir or Madam", "We are pleased to inform you", "I hope this fin
 Body is 5 to 8 short lines in two or three small paragraphs. First line is exactly "{greeting} [FIRST]," then a blank line. Never write the customer's name yourself, only [FIRST].
 [PIECES] already includes its unit word, never add "pieces", "pallets" or similar after it. Write every word in {language}, including the words for gross and chargeable weight.
 Use these placeholders exactly as written; never write any digit or price yourself:
-[REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID]
-Must contain, in your own words: thanks, and that our reference is [REF]; [ROUTE]; [PIECES], [GROSS] gross and [CHARGEABLE] chargeable; [CARRIER], [TRANSIT] and arrival [ARRIVAL]; one all-in price [TOTAL] (exactly once); what it includes: [INCLUDED]; valid until [VALID]; tell them to just reply yes and we'll book it.
+[REF] [ROUTE] [PIECES] [GROSS] [CHARGEABLE] [CARRIER] [TRANSIT] [ARRIVAL] [TOTAL] [INCLUDED] [VALID] [PREF] [GOODS_LINE] [PICKUP_LINE] [VOLUME_NOTE]
+Write flowing sentences like a person, never a list of facts and never arrows. Must contain, in your own words: a short thanks; [GOODS_LINE] as written; that for the [PREF] routing you'd put their [PIECES] ([GROSS]) on [CARRIER] from [ROUTE]; [TRANSIT] transit and arrival around [ARRIVAL]; [PICKUP_LINE] as written; one all-in price [TOTAL] (exactly once) covering [INCLUDED]; [VOLUME_NOTE] as written; the rate holds until [VALID]; just reply yes and you'll book it; our reference is [REF].
 One reply, one decision: give only this single routing and this single price. Never mention alternatives, other routings, other options, insurance, add-ons, or offering to check, compare or look into anything later. Never write the words "option", "alternatively" or "or".
 The customer asked for the {pref} routing; you may say it is the {pref} one. Customer's message, for tone only:
 ---

@@ -84,3 +84,26 @@ def test_new_rfq(classifier: RuleClassifier) -> None:
 
 def test_newsletter_is_other(classifier: RuleClassifier) -> None:
     assert classifier.classify(fixture_mail("newsletter.json"), NO_THREADS).kind == MailKind.OTHER
+
+
+def test_airline_status_update_is_routed_to_booking() -> None:
+    from datetime import UTC, datetime
+
+    from core.agents.classifier import RuleClassifier
+    from core.agents.directory import load_directory
+    from core.config import load_settings
+    from core.contracts import Mail, MailKind
+
+    settings = load_settings(environ={"FIVEU_API_KEY": "k"})
+    classifier = RuleClassifier(settings, load_directory(Path(__file__).parent / "fixtures" / "kit"))
+    mail = Mail(
+        id=5,
+        sender="fjordline-air-cargo@hackloop.mail",
+        to=settings.our_address,
+        subject="Shipment update",
+        body="Booking reference: BK-L2N8DQPG\nStatus: departed, on the way to KUL\n",
+        in_reply_to=None,
+        references=(),
+        received_at=datetime.now(UTC),
+    )
+    assert classifier.classify(mail, frozenset()).kind is MailKind.BOOKING_CONFIRMATION

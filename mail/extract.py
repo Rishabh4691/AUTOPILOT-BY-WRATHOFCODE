@@ -462,7 +462,7 @@ def find_first_name(sender: str, text: str) -> str:
     )
     if m and _person(m.group(1)):
         return m.group(1)
-    for line in reversed(lines[-4:]):
+    for line in lines[-4:]:
         name = _person(line)
         if name:
             return name

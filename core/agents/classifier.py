@@ -7,6 +7,7 @@ from core.config import Settings
 from core.contracts import Classification, Mail, MailKind
 
 BOOKING_PATTERN = re.compile(r"booking\s+BK-\S+\s+confirmed", re.IGNORECASE)
+STATUS_UPDATE = re.compile(r"\bBK-[A-Za-z0-9]{6,12}\b[\s\S]*^\s*status\s*:", re.IGNORECASE | re.MULTILINE)
 TARIFF_PATTERN = re.compile(r"\b(tariff|rate\s+sheet|valid\s+from)\b", re.IGNORECASE)
 AIRPORT_PAIR_PATTERN = re.compile(r"\b[A-Z]{3}\b.*?\b[A-Z]{3}\b", re.DOTALL)
 REQUEST_WORD_PATTERN = re.compile(
@@ -66,6 +67,10 @@ class RuleClassifier:
         if BOOKING_PATTERN.search(text):
             return Classification(
                 kind=MailKind.BOOKING_CONFIRMATION, reason=f"booking confirmed by {name}"
+            )
+        if STATUS_UPDATE.search(text):
+            return Classification(
+                kind=MailKind.BOOKING_CONFIRMATION, reason=f"booking status update from {name}"
             )
         if TARIFF_PATTERN.search(text) or mail.attachments:
             return Classification(kind=MailKind.TARIFF, reason=f"tariff from {name}")
