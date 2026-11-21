@@ -85,7 +85,7 @@ Every step writes one row to `events` and streams live to the UI, so we can see 
 
 ```bash
 git clone https://github.com/Rishabh4691/WRATHOFCODE.git && cd WRATHOFCODE
-cp .env.example .env                     # team key goes in X_API_KEY
+cp .env.example .env                     # team key goes in FIVEU_API_KEY
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -95,13 +95,16 @@ FAKE_DATA=1 uvicorn api.main:app --port 8000   # same, with demo traffic in fake
 cd ui && npm install && npm run dev      # http://localhost:5173
 ```
 
-Before every push: `./scripts/scan_secrets.sh`
+Tests: `pytest`
+
+Before every push: `./scripts/scan_secrets.sh`. Turn on the hook once per clone with `git config core.hooksPath .githooks` and git will refuse any push that fails the scan. Files uploaded on the GitHub website skip this check, so never upload `.env`-style files there.
 
 ### Control room API
 
 | Endpoint | What it returns |
 |---|---|
 | `GET /api/agents` | One card per agent: light, current task, tasks done, success, avg time, LLM cost, productivity |
+| `GET /api/summary` | Totals for the header: RFQs, quoted, failed, median time, LLM per quote, booked value |
 | `GET /api/rfqs` | Latest RFQs with status and 6-minute deadline |
 | `GET /api/rfqs/{id}` | One RFQ with breakdown, sent email and full event timeline |
 | `POST /api/rfqs/{id}/takeover` | `{"on": true}` takes the controls, `false` hands back. Core must skip sending when `rfqs.human_takeover = 1` |
@@ -109,7 +112,7 @@ Before every push: `./scripts/scan_secrets.sh`
 
 Productivity = 50% success rate + 30% speed (vs. a per-agent target) + 20% low LLM cost (vs. $0.10 per task).
 
-**How to log so the dashboard works:** write one `events` row per step. Use `status` `start` when a task begins, `ok` or `fail` when it ends (with `duration_ms`), and `info` for anything in between. Put the gateway cost of the email call in `llm_cost_usd`. The schema is in `schema.sql`.
+**How to log so the dashboard works:** write one `events` row per step. Use `status` `start` when a task begins, `ok` or `fail` when it ends (with `duration_ms`), and `info` for anything in between. Put the gateway cost of the email call in `llm_cost_usd`. `ts` is Unix seconds (`time.time()`). `success`/`done`/`sent` count as ok and `failed`/`error` count as fail, so small differences won't break the dashboard. The schema is in `schema.sql`. If your code already made the tables, the API adds any missing columns on start.
 
 ## Folder structure
 
@@ -120,7 +123,7 @@ Productivity = 50% success rate + 30% speed (vs. a per-agent target) + 20% low L
 ├── data/      # rate sheets, portal client, bids, booking, tariffs (Aryan)
 ├── api/       # FastAPI + server-sent events over app.db (Rishabh)
 ├── ui/        # React + Vite + Tailwind: Agent Control Room (Rishabh)
-├── tests/     # pytest, mostly pricing
+├── tests/     # pytest: API now, pricing next
 ├── schema.sql # shared app.db tables
 ├── docs/      # battle plan and challenge brief
 └── scripts/   # helper scripts (secret scan, …)
@@ -134,17 +137,19 @@ Shared state: a single SQLite `app.db` (WAL mode) with tables `rfqs` and `events
 _Last updated: Sat 21 Nov 2026_
 
 **Done**
-- [x] Repo, `.gitignore` (no `.env` / `app.db`), secret scanner
+- [x] Repo, `.gitignore` (no `.env`, `env`, `*.db`), secret scanner
 - [x] README and battle plan in `docs/`
 - [x] Folder skeleton, shared `schema.sql`, LLM budget rules
 - [x] Control room API: agents, RFQs, detail, takeover, SSE stream, fake-data mode
 - [x] Control room UI: agent cards, RFQ list with countdown, detail drawer, take over, failure alarm
+- [x] Hardening pass: API-down banner, stream resume, missed-deadline state, operator name, 13 API tests, pre-push secret hook
 
 **In progress**
 - [ ] `mvp_bot.py`: first RFQ priced from sheets and quoted end to end (Amaan)
 - [ ] Mailbox poll + router + reply in thread (Aditi)
 - [ ] Start kit parsed into structured tariffs, portal client (Aryan)
-- [ ] Wire the real bot into `app.db` events (everyone)
+- [ ] Wire the real bot into `data/app.db` events (everyone)
+- [ ] Remove `env.env` (real key) from the repo and get a fresh key before submission
 
 **Next**
 - [ ] Carrier bids + 50/50 price-speed pick

@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+env
+env.*
+*.env
 *.pem
 *.key
 *.eml
