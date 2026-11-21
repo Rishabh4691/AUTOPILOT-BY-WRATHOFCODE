@@ -37,6 +37,13 @@ FAST = re.compile(r"\b(fastest|asap|urgent|express|quickest|as soon as possible|
 CHEAP = re.compile(r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b", re.I)
 PICKUP = re.compile(r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|abholung|abholen|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b", re.I)
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
+SELF_DELIVERY = re.compile(
+    r"\b(?:we(?:'ll| will| shall)? (?:deliver|bring|drop)|deliver(?:ed)? (?:it|them|the (?:cargo|goods|shipment)) "
+    r"(?:to|at) [^.]{0,40}(?:airport|terminal)[^.]{0,15}ourselves|ourselves to the (?:airport|terminal)|"
+    r"selbst (?:an)?liefern|liefern (?:wir )?(?:es |die ware )?selbst|anlieferung durch uns)",
+    re.I,
+)
+LOT = re.compile(r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]", re.I)
 VOLUME = re.compile(rf"(?P<v>{NUM})\s*(?:cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi)\b", re.I)
 COUNT_ONLY = re.compile(
     r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?)\b",
@@ -138,6 +145,8 @@ def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:
         each = re.search(r"each|per piece|/\s*pc|je\b|chacun|cada|ciascuno|każd", after + before[-12:], re.I)
         found.append((num(m.group("v")), unit, bool(TOTAL_HINT.search(before)), bool(each)))
     totals = [f for f in found if f[2] and not f[3]]
+    if len(totals) > 1 and len(LOT.findall(text)) > 1 and len({f[1] for f in totals}) == 1:
+        return sum((f[0] for f in totals), Decimal(0)), totals[0][1]
     if totals:
         return totals[-1][0], totals[-1][1]
     if pieces and all(p.weight is not None for p in pieces):
@@ -215,15 +224,18 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     origin, dest = find_route(text)
     pieces = find_pieces(text)
     gross, wunit = find_gross(text, pieces)
-    door = bool(PICKUP.search(text))
+    door = bool(PICKUP.search(text)) and not SELF_DELIVERY.search(text)
     postcode = next((p for p in POSTCODE.findall(text)), None) if door else None
     zones = kit.pickup_zones()
     zone = postcode[:2] if postcode and postcode[:2] in zones else None
     if door and origin is None and zone:
         origin = zones[zone]["airport"]
 
-    vol = VOLUME.search(text)
-    volume = num(vol.group("v")) if vol and not pieces else None
+    vols = [num(m.group("v")) for m in VOLUME.finditer(text)]
+    if len(vols) > 1 and len(LOT.findall(text)) > 1:
+        volume = sum(vols, Decimal(0)) if not pieces else None
+    else:
+        volume = vols[0] if vols and not pieces else None
     counted = sum(p.count for p in pieces) or sum(int(m.group("n")) for m in COUNT_ONLY.finditer(text))
     missing = [k for k, v in (("origin", origin), ("destination", dest)) if not v]
     if gross is None and not (pieces and all(p.weight is not None for p in pieces)):

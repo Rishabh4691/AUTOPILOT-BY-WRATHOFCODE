@@ -15,7 +15,7 @@ from core.contracts import RFQ, Mail, PickupPrice
 from core.pricing.weight import volume_cbm
 
 PICKUP_GRACE_S = 8.0
-PICKUP_WAIT_S = 100.0
+PICKUP_WAIT_S = 50.0
 
 log = logging.getLogger("core.agents.trucker")
 

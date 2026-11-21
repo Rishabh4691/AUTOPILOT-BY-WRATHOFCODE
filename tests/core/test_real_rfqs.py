@@ -30,3 +30,14 @@ async def test_rfq_432_keeps_full_postcode_for_truckers() -> None:
     body = request_body(rfq, "61", zone.area, zone.airport)
     assert "61018" in body
     assert "10.78" in body
+
+
+async def test_rfq_1639_sums_lots_and_respects_self_delivery() -> None:
+    settings = load_settings(environ={"FIVEU_API_KEY": "k"})
+    extractor = RulesFirstExtractor(RegexRfqExtractor(settings, None))
+    rfq, _ = await extractor.extract(parse_mail(load("real_rfq_1639.json")))
+    assert (rfq.origin, rfq.destination) == ("MUC", "LAX")
+    assert str(rfq.gross_kg) == "998"
+    assert rfq.volume_cbm is not None and str(rfq.volume_cbm) == "2.39"
+    assert rfq.door_pickup is False
+    assert rfq.preference.value == "fastest"
