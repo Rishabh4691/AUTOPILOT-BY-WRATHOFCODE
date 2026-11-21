@@ -16,7 +16,7 @@ from core.agents.classifier import RuleClassifier
 from core.agents.directory import load_directory
 from core.agents.extractor import RegexRfqExtractor
 from core.agents.mailbox import DryRunMailbox, HttpMailboxClient
-from core.agents.portal import PortalPriceSource
+from core.agents.sourcing_adapter import SheetPriceSource, SourcingPortalPriceSource
 from core.agents.trucker import EmailTruckerPickupSource
 from core.agents.writer import LlmEmailWriter
 from core.config import Settings, auth_headers, load_settings
@@ -69,7 +69,10 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         mailbox=mailbox,
         classifier=RuleClassifier(settings, directory),
         extractor=RegexRfqExtractor(settings, llm),
-        sources=[PortalPriceSource(client, settings, lambda: datetime.now(UTC))],
+        sources=[
+            SourcingPortalPriceSource(settings, lambda: datetime.now(UTC)),
+            SheetPriceSource(lambda: datetime.now(UTC)),
+        ],
         pickup=EmailTruckerPickupSource(directory, sender, lambda: datetime.now(UTC)),
         writer=LlmEmailWriter(
             llm,
@@ -122,6 +125,10 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                 sender.cancel()
                 for task in list(orchestrator.tasks):
                     task.cancel()
+                for source in orchestrator.sources:
+                    closer = getattr(source, "aclose", None)
+                    if closer is not None:
+                        await closer()
     finally:
         store.close()
 

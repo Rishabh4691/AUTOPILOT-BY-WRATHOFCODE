@@ -51,3 +51,7 @@ python_version = "3.12"
 mypy_path = "."
 explicit_package_bases = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["sourcing", "sourcing.*"]
+ignore_errors = true
