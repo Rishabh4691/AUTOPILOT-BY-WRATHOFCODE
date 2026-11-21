@@ -219,7 +219,7 @@ def parse_lots(text: str) -> tuple[int, Decimal, Decimal] | None:
             each = bool(v.group("pre") and re.fullmatch(EACH, v.group("pre").strip(), re.I))
             cbm += volume_cbm_of(v) * (count if each else 1)
         pieces += count
-    return pieces, gross, cbm
+    return pieces, gross, cbm.quantize(Decimal("0.001"))
 
 
 def find_gross(text: str, pieces: list[Piece]) -> tuple[Decimal | None, str]:

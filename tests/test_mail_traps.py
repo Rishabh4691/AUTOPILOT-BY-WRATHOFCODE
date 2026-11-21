@@ -36,7 +36,7 @@ ROUND_9 = (
 def test_live_round_9_lots_each_together_and_net_decoys():
     x = run(ROUND_9)
     assert x.gross_kg == 1952
-    assert x.shipment.volume_cbm == pytest.approx(Decimal("4.6768"))
+    assert x.shipment.volume_cbm == Decimal("4.677")
     assert x.chargeable_kg == 1952
     assert x.pieces == 13
     assert (x.shipment.origin, x.shipment.destination, x.shipment.pickup_zone) == ("FRA", "LOS", "36")
