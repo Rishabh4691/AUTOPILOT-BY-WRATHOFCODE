@@ -86,3 +86,24 @@ async def test_html_table_with_weight_each():
     assert sum(p.count for p in rfq.pieces) == 3
     assert rfq.gross_kg == Decimal("37.5")
     assert rfq.door_pickup and rfq.pickup_zone == "80"
+
+
+@needs_kit
+async def test_volume_in_cbm_and_count_without_dims():
+    from core.agents.human_writer import piece_count
+    from core.agents.sheets import to_shipment
+    from sourcing.weights import chargeable_weight_kg
+
+    body = (
+        "Could you quote an all-in price in EUR for the fastest air freight option to ORD? "
+        "Please arrange trucking from our site in 51447 Bergisch Gladbach to the departure airport.\n\n"
+        "It's 12 pieces of printed marketing material, 676 kg gross and 5.79 cbm.\n\nSara"
+    )
+    rfq, usage = await RulesFirstExtractor(Fallback()).extract(
+        mail(body, "Fastest air freight to ORD")
+    )
+    assert usage is None
+    assert rfq.destination == "ORD" and rfq.door_pickup and rfq.pickup_zone == "51"
+    assert rfq.volume_cbm == Decimal("5.79")
+    assert chargeable_weight_kg(to_shipment(rfq)) == Decimal("967.0")
+    assert piece_count(rfq) == 12

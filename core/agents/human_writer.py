@@ -23,6 +23,16 @@ INCLUDES = {
 }
 
 
+def piece_count(rfq: RFQ) -> int:
+    counted = sum(p.count for p in rfq.pieces)
+    if counted:
+        return counted
+    for note in rfq.notes:
+        if note.startswith("pieces: ") and note[8:].isdigit():
+            return int(note[8:])
+    return 1
+
+
 class HumanEmailWriter:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
@@ -73,7 +83,7 @@ class HumanEmailWriter:
             "language": lang.detect(fresh_text(body) or rfq.subject),
             "origin": rfq.origin,
             "destination": rfq.destination,
-            "pieces": sum(p.count for p in rfq.pieces) or 1,
+            "pieces": piece_count(rfq),
             "gross_kg": float(rfq.gross_kg),
             "chargeable_kg": float(self._chargeable(rfq, option)),
             "preference": rfq.preference.value,

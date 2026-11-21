@@ -28,6 +28,8 @@ def to_rfq(mail: Mail, x) -> RFQ:
             )
         )
     notes = tuple(x.problems) + (() if x.preference_stated else (ASSUMED,))
+    if not pieces and x.pieces:
+        notes += (f"pieces: {x.pieces}",)
     return RFQ(
         mail_id=mail.id,
         thread_root_id=mail.thread_root_id,

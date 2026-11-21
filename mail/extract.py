@@ -34,8 +34,13 @@ WEIGHT = re.compile(rf"(?P<v>\d{{1,3}}(?:[ ,.]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P
 TOTAL_HINT = re.compile(r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I)
 FAST = re.compile(r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|urgente?|lo antes posible|más rápido|il più veloce|prima possibile|najszybc\w*|pilne)\b", re.I)
 CHEAP = re.compile(r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins cher|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b", re.I)
-PICKUP = re.compile(r"\b(pick ?up|collect(ion)? from|door|abholung|abholen|ab werk|enlèvement|ramassage|recogida|recoger|ritiro|odbiór|odebrać)\b", re.I)
+PICKUP = re.compile(r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|abholung|abholen|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b", re.I)
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
+VOLUME = re.compile(rf"(?P<v>{NUM})\s*(?:cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi)\b", re.I)
+COUNT_ONLY = re.compile(
+    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?)\b",
+    re.I,
+)
 LITHIUM = re.compile(r"UN\s?3480|lithium[- ]ion batter(y|ies) (packed )?alone", re.I)
 SIGNOFF = re.compile(
     r"^(thanks?|thank you|cheers|best|best regards|kind regards|regards|many thanks|viele grüße|beste grüße|mit freundlichen grüßen|grüße|danke|gruß|"
@@ -181,6 +186,9 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     if door and origin is None and zone:
         origin = zones[zone]["airport"]
 
+    vol = VOLUME.search(text)
+    volume = num(vol.group("v")) if vol and not pieces else None
+    counted = sum(p.count for p in pieces) or sum(int(m.group("n")) for m in COUNT_ONLY.finditer(text))
     missing = [k for k, v in (("origin", origin), ("destination", dest)) if not v]
     if gross is None and not (pieces and all(p.weight is not None for p in pieces)):
         missing.append("gross weight")
@@ -190,13 +198,14 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     if not missing:
         shipment = Shipment(
             rfq_id=rfq_id, origin=origin, destination=dest, pieces=pieces, gross_weight=gross, weight_unit=wunit,
+            volume_cbm=volume,
             preference=pref, door_pickup=door, pickup_zone=zone, pickup_postcode=postcode,
             lithium_un3480=bool(LITHIUM.search(text)),
         )
         gross_kg = float(gross_weight_kg(shipment))
         charge = float(chargeable_weight_kg(shipment))
         problems = sanity_problems(shipment)
-        if not pieces:
+        if not pieces and volume is None:
             problems.append("no dimensions given, chargeable = gross")
         if door and not zone:
             problems.append("door pickup asked but no pickup zone found")
@@ -210,5 +219,5 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
         problems=problems,
         gross_kg=gross_kg,
         chargeable_kg=charge,
-        pieces=sum(p.count for p in pieces) or (1 if gross else 0),
+        pieces=counted or (1 if gross else 0),
     )
