@@ -62,7 +62,7 @@ export default function App() {
 
   const live = useStream(
     (e) => {
-      if (['fail', 'failed', 'error'].includes(String(e.status).toLowerCase())) setAlarm(e)
+      if (['fail', 'failed', 'error', 'hold'].includes(String(e.status).toLowerCase())) setAlarm(e)
       clearTimeout(timer.current)
       timer.current = setTimeout(load, 300)
     },

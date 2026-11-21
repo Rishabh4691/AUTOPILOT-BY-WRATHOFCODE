@@ -11,7 +11,7 @@ AGENTS = {
 }
 MAX_COST_PER_TASK = 0.10
 OK = ("ok", "success", "done", "sent")
-FAIL = ("fail", "failed", "error")
+FAIL = ("fail", "failed", "error", "hold")
 RECENT_S = 900
 BUSY_S = 360
 
