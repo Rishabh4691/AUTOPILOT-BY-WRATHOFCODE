@@ -176,15 +176,15 @@ TOTAL_HINT = re.compile(
     r"total|gross|gesamt|brutto|poids|peso|waga|łącz|totale|in total|insgesamt", re.I
 )
 FAST = re.compile(
-    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|najszybsz\w*|pilne|pilnie|time[- ]critical|soonest)\b",
+    r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|najszybsz\w*|pilne|pilnie|time[- ]critical|soonest|snelst\w*|zo snel mogelijk|spoed\w*|mais r[áa]pid\w*|o mais r[áa]pido|o quanto antes)\b",
     re.I,
 )
 CHEAP = re.compile(
-    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins ch[eè]re?s?|más barat\w*|económic\w*|più economic\w*|najtańsz\w*)\b",
+    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins ch[eè]re?s?|más barat\w*|económic\w*|più economic\w*|najtańsz\w*|goedkoopst\w*|zo goedkoop mogelijk|mais barat\w*|o mais barato)\b",
     re.I,
 )
 PICKUP = re.compile(
-    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|abgehol\w*|hol\w* (?:die|unsere) ware[^.\n]{0,30}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać)\b",
+    r"\b(pick ?up|collect(ion)? from|door|truck(ing)? (from|to the)|from our (site|warehouse|factory|premises)|ready for collection|abhol\w*|abgehol\w*|hol\w* (?:sie )?(?:die|unsere) ware[^.\n]{0,60}\bab|ab werk|vorlauf|enlèvement|ramassage|camionnage|recogida|recoger|ritiro|odbiór|odebrać|ophal\w*|afhal\w*|opgehaald|recolha|recolher|coleta|coletar)\b",
     re.I,
 )
 POSTCODE = re.compile(r"\b(?:D-?)?(\d{5})\b")
@@ -210,11 +210,11 @@ def volume_cbm_of(m) -> Decimal:
 
 
 COUNT_ONLY = re.compile(
-    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?)\b",
+    r"\b(?P<n>\d{1,4})\s*(?:x\s*)?(?:pcs?\.?|pieces?|pallets?|cartons?|boxes|crates?|packages?|parcels?|colli|kolli|colis|bultos|paletten?|palettes?|palety|palet\w*|bancali|cartoni|karton\w*|stk\.?|stück|szt\.?|paczk\w*|ctns?|skids?|cases?|kisten?|caisses?|cajas?|casse|skrzy\w*|drums?|packst(?:ü|ue)ck\w*|stuks|pakketten|volumes|caixas|paletes)\b",
     re.I,
 )
-READY_KW = r"(?:ready|pick-?up|collected|available|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*)"
-READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})[./](\d{1,2})[./](\d{4}))"
+READY_KW = r"(?:ready|pick-?up|collected|available|\w*bereit|disponible|list[oa]s?|pront\w+|gotow\w*|prêt\w*|klaar|gereed)"
+READY_DATE = r"(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2})[./-](\d{1,2})[./-](\d{4}))"  # 26-11-2026 (NL) too
 READY = re.compile(rf"\b{READY_KW}\D{{0,40}}?{READY_DATE}", re.I)
 READY_AFTER = re.compile(rf"{READY_DATE}[^\d\n]{{0,25}}?\b{READY_KW}", re.I)
 SELF_DROP_DATE = re.compile(
@@ -891,6 +891,8 @@ def without_injections(text: str) -> str:
 
 def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     body = without_injections((body or "").replace("’", "'").replace("‘", "'"))
+    # French/Swiss thousands use narrow or no-break spaces ("1\u202f225 kg" was read as 225 kg).
+    body = body.replace("\u202f", " ").replace("\u00a0", " ").replace("\u2009", " ")
     subject = (subject or "").replace("’", "'")
     # "FW: ..." with "please quote the request below": the request is the forwarded mail.
     forwarded = request_text(subject, body)
