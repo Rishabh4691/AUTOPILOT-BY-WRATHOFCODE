@@ -3,6 +3,7 @@ import { get, mmss, money, useNow, useOperator, useStream } from './api'
 import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
+import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
   const booked = s?.booked?.length ? s.booked.map((b) => money(b.total, b.currency)).join(' + ') : '—'
@@ -27,7 +28,7 @@ function Summary({ s }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('agents')
+  const [tab, setTab] = useState('board')
   const [agents, setAgents] = useState([])
   const [rfqs, setRfqs] = useState([])
   const [sum, setSum] = useState(null)
@@ -75,6 +76,7 @@ export default function App() {
   }
 
   const tabs = [
+    ['board', 'Live scoreboard'],
     ['agents', 'Agent Control Room'],
     ['rfqs', `RFQs (${rfqs.length})`],
   ]
@@ -145,7 +147,9 @@ export default function App() {
         ))}
       </nav>
 
-      {tab === 'agents' ? (
+      {tab === 'board' ? (
+        <Scoreboard />
+      ) : tab === 'agents' ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {agents.map((a) => <AgentCard key={a.agent} a={a} now={now} onOpen={show} />)}
         </div>

@@ -6,12 +6,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import httpx
 from pydantic import BaseModel, Field
 
 from . import db as store
 from .stats import agent_cards, summary
 
 WINDOW_S = 360
+BOARD_TTL_S = 8
+_board_cache: dict = {"at": 0.0, "data": None}
 
 
 @asynccontextmanager
@@ -140,3 +143,70 @@ async def stream(last_event_id: str | None = Header(None)):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _parse_ts(value):
+    from datetime import datetime
+
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() if value else None
+
+
+def time_points(seconds):
+    if seconds is None:
+        return 0.0
+    if seconds <= 120:
+        return 15.0
+    if seconds >= 360:
+        return 0.0
+    return round(15 * (360 - seconds) / 240, 2)
+
+
+def shape_rounds(me: dict) -> list[dict]:
+    rows = []
+    for r in me.get("requests", []):
+        sent, answered = _parse_ts(r.get("sent_at")), _parse_ts(r.get("answered_at"))
+        secs = round(answered - sent, 1) if sent and answered else None
+        verdict = r.get("verdict")
+        tp = time_points(secs) if verdict == "accepted" else 0.0
+        lost = []
+        if verdict == "rejected":
+            lost.append(f"rejected ({r.get('reason') or 'unknown'}): whole round lost")
+        elif verdict in ("no answer", "open") and not answered:
+            lost.append("no answer yet" if verdict == "open" else "no answer: whole round lost")
+        if verdict == "accepted" and tp < 15:
+            lost.append(f"slow answer ({int(secs)} s): {15 - tp:.1f} time points lost")
+        if verdict == "accepted" and r.get("booked") is False:
+            lost.append("accepted but not booked in time: no tracking bonus possible")
+        rows.append({**r, "seconds": secs, "time_points": tp, "lost": lost})
+    return rows
+
+
+@app.get("/api/board")
+async def board():
+    import os
+    import time as _t
+
+    if _board_cache["data"] is not None and _t.time() - _board_cache["at"] < BOARD_TTL_S:
+        return _board_cache["data"]
+    key = os.getenv("FIVEU_API_KEY")
+    base = os.getenv("FIVEU_BASE_URL", "https://api.start-hack.5u.ai").rstrip("/")
+    if not key:
+        raise HTTPException(503, "FIVEU_API_KEY missing in .env")
+    async with httpx.AsyncClient(base_url=base, headers={"X-API-Key": key}, timeout=10) as client:
+        me_r, all_r = await asyncio.gather(client.get("/v1/board/me"), client.get("/v1/board"))
+    if me_r.status_code != 200 or all_r.status_code != 200:
+        raise HTTPException(502, f"5U board answered {me_r.status_code}/{all_r.status_code}")
+    me, everyone = me_r.json(), all_r.json()
+    data = {
+        "team": me.get("team"),
+        "rank": me.get("rank"),
+        "total": me.get("total"),
+        "scores_revealed": me.get("scores_revealed"),
+        "rounds": shape_rounds(me),
+        "bookings": me.get("bookings", []),
+        "ranking": everyone.get("ranking", [])[:15],
+        "overview": everyone.get("overview", {}),
+        "fetched_at": _t.time(),
+    }
+    _board_cache.update(at=_t.time(), data=data)
+    return data
