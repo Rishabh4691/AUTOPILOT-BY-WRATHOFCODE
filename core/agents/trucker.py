@@ -145,7 +145,7 @@ def parse_hours(text: str) -> Decimal | None:
 
 
 def pickup_rule() -> str:
-    return (os.getenv("PICKUP_RULE") or "cheapest").strip().lower()
+    return (os.getenv("PICKUP_RULE") or "balanced").strip().lower()
 
 
 def best_offer(prices: list[PickupPrice]) -> PickupPrice:
@@ -153,7 +153,7 @@ def best_offer(prices: list[PickupPrice]) -> PickupPrice:
     if pickup_rule() != "balanced":
         return min(pool, key=lambda p: p.total)
     timed = [p for p in pool if p.pickup_hours is not None and p.pickup_hours > 0]
-    if len(timed) != len(pool) or not timed:
+    if not timed:
         return min(pool, key=lambda p: p.total)
     cheapest = min(p.total for p in timed)
     fastest = min(p.pickup_hours for p in timed if p.pickup_hours is not None)

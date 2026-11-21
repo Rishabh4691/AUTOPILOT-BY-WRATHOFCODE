@@ -274,7 +274,7 @@ def test_pickup_uses_50_50_price_and_time_balance_round_14(
     )
 
 
-def test_default_pickup_rule_is_cheapest_round_15() -> None:
+def test_default_pickup_rule_is_balanced_round_15() -> None:
     from core.agents.trucker import best_offer
     from core.contracts import PickupPrice
 
@@ -296,4 +296,4 @@ def test_default_pickup_rule_is_cheapest_round_15() -> None:
             ("Flinkwagen", "241.96", 6),
         ]
     ]
-    assert best_offer(offers).trucker == "Elbkante"
+    assert best_offer(offers).trucker == "Neckarstrom"
