@@ -1,0 +1,85 @@
+{
+ "17573": {
+  "id": 17573,
+  "from": "hofmann-textilwerk@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Request for quotation from Hofmann Textilwerk KG",
+  "body": "Hello,\n\nplease find our request for an air freight quotation attached, as a Word document (quotation-request.docx). It has all details of the shipment.\n\nPlease reply by mail with your all-in price in EUR.\n\nThanks a lot and have a lovely day!\nPetra Hofmann\nExport Desk, Hofmann Textilwerk KG",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T21:23:28.354602+00:00",
+  "attachments": [
+   {
+    "id": 235,
+    "filename": "quotation-request.docx",
+    "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "size": 1424
+   }
+  ]
+ },
+ "18361": {
+  "id": 18361,
+  "from": "rheintal-elektronik@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Request for quotation from Rheintal Elektronik GmbH",
+  "body": "Hello,\n\nplease find our request for an air freight quotation attached, as a text file (quotation-request.txt). It has all details of the shipment.\n\nPlease reply by mail with your all-in price in EUR.\n\nViele Gruesse / Many greetings\nDeniz Yilmaz\nRheintal Elektronik GmbH",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T21:35:39.011545+00:00",
+  "attachments": [
+   {
+    "id": 370,
+    "filename": "quotation-request.txt",
+    "content_type": "text/plain",
+    "size": 594
+   }
+  ]
+ },
+ "18684": {
+  "id": 18684,
+  "from": "auer-maschinenbau@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Request for quotation from Auer Maschinenbau GmbH",
+  "body": "Hello,\n\nplease find our request for an air freight quotation attached, as a PDF file (quotation-request.pdf). It has all details of the shipment.\n\nPlease reply by mail with your all-in price in EUR.\n\nBest greetings from Regensburg\nTobias Auer\nVersand / Shipping\nAuer Maschinenbau GmbH",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T21:41:43.305805+00:00",
+  "attachments": [
+   {
+    "id": 442,
+    "filename": "quotation-request.pdf",
+    "content_type": "application/pdf",
+    "size": 1660
+   }
+  ]
+ },
+ "20161": {
+  "id": 20161,
+  "from": "hofmann-textilwerk@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "空运询价：Cologne → LIM",
+  "body": "您好，\n\n希望您这周过得顺利！想请您帮忙看看一票发往 LIM（Lima, PE）的空运。这票货我们想走最便宜的方案。\n\n货物是汽车传感器，共 11 件，毛重 704 kg，体积 3.08 cbm。2026-11-23 可以提货，提货地点是我们在 Cologne, Germany 的场地，邮编 50978。麻烦您安排卡车上门提货并送到机场。\n\n能否请您报一个包含上门提货和空运的 EUR 全包价？谢谢！\n\nThanks a lot and have a lovely day!\nPetra Hofmann\nExport Desk, Hofmann Textilwerk KG",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T22:12:11.637998+00:00",
+  "attachments": []
+ },
+ "21129": {
+  "id": 21129,
+  "from": "lindqvist-medtech@hackloop.mail",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "Request for quotation from Lindqvist Medtech GmbH",
+  "body": "Hello,\n\nplease find our request for an air freight quotation attached, as a PDF file (quotation-request.pdf). It has all details of the shipment.\n\nPlease reply by mail with your all-in price in EUR.\n\nSara\nLindqvist Medtech",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T22:30:24.774510+00:00",
+  "attachments": [
+   {
+    "id": 651,
+    "filename": "quotation-request.pdf",
+    "content_type": "application/pdf",
+    "size": 1467
+   }
+  ]
+ }
+}
