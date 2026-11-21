@@ -79,10 +79,68 @@ def site_unknown(body: str, rfq: RFQ) -> bool:
     return True
 
 
+TOTAL_PIECES = re.compile(r"total\s+(?:pieces|pcs|packages|colli)\s*(?:\(\w+\))?\s*[:=]\s*(\d{1,4})\b", re.I)
+TOTAL_GROSS = re.compile(r"total\s+gross\s+weight\s*(?:\(kg\))?\s*[:=]\s*(\d[\d.,]*)", re.I)
+TOTAL_VOLUME = re.compile(r"total\s+volume\s*(?:\(cbm\)|\(m3\)|\(m³\))?\s*[:=]\s*(\d[\d.,]*)", re.I)
+
+
+def _number(text: str) -> Decimal | None:
+    raw = text.strip().rstrip(".")
+    if "," in raw and "." not in raw:
+        raw = raw.replace(",", ".")
+    else:
+        raw = raw.replace(",", "")
+    try:
+        value = Decimal(raw)
+    except Exception:
+        return None
+    return value if value > 0 else None
+
+
+def document_totals(text: str) -> dict:
+    """Totals a packing specification or SLI states ("Total volume (cbm): 1.92")."""
+    found: dict = {}
+    if m := TOTAL_PIECES.search(text):
+        found["pieces"] = int(m.group(1))
+    if (m := TOTAL_GROSS.search(text)) and (v := _number(m.group(1))):
+        found["gross_kg"] = v
+    if (m := TOTAL_VOLUME.search(text)) and (v := _number(m.group(1))):
+        found["volume_cbm"] = v
+    return found
+
+
 class RulesFirstExtractor:
     def __init__(self, fallback: RfqExtractor, attachments=None) -> None:
         self.fallback = fallback
         self.attachments = attachments
+
+    async def attachment_totals(self, mail: Mail, rfq: RFQ) -> RFQ:
+        """The customer's packing document wins over the mail text.
+
+        Round 33: the mail said 120 x 40 x 116 cm and 2.78 cbm, the attached packing
+        specification said 1.92 cbm, and the customer confirmed the document was right.
+        """
+        try:
+            texts = await self.attachments(mail)
+        except Exception as error:
+            log.warning("attachment_totals_failed", extra={"rfq": mail.id, "error": type(error).__name__})
+            return rfq
+        totals = document_totals("\n".join(t for _, t in texts if t))
+        if "volume_cbm" not in totals and "gross_kg" not in totals:
+            return rfq
+        update: dict = {}
+        if "gross_kg" in totals and totals["gross_kg"] != rfq.gross_kg:
+            update["gross_kg"] = totals["gross_kg"]
+        if "volume_cbm" in totals:
+            update["volume_cbm"] = totals["volume_cbm"]
+            update["pieces"] = ()  # the stated total volume replaces per-piece dimensions
+        if "pieces" in totals:
+            notes = tuple(n for n in rfq.notes if not n.startswith("pieces: "))
+            update["notes"] = (*notes, f"pieces: {totals['pieces']}")
+        if update:
+            log.info("attachment_totals_used", extra={"rfq": mail.id, "totals": {k: str(v) for k, v in totals.items()}})
+            rfq = rfq.model_copy(update=update)
+        return rfq
 
     async def extract(self, mail: Mail) -> tuple[RFQ, LlmUsage | None]:
         try:
@@ -102,6 +160,8 @@ class RulesFirstExtractor:
                         x = y
             if x.shipment is not None:
                 rfq = to_rfq(mail, x)
+                if mail.attachments and self.attachments:
+                    rfq = await self.attachment_totals(mail, rfq)
                 if site_unknown(body, rfq):
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, SITE_UNKNOWN)})
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})

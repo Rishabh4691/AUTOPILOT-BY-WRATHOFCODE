@@ -791,6 +791,24 @@ NEAREST_ZONE = {
 }
 
 
+EACH_DIMS = re.compile(
+    r"\b(?:each|every|per)\s+(?:piece|pallet|carton|box|crate|case|package|unit|colli?)?\s*"
+    r"(?:measures|is|has|:|=|with dimensions(?: of)?)?|\b(?:dimensions|dims|size)\s+(?:of\s+)?each\b|"
+    r"\bje\s+(?:stück|palette|karton|packstück)\b",
+    re.I,
+)
+
+
+def each_piece_count(text: str, pieces: list[Piece]) -> list[Piece]:
+    """ "5 pieces ... Each piece measures 120 x 40 x 116 cm" is 5 pieces, not 1 (round 33)."""
+    if len(pieces) != 1 or pieces[0].count != 1 or not EACH_DIMS.search(text):
+        return pieces
+    counts = {int(m.group("n")) for m in COUNT_ONLY.finditer(text)}
+    if len(counts) == 1 and (n := counts.pop()) > 1:
+        return [pieces[0].model_copy(update={"count": n})]
+    return pieces
+
+
 def learn_pickups(mails: list[dict]) -> int:
     """Fill the customer memory from earlier mails (each sender's last pickup postcode).
 
@@ -828,6 +846,7 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
     origin, dest = find_route(route_text)
     pieces = labelled_per_piece(text, find_pieces(text))
+    pieces = each_piece_count(text, pieces)
     gross, wunit = find_gross(text, pieces)
     if gross is None and not pieces:
         gross, wunit = each_times_count(text)
