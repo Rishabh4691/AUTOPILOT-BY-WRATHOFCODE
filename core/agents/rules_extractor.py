@@ -39,6 +39,10 @@ def to_rfq(mail: Mail, x) -> RFQ:
         notes += ("UN3480",)
     if s.door_pickup and s.pickup_postcode:
         notes += (f"postcode: {s.pickup_postcode}",)
+    from mail.multilot import lots  # roadmap section 18: several shipments in one request
+
+    if (count := lots(mail.body)) > 1:
+        notes += (f"multi_lot: {count}",)
     return RFQ(
         mail_id=mail.id,
         thread_root_id=mail.thread_root_id,

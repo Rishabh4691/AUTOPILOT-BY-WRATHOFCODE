@@ -178,7 +178,9 @@ def is_acceptance(body: str) -> bool:
     text = fresh_text(body).lower()
     yes = hits(ACCEPT, text) + len(ACCEPT_INTL.findall(text))
     no = hits(DECLINE, text) + len(DECLINE_INTL.findall(text))
-    return yes > 0 and yes > no
+    from mail.multilot import partial_acceptance  # "book lot A only, hold B" is not a yes to all
+
+    return yes > 0 and yes > no and not partial_acceptance(fresh_text(body))
 
 
 def quote_from_mail(body: str, airlines: list[str]) -> tuple[str, str, str] | None:
