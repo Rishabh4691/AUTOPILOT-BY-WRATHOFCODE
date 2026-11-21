@@ -131,3 +131,13 @@ def test_live_round_33_not_restricted_is_not_dg():
 def test_polish_french_spanish_italian_dg_negations(line):
     assert not check(f"3 pallets of tools\n{line}", []).dangerous
     assert check("Towary niebezpieczne: UN3481, klasa 9", []).dangerous
+
+
+@_pytest.mark.parametrize("line", ["Non-DG lithium batteries, 3 cartons.", "Non-hazardous aerosol cans", "Not dangerous goods: lithium-ion batteries"])
+def test_a_non_dg_claim_does_not_clear_lithium_or_aerosols(line):
+    assert check(line, []).dangerous
+
+
+@_pytest.mark.parametrize("line", ["non-hazardous paints", "No lithium batteries inside.", "without lithium batteries", "non-flammable adhesive"])
+def test_negated_goods_stay_not_dangerous(line):
+    assert not check(line, []).dangerous

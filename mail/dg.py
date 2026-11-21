@@ -48,10 +48,25 @@ ABSENT_AFTER = re.compile(r"[\s\w-]{0,15}?(?:content|contained|inside|batteries)
 DG_CONTEXT = re.compile(r"dangerous|hazard|\bDG\b|gefahrgut|flammable|entzündlich|\bUN\s?\d{4}", re.I)
 
 
+# Goods that are dangerous whatever the customer calls them: "Non-DG lithium batteries" is still DG.
+ALWAYS_DG = re.compile(
+    r"lithium|li-?ion|litio|litowo|a[eé]ro[sz]ol|spray ?can|spraydos|sprühdos|bombolett|dry ice|trockeneis|"
+    r"compressed gas|gas cylinder|fireworks|explosive|petrol|gasoline",
+    re.I,
+)
+STATUS_CLAIM = re.compile(
+    r"\b(?:non|not|kein\w*|nicht)[- ]?(?:dg|dangerous|hazardous|haz|restricted|regulated|gefahrgut|gefährlich)\b"
+    r"(?:\s+(?:goods|cargo|ware))?[\s:,-]*$",
+    re.I,
+)
+
+
 def dg_goods(text: str):
     """First goods keyword that is not negated ("non-flammable", "no lithium batteries")."""
     for m in DG_GOODS.finditer(text or ""):
-        if NEGATED.search(text[max(0, m.start() - 40) : m.start()]):
+        before = text[max(0, m.start() - 40) : m.start()]
+        claim_only = STATUS_CLAIM.search(before) and ALWAYS_DG.match(m.group(0))
+        if NEGATED.search(before) and not claim_only:
             continue
         if ABSENT_AFTER.match(text[m.end() : m.end() + 40]):
             continue
