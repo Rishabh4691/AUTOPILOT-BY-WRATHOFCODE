@@ -39,3 +39,7 @@ fake.db*
 
 data/bot.lock
 env.env
+*.db-shm
+*.db-wal
+data/STOP
+data/dry.db

@@ -1,0 +1,11 @@
+{
+  "id": 102,
+  "from": "buyer@example.com",
+  "to": "wrathofcode@hackloop.mail",
+  "subject": "RFQ air freight FRA-ORD",
+  "body": "Hi team,\nplease quote FRA to ORD, airport to airport.\n3 pieces 100x80x60 cm\nGross weight 410 kg\nCheapest option please.\nBest regards",
+  "in_reply_to": null,
+  "references": [],
+  "received_at": "2026-11-21T14:07:21.768955+00:00",
+  "attachments": []
+}
