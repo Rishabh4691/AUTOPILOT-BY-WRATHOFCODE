@@ -244,7 +244,10 @@ class Orchestrator:
     tariffs: Any = None
     attachments: Any = None
     review_dir: Path | None = None
-    review_deadline_s: float = 60.0
+    # Round 189: a draft that came after 80 s was sent at once with no PDF, before the checker could
+    # hold it. 150 s leaves the checker time to hold an incomplete draft; a matching draft is still
+    # released within seconds. REVIEW_DEADLINE_S overrides it.
+    review_deadline_s: float = float(os.getenv("REVIEW_DEADLINE_S") or 150)
     review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
     bids: Any = None
     claims: Any = None
