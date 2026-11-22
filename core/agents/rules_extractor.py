@@ -227,6 +227,12 @@ class RulesFirstExtractor:
                 if cover is not None:
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, f"insurance_premium: {cover}")})
                     log.info("insurance_requested", extra={"rfq": mail.id, "premium": str(cover)})
+                from mail import extras as extra_charges
+
+                found = await extra_charges.read_extras(full, skip_insurance=cover is not None)
+                if found:
+                    rfq = rfq.model_copy(update={"notes": (*rfq.notes, *extra_charges.notes_for(found))})
+                    log.info("extras_requested", extra={"rfq": mail.id, "extras": [e["label"] for e in found]})
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})

@@ -186,3 +186,17 @@ def test_insurance_premium_is_added_round_91() -> None:
     assert premium("Warenwert 15.000 EUR, bitte Versicherung inklusive, versichert zu 110 %, Prämiensatz 0,35 %.") == Decimal("57.75")
     assert premium("Please quote the cheapest option, 1497 kg and 13.89 cbm.") is None
     assert premium("We do not need insurance. Goods value 5000 EUR.") is None
+
+
+def test_extra_charges_are_added_to_the_total() -> None:
+    from mail import extras
+
+    notes = extras.notes_for([
+        {"label": "export handling fee", "fixed_eur": None, "percent_of_total": Decimal("2.5")},
+        {"label": "documentation fee", "fixed_eur": Decimal("35"), "percent_of_total": None},
+    ])
+    total, labels = extras.apply(Decimal("1000.00"), notes)
+    assert total == Decimal("1060.00")
+    assert labels == ["export handling fee", "documentation fee"]
+    assert not extras.worth_asking("1497 kg gross and 13.89 cbm, cheapest please.")
+    assert extras.worth_asking("please add the 2.5 % handling fee")

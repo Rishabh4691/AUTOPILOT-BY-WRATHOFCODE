@@ -984,6 +984,9 @@ class Orchestrator:
                 converted = convert_money(cover, "EUR", option.currency)
                 cover = converted if converted is not None else cover
             total = to_money(total + cover)
+        from mail import extras as extra_charges
+
+        total, _extra_labels = extra_charges.apply(total, rfq.notes)
         if rfq.currency is not None and rfq.currency != option.currency:
             self.emit(
                 Agent.RFQ,
