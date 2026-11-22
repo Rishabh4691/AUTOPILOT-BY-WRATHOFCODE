@@ -112,9 +112,9 @@ export default function App() {
   const tabs = [
     ['network', t('network')],
     ['shipments', t('shipments')],
-    ['claims', t('claims')],
     ['agents', t('agents')],
     ['rfqs', `${t('rfqs')} (${rfqs.length})`],
+    ['claims', t('claims')],
     ['lessons', t('lessons')],
   ]
 

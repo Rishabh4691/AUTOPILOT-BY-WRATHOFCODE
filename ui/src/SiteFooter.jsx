@@ -13,7 +13,7 @@ const COPY = {
       </>
     ),
     primary: [['See the network', 'network', <Globe2 key="g" />]],
-    secondary: [['Shipments', 'shipments'], ['Lessons', 'lessons'], ['Requests', 'rfqs'], ['Features', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
+    secondary: [['Shipments', 'shipments'], ['Missed leads', 'lessons'], ['Requests', 'rfqs'], ['Features', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack Munich',
     top: 'Back to top',
   },
@@ -25,7 +25,7 @@ const COPY = {
       </>
     ),
     primary: [['Netzwerk ansehen', 'network', <Globe2 key="g" />]],
-    secondary: [['Sendungen', 'shipments'], ['Lektionen', 'lessons'], ['Anfragen', 'rfqs'], ['Funktionen', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
+    secondary: [['Sendungen', 'shipments'], ['Verpasste Leads', 'lessons'], ['Anfragen', 'rfqs'], ['Funktionen', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack München',
     top: 'Nach oben',
   },

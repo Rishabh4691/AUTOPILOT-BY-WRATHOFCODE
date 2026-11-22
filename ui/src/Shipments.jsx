@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { get, money } from './api'
-import { useT } from './prefs'
+import { FileText } from 'lucide-react'
+import Invoice from './Invoice'
+import { useLang, useT } from './prefs'
 
 const day = (v) => (v ? new Date(`${String(v).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { day: '2-digit', month: 'short' }) : '—')
 
-function Table({ rows, t }) {
+function Table({ rows, t, onInvoice, invoiceLabel }) {
   if (!rows.length) return <p className="px-4 py-6 text-sm text-muted">{t('noShipments')}</p>
   return (
     <div className="overflow-x-auto">
@@ -18,6 +20,7 @@ function Table({ rows, t }) {
             <th className="px-4 py-2 text-right">{t('price')}</th>
             <th className="px-4 py-2 text-right">{t('updatesSent')}</th>
             <th className="px-4 py-2">{t('status')}</th>
+            <th className="px-4 py-2"><span className="sr-only">{invoiceLabel}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -40,6 +43,15 @@ function Table({ rows, t }) {
                   {(r.live ? r.status : r.note || r.status) || (r.delivered ? t('delivered') : t('booked'))}
                 </span>
               </td>
+              <td className="px-4 py-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => onInvoice(r)}
+                  className="glass inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[12px] font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5"
+                >
+                  <FileText className="size-3.5" aria-hidden /> {invoiceLabel}
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -50,6 +62,8 @@ function Table({ rows, t }) {
 
 export default function Shipments() {
   const t = useT()
+  const [lang] = useLang()
+  const [invoice, setInvoice] = useState(null)
   const [view, setView] = useState('booked')
   const [data, setData] = useState({ booked: [], delivered: [] })
   const [err, setErr] = useState(null)
@@ -80,7 +94,8 @@ export default function Shipments() {
         </div>
         {err && <span className="text-xs text-rose-300">{err}</span>}
       </header>
-      <Table rows={data[view] ?? []} t={t} />
+      <Table rows={data[view] ?? []} t={t} onInvoice={setInvoice} invoiceLabel={lang === 'de' ? 'Rechnung' : 'Invoice'} />
+      {invoice && <Invoice booking={invoice} onClose={() => setInvoice(null)} />}
     </section>
   )
 }

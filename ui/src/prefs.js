@@ -4,7 +4,7 @@ const WORDS = {
   en: {
     tagline: 'WRATHOFCODE · digital air forwarder',
     overview: 'Overview', board: 'Live scoreboard', network: 'Network', agents: 'Agent Control Room', rfqs: 'RFQs',
-    shipments: 'Shipments', claims: 'Claims', lessons: 'Lessons',
+    shipments: 'Shipments', claims: 'Claims', lessons: 'Missed leads',
     live: 'Live', reconnecting: 'Reconnecting', apiDown: 'API down', demo: 'Demo data',
     dark: 'Dark', light: 'Light', model: 'Writer model', updates: 'Daily updates', on: 'On', off: 'Off',
     booked: 'Booked', delivered: 'Delivered', lane: 'Lane', airline: 'Airline', arrival: 'Arrival',
@@ -20,7 +20,7 @@ const WORDS = {
   de: {
     tagline: 'WRATHOFCODE · digitaler Luftfracht-Spediteur',
     overview: 'Überblick', board: 'Live-Rangliste', network: 'Netzwerk', agents: 'Agenten-Leitstand', rfqs: 'Anfragen',
-    shipments: 'Sendungen', claims: 'Schäden', lessons: 'Lektionen',
+    shipments: 'Sendungen', claims: 'Schäden', lessons: 'Verpasste Leads',
     live: 'Live', reconnecting: 'Verbinde neu', apiDown: 'API nicht erreichbar', demo: 'Demodaten',
     dark: 'Dunkel', light: 'Hell', model: 'Schreib-Modell', updates: 'Tägliche Updates', on: 'An', off: 'Aus',
     booked: 'Gebucht', delivered: 'Zugestellt', lane: 'Strecke', airline: 'Airline', arrival: 'Ankunft',

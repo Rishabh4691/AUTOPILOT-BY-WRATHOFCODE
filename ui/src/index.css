@@ -296,3 +296,13 @@ button, [role="button"], a[href], summary { cursor: pointer }
 .glass-header {
   background: linear-gradient(to bottom, var(--color-background) 0%, color-mix(in oklch, var(--color-background) 85%, transparent) 55%, transparent 100%);
 }
+
+/* Invoice: print only the paper. */
+@media print {
+  body.invoice-open { background: #fff !important }
+  body.invoice-open > *:not(.invoice-layer) { display: none !important }
+  body.invoice-open .invoice-layer { position: static; background: none; backdrop-filter: none; padding: 0; overflow: visible }
+  body.invoice-open .invoice-actions { display: none !important }
+  body.invoice-open .invoice-paper { box-shadow: none; border-radius: 0; padding: 0 }
+  @page { margin: 16mm }
+}
