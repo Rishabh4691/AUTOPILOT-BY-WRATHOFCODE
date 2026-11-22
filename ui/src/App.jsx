@@ -7,12 +7,10 @@ import Claims from './Claims'
 import Controls from './Controls'
 import Lessons from './Lessons'
 import Network from './Network'
-import Overview from './Overview'
 import { useT, useTheme } from './prefs'
 import Shipments from './Shipments'
 import SiteFooter from './SiteFooter'
 import Intro from './Intro'
-import Features from './Features'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -41,8 +39,7 @@ export default function App() {
   const t = useT()
   useTheme()
   const query = new URLSearchParams(window.location.search)
-  const deepLink = query.has('tab') || query.has('open')
-  const [tab, setTab] = useState(query.get('tab') || 'overview')
+  const [tab, setTab] = useState(query.get('tab') || (query.has('open') ? 'rfqs' : 'overview'))
   const [agents, setAgents] = useState([])
   const [rfqs, setRfqs] = useState([])
   const [sum, setSum] = useState(null)
@@ -100,19 +97,17 @@ export default function App() {
     ['lessons', t('lessons')],
   ]
 
+  // Home is just the intro and the footer; the Control Room shows once a screen is picked.
+  const home = tab === 'overview'
   const enter = (k) => {
-    if (k) setTab(k)
-    document.getElementById('app')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setTab(k)
+    window.scrollTo({ top: 0 })
   }
 
   return (
     <>
-    {!deepLink && (
-      <>
-        <Intro onTour={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} onLeaderboard={() => enter('board')} />
-        <Features />
-      </>
-    )}
+    {home && <Intro onTour={() => enter('network')} onLeaderboard={() => enter('board')} />}
+    {!home && (
     <div id="app" className="mx-auto max-w-7xl scroll-mt-4 px-4 pb-16 sm:px-6">
       <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
         <div className="flex shrink-0 items-center gap-2.5">
@@ -124,7 +119,7 @@ export default function App() {
               key={k}
               type="button"
               aria-current={tab === k ? 'page' : undefined}
-              onClick={() => setTab(k)}
+              onClick={() => enter(k)}
               className={`shrink-0 cursor-pointer rounded-full px-3.5 py-2 text-[12.5px] font-medium uppercase tracking-[0.02em] transition-colors duration-200 ${tab === k ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300 hover:bg-sky-500/8 hover:text-white'}`}
             >
               {label}
@@ -165,13 +160,11 @@ export default function App() {
         </div>
       )}
 
-      {tab !== 'overview' && <div className="mt-8"><Summary s={sum} /></div>}
+      <div className="mt-8"><Summary s={sum} /></div>
 
       <div className="mb-8" />
 
-      {tab === 'overview' ? (
-        <Overview sum={sum} onOpen={(k) => { setTab(k); window.scrollTo({ top: 0 }) }} />
-      ) : tab === 'board' ? (
+      {tab === 'board' ? (
         <Scoreboard />
       ) : tab === 'network' ? (
         <Network />
@@ -199,7 +192,8 @@ export default function App() {
 
       {open && <RfqDetail id={open} tick={tick} now={now} operator={operator} onClose={() => setOpen(null)} />}
     </div>
-    <SiteFooter onOpen={setTab} />
+    )}
+    <SiteFooter onOpen={enter} />
     </>
   )
 }

@@ -49,7 +49,6 @@ export default function SiteFooter({ onOpen }) {
           onClick: (e) => {
             e.preventDefault()
             onOpen?.(target)
-            document.getElementById('app')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
           },
         }
       : { label, icon, href: target, external: true }
