@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Crown, Medal } from 'lucide-react'
-import { clock, get } from './api'
+import { ArrowLeft } from 'lucide-react'
+import { clock, get, money } from './api'
 import PageBackdrop from './PageBackdrop'
 import { useLang } from './prefs'
 
@@ -10,10 +10,10 @@ const COPY = {
     live: 'Live',
     updated: 'updated',
     eyebrow: 'START Hack Munich 2026 · 5U AI challenge',
-    title: 'Leaderboard',
-    sub: 'Every team, every point, live.',
-    stats: ['Our rank', 'Points', 'Gap to #3', 'Accepted', 'Booked', 'Median answer'],
-    podium: 'Top three',
+    title: 'Our results',
+    sub: 'What AUTOPILOT achieved on its own, live from the 5U board.',
+    finished: 'Our rank', of: 'of', teams: 'teams', points: 'points', sold: 'We sold', in: 'in', bookings: 'confirmed bookings',
+    tiles: ['Requests answered', 'Accepted quotes', 'Median answer', 'AI spend in total'],
     all: 'All teams',
     you: 'You',
     accepted: 'accepted',
@@ -27,10 +27,10 @@ const COPY = {
     live: 'Live',
     updated: 'aktualisiert',
     eyebrow: 'START Hack München 2026 · 5U AI Challenge',
-    title: 'Rangliste',
-    sub: 'Jedes Team, jeder Punkt, live.',
-    stats: ['Unser Rang', 'Punkte', 'Abstand zu #3', 'Angenommen', 'Gebucht', 'Median-Antwort'],
-    podium: 'Die ersten drei',
+    title: 'Unsere Ergebnisse',
+    sub: 'Was AUTOPILOT allein erreicht hat, live vom 5U-Board.',
+    finished: 'Unser Platz', of: 'von', teams: 'Teams', points: 'Punkte', sold: 'Verkauft', in: 'in', bookings: 'bestätigten Buchungen',
+    tiles: ['Anfragen beantwortet', 'Angenommene Angebote', 'Median-Antwort', 'KI-Kosten gesamt'],
     all: 'Alle Teams',
     you: 'Wir',
     accepted: 'angenommen',
@@ -43,42 +43,19 @@ const COPY = {
 
 const fmt = (n, d = 0) => (n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }))
 
-function Podium({ team, place, us, c }) {
-  const tall = place === 1 ? 'sm:pt-10 sm:pb-9' : place === 2 ? 'sm:pt-7 sm:pb-6' : 'sm:pt-5 sm:pb-5'
-  const order = place === 1 ? 'sm:order-2' : place === 2 ? 'sm:order-1' : 'sm:order-3'
-  return (
-    <li
-      className={`glass lb-rise relative flex flex-col items-center gap-2 rounded-[28px] px-5 py-6 text-center ${tall} ${order} ${us ? 'lb-us' : ''}`}
-      style={{ animationDelay: `${place * 90}ms` }}
-    >
-      <span className={place === 1 ? 'text-accent' : 'text-zinc-400'}>
-        {place === 1 ? <Crown className="size-7" aria-hidden /> : <Medal className="size-6" aria-hidden />}
-      </span>
-      <span className={`font-display leading-none ${place === 1 ? 'lb-gold text-[64px]' : 'text-white text-[48px]'}`}>{place}</span>
-      <span className="mt-1 max-w-full truncate text-lg font-semibold text-white">{team.team}</span>
-      <span className="font-mono text-sm text-zinc-300">
-        {fmt(team.total, 2)} {c.pts}
-      </span>
-      <span className="text-[12px] text-muted">
-        {team.accepted}/{team.answered} {c.accepted} · {team.bookings} {c.booked}
-      </span>
-      {us && <span className="absolute top-3 right-3 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold uppercase text-[#0d0d0d]">{c.you}</span>}
-    </li>
-  )
-}
-
 /** The standalone leaderboard, opened from the home page. Refreshes every 10 s. */
 export default function Leaderboard({ onHome }) {
   const [lang] = useLang()
   const c = COPY[lang] ?? COPY.en
   const [d, setD] = useState(null)
   const [err, setErr] = useState(null)
+  const [sum, setSum] = useState(null)
 
   useEffect(() => {
     let alive = true
     const load = () =>
-      get('/board')
-        .then((x) => alive && (setD(x), setErr(null)))
+      Promise.all([get('/board'), get('/summary').catch(() => null)])
+        .then(([x, s]) => alive && (setD(x), setSum(s), setErr(null)))
         .catch((e) => alive && setErr(e.message))
     load()
     const t = setInterval(load, 10000)
@@ -94,23 +71,11 @@ export default function Leaderboard({ onHome }) {
   const low = ranking.length ? Math.min(...ranking.map((r) => r.total)) : 0
   // Bars run from the lowest score to the leader, so close scores still look different.
   const bar = (v) => (top > low ? 8 + 92 * ((v - low) / (top - low)) : 100)
-  const third = ranking.find((r) => r.rank === 3)
   const answered = rounds.filter((r) => r.seconds != null).map((r) => r.seconds).sort((a, b) => a - b)
   const median = answered.length ? answered[Math.floor(answered.length / 2)] : null
   const accepted = rounds.filter((r) => r.verdict === 'accepted').length
-  const booked = rounds.filter((r) => r.booked === true).length
   const isUs = (t) => t.name === d?.team
 
-  const stats = d
-    ? [
-        [`#${d.rank}`, d.rank <= 3],
-        [fmt(d.total, 2)],
-        [third && d.rank > 3 ? fmt(third.total - d.total, 1) : '—'],
-        [`${accepted}/${rounds.length}`],
-        [fmt(booked)],
-        [median == null ? '—' : `${Math.round(median)} s`],
-      ]
-    : []
 
   return (
     <main className="relative isolate min-h-screen overflow-hidden px-4 pt-5 pb-24 sm:px-6">
@@ -144,23 +109,39 @@ export default function Leaderboard({ onHome }) {
           <p className="glass mx-auto mt-14 max-w-md rounded-3xl p-8 text-center text-zinc-300">{err ? `${c.down}: ${err}` : c.loading}</p>
         ) : (
           <>
-            <dl className="glass lb-rise mt-12 grid grid-cols-2 gap-y-5 rounded-[28px] px-6 py-6 sm:grid-cols-3 lg:grid-cols-6">
-              {stats.map(([value, good], i) => (
-                <div key={c.stats[i]} className="min-w-0 text-center">
-                  <dt className="text-[11px] tracking-[0.12em] text-muted uppercase">{c.stats[i]}</dt>
-                  <dd className={`font-display mt-1 truncate text-[clamp(1.25rem,2.4vw,1.75rem)] ${i === 0 ? (good ? 'text-emerald-300' : 'text-accent') : 'text-white'}`}>{value}</dd>
+            <section className="glass lb-rise lb-us mt-12 grid gap-8 rounded-[32px] p-7 sm:p-10 lg:grid-cols-2">
+              <div className="text-center lg:text-left">
+                <p className="text-[11px] tracking-[0.16em] text-muted uppercase">{c.finished}</p>
+                <p className="mt-2 flex items-baseline justify-center gap-3 lg:justify-start">
+                  <span className="lb-gold font-display text-[clamp(4.5rem,12vw,8rem)] leading-none">#{d.rank}</span>
+                  <span className="text-xl text-zinc-300">{c.of} {ranking.length} {c.teams}</span>
+                </p>
+                <p className="mt-3 font-mono text-zinc-300">{fmt(d.total, 2)} {c.points}</p>
+              </div>
+              <div className="text-center lg:border-l lg:border-[color-mix(in_oklch,var(--color-foreground)_12%,transparent)] lg:pl-10 lg:text-left">
+                <p className="text-[11px] tracking-[0.16em] text-muted uppercase">{c.sold}</p>
+                <p className="font-display mt-2 text-[clamp(2.4rem,6vw,4rem)] leading-none text-white">
+                  {sum?.booked?.length ? sum.booked.map((b) => (b.currency === 'EUR' ? `€${Math.round(b.total).toLocaleString('en-US')}` : money(b.total, b.currency))).join(' + ') : '—'}
+                </p>
+                <p className="mt-3 text-zinc-300">
+                  {c.in} <span className="font-semibold text-white">{sum?.booked_count ?? (d.bookings ?? []).length}</span> {c.bookings}
+                </p>
+              </div>
+            </section>
+
+            <dl className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+              {[
+                `${rounds.filter((r) => r.seconds != null).length}/${rounds.length}`,
+                `${accepted} · ${rounds.length ? Math.round((accepted / rounds.length) * 100) : 0} %`,
+                median == null ? '—' : `${Math.round(median)} s`,
+                sum?.llm_total_eur != null ? `€${sum.llm_total_eur.toFixed(2)}` : '—',
+              ].map((v, i) => (
+                <div key={c.tiles[i]} className="glass lb-rise rounded-[24px] px-5 py-5 text-center" style={{ animationDelay: `${(i + 1) * 80}ms` }}>
+                  <dt className="text-[11px] tracking-[0.12em] text-muted uppercase">{c.tiles[i]}</dt>
+                  <dd className="font-display mt-2 text-[clamp(1.3rem,2.6vw,1.9rem)] text-white">{v}</dd>
                 </div>
               ))}
             </dl>
-
-            <section className="mt-14" aria-label={c.podium}>
-              <h2 className="mb-5 text-center text-[11px] tracking-[0.18em] text-muted uppercase">{c.podium}</h2>
-              <ol className="grid items-end gap-4 sm:grid-cols-3">
-                {ranking.slice(0, 3).map((t) => (
-                  <Podium key={t.name} team={t} place={t.rank} us={isUs(t)} c={c} />
-                ))}
-              </ol>
-            </section>
 
             <section className="mt-14" aria-label={c.all}>
               <h2 className="mb-5 text-center text-[11px] tracking-[0.18em] text-muted uppercase">{c.all}</h2>
