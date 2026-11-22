@@ -139,13 +139,27 @@ async def stats():
         out["eur_per_usd"] = fx
         out["llm_per_quote_eur"] = round(out["llm_per_quote"] * fx, 5)
         out["llm_total_eur"] = round(out["llm_total_usd"] * fx, 4)
+    if raw:
+        # Counts follow 5U: one request per round (a two-route mail is one round here,
+        # stored as several rows locally), and booked value only for bookings 5U confirms.
+        out["rfqs_rows"] = out["rfqs"]
+        out["rfqs"] = len(raw)
+        refs = {b.get("booking_reference") for b in await _our_bookings() if b.get("booking_reference")}
+        prices = query(lambda db: store.rows(db, "SELECT booking_reference, price, currency FROM bookings") if "bookings" in {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")} else [])
+        priced = [p for p in prices if p["booking_reference"] in refs and p["price"] is not None]
+        totals: dict = {}
+        for p in priced:
+            cur = p["currency"] or "EUR"
+            totals[cur] = totals.get(cur, 0) + float(p["price"])
+        out["booked"] = [{"currency": c, "total": round(v, 2)} for c, v in sorted(totals.items(), key=lambda x: -x[1])]
+        out["booked_count"] = len(refs)
+        out["booked_unpriced"] = len(refs) - len({p["booking_reference"] for p in priced})
     live = await _live_rounds()
     if not live:
         return out
     # Answer times come from the board for every round: it is what 5U scored.
     board = [_live_row(r) for r in await _our_verdicts() if r.get("round_no") is not None and r.get("sent_at")]
     times = sorted(r["quoted_at"] - r["received_at"] for r in board if r["quoted_at"] and r["received_at"])
-    out["rfqs"] += len(live)
     out["quoted"] = len(times)
     out["under_2min"] = sum(1 for t in times if t <= 120)
     out["failed"] += sum(1 for r in live if r["status"] == "FAILED")

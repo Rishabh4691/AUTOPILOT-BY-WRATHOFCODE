@@ -113,7 +113,7 @@ export default function App() {
     ['network', t('network')],
     ['shipments', t('shipments')],
     ['agents', t('agents')],
-    ['rfqs', `${t('rfqs')} (${rfqs.length})`],
+    ['rfqs', `${t('rfqs')} (${sum?.rfqs ?? rfqs.length})`],
     ['claims', t('claims')],
     ['lessons', t('lessons')],
   ]

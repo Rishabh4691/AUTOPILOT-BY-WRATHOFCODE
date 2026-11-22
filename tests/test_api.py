@@ -136,7 +136,7 @@ def test_summary_and_list_add_live_board_rounds(client):
         ]
     )
     s = client.get("/api/summary").json()
-    assert s["rfqs"] == 3 and s["live_rounds"] == 2
+    assert s["rfqs"] == 2 and s["live_rounds"] == 2  # rounds on the 5U board
     assert s["quoted"] == 1 and s["median_s"] == 30
     assert s["llm_per_quote"] == pytest.approx(0.005)
     assert s["llm_total_usd"] == pytest.approx(0.005)
