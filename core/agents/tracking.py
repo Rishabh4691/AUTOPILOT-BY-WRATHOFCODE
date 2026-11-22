@@ -76,6 +76,11 @@ def match(question: str, rows: list[dict]) -> dict | None:
         if hit:
             return hit[0]
     low = question.lower()
+    # Round 117: "47914 to JFK, 1061 kg" was answered with the same customer's NBO booking (same cargo,
+    # repeat request). A question that names the destination never matches a booking to another airport.
+    asked = {m.upper() for m in re.findall(r"\bto\s+([A-Z]{3})\b", question)}
+    if asked:
+        rows = [r for r in rows if not r.get("destination") or str(r["destination"]).upper() in asked] or rows
     scored = []
     for r in rows:
         score = 0
