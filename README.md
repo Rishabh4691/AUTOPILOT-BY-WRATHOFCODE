@@ -13,7 +13,7 @@ Live from the 5U board at submission, Sunday 22 November 2026:
 | Rank | **#6 of 15 teams**, 16,330 points |
 | Requests answered | 195 of 199 |
 | Quotes accepted by customers | 159 (80 %) |
-| Sold | **€384,173** in 127 confirmed bookings |
+| Sold | **€392,637** in 127 confirmed bookings |
 | Median time to answer | 46 s |
 | AI spend for the whole run | **€0.73**, about half a cent per quote |
 

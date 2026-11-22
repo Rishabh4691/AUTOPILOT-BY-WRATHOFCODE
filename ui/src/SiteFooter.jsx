@@ -9,7 +9,7 @@ const COPY = {
     marquee: ['Reads every request', 'Prices in code', 'Best airline on price and deadline', 'Trucks the road legs', 'Replies in your language', 'Books on a yes', 'Learns every round'],
     heading: (
       <>
-        Ready for <span className="font-serif italic font-normal">take-off?</span>
+        Ready for <span className="font-serif italic font-normal">take-off!</span>
       </>
     ),
     primary: [['See the network', 'network', <Globe2 key="g" />]],
@@ -21,7 +21,7 @@ const COPY = {
     marquee: ['Liest jede Anfrage', 'Preis im Code', 'Beste Airline nach Preis und Frist', 'Lkw für die Straße', 'Antwortet in Ihrer Sprache', 'Bucht beim Ja', 'Lernt jede Runde'],
     heading: (
       <>
-        Bereit zum <span className="font-serif italic font-normal">Abheben?</span>
+        Bereit zum <span className="font-serif italic font-normal">Abheben!</span>
       </>
     ),
     primary: [['Netzwerk ansehen', 'network', <Globe2 key="g" />]],
