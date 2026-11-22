@@ -7,6 +7,7 @@ import Claims from './Claims'
 import Controls from './Controls'
 import Lessons from './Lessons'
 import Network from './Network'
+import Overview from './Overview'
 import { useT, useTheme } from './prefs'
 import Shipments from './Shipments'
 import Scoreboard from './Scoreboard'
@@ -36,11 +37,12 @@ function Summary({ s }) {
 export default function App() {
   const t = useT()
   useTheme()
-  const [tab, setTab] = useState('board')
+  const query = new URLSearchParams(window.location.search)
+  const [tab, setTab] = useState(query.get('tab') || 'overview')
   const [agents, setAgents] = useState([])
   const [rfqs, setRfqs] = useState([])
   const [sum, setSum] = useState(null)
-  const [open, setOpen] = useState(null)
+  const [open, setOpen] = useState(query.get('open'))
   const [tick, setTick] = useState(0)
   const [alarm, setAlarm] = useState(null)
   const [fake, setFake] = useState(false)
@@ -84,6 +86,7 @@ export default function App() {
   }
 
   const tabs = [
+    ['overview', t('overview')],
     ['board', t('board')],
     ['network', t('network')],
     ['shipments', t('shipments')],
@@ -160,7 +163,9 @@ export default function App() {
         ))}
       </nav>
 
-      {tab === 'board' ? (
+      {tab === 'overview' ? (
+        <Overview onOpen={(k) => { setTab(k); window.scrollTo({ top: 0 }) }} />
+      ) : tab === 'board' ? (
         <Scoreboard />
       ) : tab === 'network' ? (
         <Network />

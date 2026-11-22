@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 const WORDS = {
   en: {
     tagline: 'WRATHOFCODE · digital air forwarder',
-    board: 'Live scoreboard', network: 'Network', agents: 'Agent Control Room', rfqs: 'RFQs',
+    overview: 'Overview', board: 'Live scoreboard', network: 'Network', agents: 'Agent Control Room', rfqs: 'RFQs',
     shipments: 'Shipments', claims: 'Claims', lessons: 'Lessons',
     live: 'Live', reconnecting: 'Reconnecting', apiDown: 'API down', demo: 'Demo data',
     dark: 'Dark', light: 'Light', model: 'Writer model', updates: 'Daily updates', on: 'On', off: 'Off',
@@ -19,7 +19,7 @@ const WORDS = {
   },
   de: {
     tagline: 'WRATHOFCODE · digitaler Luftfracht-Spediteur',
-    board: 'Live-Rangliste', network: 'Netzwerk', agents: 'Agenten-Leitstand', rfqs: 'Anfragen',
+    overview: 'Überblick', board: 'Live-Rangliste', network: 'Netzwerk', agents: 'Agenten-Leitstand', rfqs: 'Anfragen',
     shipments: 'Sendungen', claims: 'Schäden', lessons: 'Lektionen',
     live: 'Live', reconnecting: 'Verbinde neu', apiDown: 'API nicht erreichbar', demo: 'Demodaten',
     dark: 'Dunkel', light: 'Hell', model: 'Schreib-Modell', updates: 'Tägliche Updates', on: 'An', off: 'Aus',
