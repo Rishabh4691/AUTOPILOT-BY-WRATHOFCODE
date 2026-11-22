@@ -92,3 +92,15 @@ def test_nobody_in_time_quotes_the_fastest_and_warns(tmp_path: Path):
     kept = h.orchestrator.meet_deadline(rfq(("deadline: 2026-11-30",)), options)
     assert [o.carrier for o in kept] == ["Lessslow"]
     assert any(e.step == "deadline" and e.status.value == "warn" for e in h.sink.events)
+
+
+def test_flight_may_leave_on_the_ready_date_round_179(tmp_path: Path):
+    # Round 179 (rejected too_high): ready 27 Nov, at ORD by 29 Nov, price decides. Aurelia (2 days)
+    # makes it when it leaves on the ready date; the engine had quoted only the 1-day Meridian.
+    h = harness(tmp_path, now=datetime(2026, 11, 22, 9, 4, tzinfo=UTC))
+    r = rfq(("deadline: 2026-11-29",)).model_copy(update={"ready_date": date(2026, 11, 27)})
+    options = [option("Xenon", "782.04", 3), option("Aurelia", "929.53", 2), option("Ibisair", "1162.77", 2),
+               option("Meridian", "1265.67", 1)]
+    kept = h.orchestrator.meet_deadline(r, options)
+    assert [o.carrier for o in kept] == ["Aurelia", "Ibisair", "Meridian"]
+    assert min(kept, key=lambda o: o.total).carrier == "Aurelia"

@@ -1348,7 +1348,15 @@ class Orchestrator:
         except ValueError:
             return options
         today = self.clock().date()
-        lands = {id(o): arrival_date(rfq.ready_date, o.transit_days, today) for o in options}
+        # Round 179 (rejected too_high): ready 27 Nov, "at ORD by 29 Nov". Counting the flight from the
+        # day after the ready date left only Meridian (1 day, 1265.67); the grader also counts the 2-day
+        # Aurelia (929.53), i.e. the flight can leave on the ready date. The arrival date written in
+        # the mail stays the cautious arrival_date().
+        from datetime import timedelta as _td
+
+        from mail.writer import departure_date
+
+        lands = {id(o): departure_date(rfq.ready_date, today) + _td(days=int(o.transit_days or 0)) for o in options}
         on_time = [o for o in options if lands[id(o)] <= deadline]
         if on_time:
             if len(on_time) < len(options):
