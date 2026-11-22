@@ -47,6 +47,8 @@ export default function SettingsDock() {
   const model = bot?.writer_model || 'gpt-4.1-mini'
   const daily = !!bot?.daily_updates
   const dark = theme === 'dark'
+  const away = bot && !bot.bot_here
+  const awayNote = lang === 'de' ? 'Kein Bot auf diesem Rechner: Modell und Updates wirken nur auf den Bot, der hier läuft.' : 'No bot runs on this machine: model and daily mail only steer the bot that runs here.'
 
   const items = [
     {
@@ -74,7 +76,7 @@ export default function SettingsDock() {
         title: lang === 'de' ? 'Modell' : 'Model',
         value: MODELS[model] ?? model,
         badge: model === 'gpt-4.1' ? '4.1' : 'mini',
-        hint: t('modelNote'),
+        hint: away ? awayNote : t('modelNote'),
         icon: <Cpu />,
         gradientFrom: '#ff9966',
         gradientTo: '#ff5e62',
@@ -84,7 +86,7 @@ export default function SettingsDock() {
         title: lang === 'de' ? 'Updates' : 'Daily mail',
         value: daily ? t('on') : t('off'),
         badge: daily ? t('on') : t('off'),
-        hint: t('updatesNote'),
+        hint: away ? awayNote : t('updatesNote'),
         icon: daily ? <MailCheck /> : <MailX />,
         gradientFrom: '#80ff72',
         gradientTo: '#7ee8fa',
@@ -95,6 +97,7 @@ export default function SettingsDock() {
 
   return (
     <div ref={box} className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2 sm:right-6 sm:bottom-6">
+      {away && open && <span className="glass max-w-xs rounded-2xl px-3 py-2 text-[11px] leading-snug text-zinc-300">{awayNote}</span>}
       {err && open && <span className="glass rounded-full px-3 py-1 text-[11px] text-rose-300">{lang === 'de' ? 'Bot-Einstellungen nicht erreichbar' : 'Bot settings unavailable'}</span>}
       <div className="flex items-center gap-3 sm:gap-6">
       {open && (

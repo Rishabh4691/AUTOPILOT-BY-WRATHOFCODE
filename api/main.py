@@ -597,7 +597,13 @@ def get_settings():
     from core import runtime_settings
 
     data = runtime_settings.load()
-    return {**data, "models": list(runtime_settings.MODELS)}
+    log = runtime_settings.ROOT / "data" / "bot.log"
+    try:
+        active = time.time() - log.stat().st_mtime < 600
+    except OSError:
+        active = False
+    # The switches change data/settings.json on this machine; they only steer a bot running here.
+    return {**data, "models": list(runtime_settings.MODELS), "bot_here": active}
 
 
 @app.post("/api/settings")
