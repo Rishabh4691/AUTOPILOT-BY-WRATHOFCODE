@@ -182,4 +182,4 @@ The full review is in [docs/SECURITY.md](docs/SECURITY.md).
 | Aditi | Mail layer (`mail/`) |
 | Rishabh | Control Room, API, integration and pitch (`api/`, `ui/`) |
 
-We used AI coding assistants (Claude Code and Codex) to help write and review code during the hackathon. The team designed the system, made the decisions and checked every change.
+<sub>Some code written with help from AI coding tools (Claude Code, Codex).</sub>
