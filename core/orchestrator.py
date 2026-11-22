@@ -84,6 +84,36 @@ def review_facts(
     }
 
 
+def lots_body(mail: Mail, rfqs: list[RFQ], quotes: list[Quote]) -> str:
+    from mail.extract import find_first_name
+    from mail.writer import money, place, short_day
+
+    first = find_first_name(mail.sender, mail.body) or "there"
+    lines = []
+    for i, (rfq, quote) in enumerate(zip(rfqs, quotes, strict=True), 1):
+        days = quote.option.transit_days
+        eta = short_day(arrival_date(rfq.ready_date, days), "en")
+        count = next((n[8:] for n in rfq.notes if n.startswith("pieces: ")), "")
+        what = f"{count} pieces, " if count else ""
+        pickup = "the truck from your site to the airport, " if quote.pickup is not None else ""
+        lines.append(
+            f"{i}. {place(rfq.origin)} to {place(rfq.destination)}, {what}{rfq.gross_kg} kg: I would go with "
+            f"{quote.option.carrier}, the {rfq.preference.value} choice, {days} day{'s' if days != 1 else ''} in transit, "
+            f"arriving around {eta}. All-in price {money(quote.total, quote.currency, 'en')}, including {pickup}air freight, fuel and security."
+        )
+    return (
+        f"Hi {first},\n\nthanks for the request. Here are your {len(rfqs)} shipments, each priced on its own as you asked:\n\n"
+        + "\n\n".join(lines)
+        + f"\n\nBoth prices are valid today, and a yes for one or all of them is all I need to book. "
+        f"Our reference is WOC-{mail.id}.\n\nCheers,\nLena\nWRATHOFCODE Air Freight"
+    ) if len(rfqs) == 2 else (
+        f"Hi {first},\n\nthanks for the request. Here are your {len(rfqs)} shipments, each priced on its own as you asked:\n\n"
+        + "\n\n".join(lines)
+        + f"\n\nAll prices are valid today, and a yes for one or all of them is all I need to book. "
+        f"Our reference is WOC-{mail.id}.\n\nCheers,\nLena\nWRATHOFCODE Air Freight"
+    )
+
+
 def dg_request_body(rfq: RFQ, declared: str) -> str:
     return (
         f"Hello,\n\nthank you for your request from {rfq.origin} to {rfq.destination}. "
@@ -307,6 +337,55 @@ class Orchestrator:
                 mail.id,
             )
 
+    async def quote_lots(self, mail: Mail, shared: str, lots: list[str]) -> bool:
+        """Several shipments in one request ("1. GRU ... 2. TLV ..."): price each on its own, one reply,
+        a separate all-in price per shipment."""
+        rfqs: list[RFQ] = []
+        for i, lot in enumerate(lots, 1):
+            lot_id = mail.id * 10 + i
+            lot_mail = mail.model_copy(
+                update={"id": lot_id, "subject": "Air freight quote request", "body": f"{shared}\n\nShipment: {lot}", "attachments": ()}
+            )
+            try:
+                lot_rfq, _ = await self.extractor.extract(lot_mail)
+            except Exception:
+                log.exception("lot_extract_failed", extra={"rfq": mail.id, "lot": i})
+                self.hold(mail.id, f"Request {mail.id} lists {len(lots)} shipments; shipment {i} could not be read.")
+                return False
+            lot_rfq = lot_rfq.model_copy(update={"mail_id": lot_id, "thread_root_id": lot_id, "received_at": mail.received_at})
+            self.store.upsert_rfq(str(lot_id), str(mail.thread_root_id), mail.sender, mail.subject, mail.received_at, Stage.NEW.value)
+            rfqs.append(lot_rfq)
+        self.emit(
+            Agent.RFQ,
+            "lots",
+            EventStatus.INFO,
+            f"Request {mail.id} has {len(rfqs)} separate shipments: "
+            + "; ".join(f"{r.origin} to {r.destination}, {r.gross_kg} kg" for r in rfqs)
+            + ". Pricing each one.",
+            mail.id,
+        )
+        quotes = await asyncio.gather(*(self.source_and_price(r) for r in rfqs), return_exceptions=True)
+        if any(q is None or isinstance(q, BaseException) for q in quotes):
+            self.hold(mail.id, f"Request {mail.id}: not every one of its {len(rfqs)} shipments could be priced. A person should quote it.")
+            return False
+        body = lots_body(mail, rfqs, quotes)
+        total = sum((q.total for q in quotes), Decimal(0))
+        carriers = " + ".join(q.option.carrier for q in quotes)
+        combined = quotes[0].model_copy(
+            update={
+                "rfq_mail_id": mail.id,
+                "thread_root_id": mail.thread_root_id,
+                "to": mail.sender,
+                "subject": reply_subject(mail.subject),
+                "body": body,
+                "total": total,
+                "option": quotes[0].option.model_copy(update={"carrier": carriers, "rate_id": None}),
+                "used_llm": any(q.used_llm for q in quotes),
+            }
+        )
+        await self.outbox.put(combined)
+        return True
+
     async def revise_if_changed(self, mail: Mail) -> bool:
         """Customer sends new figures after our quote ("details have changed, please update your offer"):
         quote again once, in the same thread, with the new pieces, weight and volume."""
@@ -496,6 +575,12 @@ class Orchestrator:
             except Exception:
                 log.exception("dg_check_failed", extra={"rfq": mail.id})
         elif await self.dangerous_goods_blocked(mail, rfq):
+            return
+        from mail.multilot import split_shipments
+
+        shared, lots = split_shipments(mail.body)
+        if len(lots) >= 2:
+            await self.quote_lots(mail, shared, lots)
             return
         checker = asyncio.create_task(
             cross_check(self, mail, rfq, getattr(self.dg, "texts", None)), name=f"check-{mail.id}"

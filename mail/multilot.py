@@ -87,3 +87,38 @@ PARTIAL = re.compile(
 
 def partial_acceptance(text: str) -> bool:
     return bool(PARTIAL.search(text or ""))
+
+
+MARK = re.compile(
+    r"^[ \t]*(?:\(?\d{1,2}[.)]|\(?[A-Ha-h][.)]|[-*•]|(?:lot|shipment|parcel|consignment|sendung|envoi|lote|partita|zending|"
+    r"partia)\s+(?:[A-H]|[1-9])\s*[:.)\-–]?)[ \t]+(?=\S)",
+    re.I | re.M,
+)
+
+
+def split_shipments(text: str) -> tuple[str, list[str]]:
+    """Separate shipments listed in one request ("1. GRU ... 2. TLV ...").
+
+    Returns the shared text (site, ready date, wishes) and one segment per shipment. Only splits when
+    every segment carries its own weight and the segments differ in place (airport, postcode, site or
+    date); "Lot 1 / Lot 2" of one consignment on one route stays one shipment.
+    """
+    body = fresh_text(text or "")
+    marks = list(MARK.finditer(body))
+    segments: list[tuple[int, int]] = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(body)
+        para_end = body.find("\n\n", m.end())
+        if para_end != -1 and para_end < end:
+            end = para_end
+        segments.append((m.start(), end))
+    chosen = [(a, b) for a, b in segments if WEIGHT.search(body[a:b])]
+    if len(chosen) < 2:
+        return body, []
+    places = [_places(body[a:b]) for a, b in chosen]
+    if any(not p for p in places) or len(set(places)) < len(places):
+        return body, []
+    shared = body
+    for a, b in reversed(chosen):
+        shared = shared[:a] + shared[b:]
+    return shared.strip(), [MARK.sub("", body[a:b], count=1).strip() for a, b in chosen]
