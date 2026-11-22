@@ -468,3 +468,15 @@ def test_the_forwarder_holds_the_rate_not_the_customer():
     out = writer.fill("Hi [FIRST],\n\nYou can hold it [VALID]. Our reference is [REF].",
                       {"FIRST": "Deniz", "VALID": "for you today", "REF": "WOC-1"})
     assert "I can hold this rate for you today." in out and "You can hold" not in out
+
+
+@pytest.mark.parametrize("said", [
+    "We can hold it for you today for you no problem.",
+    "You can hold it for you today.",
+    "I can hold this rate for you today.",
+])
+def test_hold_for_today_is_one_clean_sentence(said):
+    # Round 146 on gpt-4.1-mini: "We can hold it for you today for you no problem."
+    out = writer.fill(f"Hi [FIRST],\n\n{said} Our reference is [REF].", {"FIRST": "Sara", "REF": "WOC-1"})
+    assert "I can hold this rate for you today. Our reference is WOC-1." in out
+    assert "no problem" not in out and "today for you" not in out

@@ -598,6 +598,9 @@ WRAPPED_SLOT = re.compile(r"\[[^\[\]\n]*\[([A-Z_]+)\][^\[\]\n]*\]")
 LEFTOVER_NOTE = re.compile(r"[ \t]*\[[^\[\]\n\d]{12,}\]")
 # Rounds 144/145 (gpt-4.1-mini): "You can hold it for you today." The forwarder holds the rate.
 HOLD_WHO = re.compile(r"\byou can hold (?:it|this|the rate|this rate|the price)\b", re.I)
+# Round 146: "We can hold it for you today for you no problem." Any English hold-for-today
+# sentence becomes one clean sentence.
+HOLD_TODAY = re.compile(r"\b(?:I|we|you) can hold\b[^.!?\n]*\btoday\b[^.!?\n]*[.!?]", re.I)
 
 
 def fill(text: str, values: dict) -> str:
@@ -613,6 +616,7 @@ def fill(text: str, values: dict) -> str:
     # Any other bracketed note left by the model ("[If it is empty, leave it out.]") is not
     # for the customer; filled values never come in brackets.
     text = LEFTOVER_NOTE.sub("", text)
+    text = HOLD_TODAY.sub("I can hold this rate for you today.", text)
     text = HOLD_WHO.sub("I can hold this rate", text)
     text = re.sub(r"(?<=\S) {2,}(?=\S)", " ", text)
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
