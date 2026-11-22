@@ -1,4 +1,4 @@
-"""Cargo claims: a customer reports a lost or damaged shipment, the bot files it with the airline and confirms."""
+"""Cargo claims: a customer reports a lost, misplaced or damaged shipment, the bot files it with the airline and confirms."""
 
 from __future__ import annotations
 
@@ -21,6 +21,15 @@ LOST = re.compile(
     r"n'est pas arrivée?|perdue? en transit|(?:colis|carton|palette)s? (?:perdue?s?|manquante?s?)|"
     r"no ha llegado|no llegó|se perdió|(?:bulto|caja|palé)s? perdid[oa]s?|"
     r"non è arrivat[oa]|è andat[oa] pers[oa]|(?:collo|colli|cartone|bancale) mancant[ei])\b",
+    re.I,
+)
+MISPLACED = re.compile(
+    r"\b(?:misplaced|mis-?routed|mis-?delivered|sent to the wrong (?:airport|address|destination|warehouse|city|country)|"
+    r"delivered to the wrong (?:address|airport|warehouse|company|place)|ended up in the wrong|wrong destination|"
+    r"fehlgeleitet|falsch zugestellt|an die falsche (?:Adresse|Stelle|Firma) geliefert|"
+    r"mal acheminée?s?|livrée? à la mauvaise adresse|"
+    r"mal dirigid[oa]s?|enviad[oa] al destino equivocado|entregad[oa] en la dirección equivocada|"
+    r"instradat[oa] male|consegnat[oa] all'indirizzo sbagliato)\b",
     re.I,
 )
 DAMAGED = re.compile(
@@ -56,6 +65,8 @@ def kind_of(text: str) -> str | None:
     fresh = fresh_text(text or "")
     if LOST.search(fresh):
         return "lost"
+    if MISPLACED.search(fresh):
+        return "misplaced"
     if DAMAGED.search(fresh) or (CLAIM_WORD.search(fresh) and re.search(r"damag|broken|beschädig|endommag|dañ|dannegg", fresh, re.I)):
         return "damaged"
     return None

@@ -94,6 +94,28 @@ async def test_damaged_complaint_files_a_claim_with_the_airline_and_confirms(tmp
     assert claim == ("damaged", "filed")
 
 
+async def test_misplaced_shipment_files_a_claim_with_the_airline_and_confirms(tmp_path: Path):
+    h = harness(tmp_path)
+    booked(h.store)
+    airline_mails = []
+
+    class Outbound:
+        async def send_new(self, to, subject, body):
+            airline_mails.append((to, subject, body))
+            return 1
+
+    h.orchestrator.claims = ClaimsAgent(load_directory(KIT), outbound=Outbound())
+    complaint = mail(902, sender="lindqvist-medtech@hackloop.mail", subject="Re: Fastest air freight to ORD",
+                     body="Our cartons were sent to the wrong airport, they are in Detroit, not Chicago.", in_reply_to=276, references=[276])
+    h.orchestrator.route(complaint)
+    await drain(h)
+    (to, subject, body), = airline_mails
+    assert to == "lumen-air-cargo@hackloop.mail" and "misplaced" in subject and "BK-AB12CD34" in body
+    ack = h.mailbox.sent[0]
+    assert ack.to == "lindqvist-medtech@hackloop.mail" and "CLM-276" in ack.body
+    assert h.store._conn.execute("SELECT kind FROM claims").fetchone() == ("misplaced",)
+
+
 async def test_ordinary_reply_files_no_claim(tmp_path: Path):
     h = harness(tmp_path)
     booked(h.store)
@@ -109,6 +131,11 @@ async def test_ordinary_reply_files_no_claim(tmp_path: Path):
     ("The shipment never arrived in Chicago.", "lost"),
     ("Die Sendung ist nicht angekommen.", "lost"),
     ("Il collo è arrivato danneggiato", "damaged"),
+    ("Our pallets were misrouted and are now in Dubai instead of Doha.", "misplaced"),
+    ("The cargo was sent to the wrong airport.", "misplaced"),
+    ("Die Sendung wurde fehlgeleitet.", "misplaced"),
+    ("Le colis a été mal acheminé.", "misplaced"),
+    ("Please do not send it to the wrong address, the street is new.", None),
     ("Es fehlt noch die Rechnung.", None),
     ("la rotta più veloce per favore", None),
     ("Falta información sobre el envío", None),
