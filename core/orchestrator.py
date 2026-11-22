@@ -656,6 +656,8 @@ class Orchestrator:
             mail.id,
             cost=extract_cost,
         )
+        if await self.out_of_scope_declined(mail, rfq):
+            return
         if self.dg is not None:
             try:
                 if await self.dg.stop_for_docs(self, mail):
@@ -741,6 +743,42 @@ class Orchestrator:
             rfq.mail_id,
         )
         return candidate
+
+    async def out_of_scope_declined(self, mail: Mail, rfq: RFQ) -> bool:
+        """Round 159 (accepted): an air import INTO Germany is outside the brief ("Air export RFQs
+        only"); answer with a polite decline instead of pricing the reversed route."""
+        from mail.scope import decline_body, import_into_germany
+
+        try:
+            found = import_into_germany(mail.subject, mail.body)
+        except Exception:
+            log.exception("scope_check_failed", extra={"rfq": mail.id})
+            return False
+        if found is None:
+            return False
+        origin, dest = found
+        if not self.store.claim_outbox(rfq.thread_root_id, Stage.HELD, rfq.mail_id, self.clock()):
+            return True
+        body = decline_body(origin, dest, f"WOC-{rfq.mail_id}")
+        outgoing = OutgoingMail(
+            to=rfq.customer, subject=reply_subject(rfq.subject), body=body, in_reply_to=rfq.mail_id
+        )
+        try:
+            sent = await self.send_with_retry(outgoing)
+        except Exception as error:
+            self.store.mark_outbox_failed(rfq.thread_root_id, Stage.HELD, type(error).__name__)
+            self.hold(rfq.mail_id, f"Import {origin} to {dest} is out of scope; sending the decline failed.")
+            return True
+        self.store.mark_outbox_sent(rfq.thread_root_id, Stage.HELD, sent.id)
+        self.store.update_rfq(str(rfq.mail_id), status=Stage.HELD.value, email_body=body)
+        self.emit(
+            Agent.RFQ,
+            "out_of_scope",
+            EventStatus.OK,
+            f"Request {rfq.mail_id} is an air import {origin} to {dest}: declined politely (export only).",
+            rfq.mail_id,
+        )
+        return True
 
     async def dangerous_goods_blocked(self, mail: Mail, rfq: RFQ) -> bool:
         from core.agents.attachments import dangerous_goods, has_dg_documents
