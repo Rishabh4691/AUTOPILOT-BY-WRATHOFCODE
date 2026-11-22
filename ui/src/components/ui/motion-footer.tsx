@@ -69,23 +69,26 @@ const STYLES = `
 }
 
 .footer-glass-pill {
-  background: linear-gradient(145deg, var(--pill-bg-1) 0%, var(--pill-bg-2) 100%);
+  position: relative;
+  background: linear-gradient(160deg, var(--glass-hi) 0%, var(--glass-lo) 100%);
+  border: 1px solid var(--glass-edge);
   box-shadow:
-      0 10px 30px -10px var(--pill-shadow),
-      inset 0 1px 1px var(--pill-highlight),
-      inset 0 -1px 2px var(--pill-inset-shadow);
-  border: 1px solid var(--pill-border);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+      inset 0 1px 0 var(--glass-shine),
+      inset 0 -1px 1px var(--glass-under),
+      inset 0 0 14px var(--glass-inner),
+      0 10px 30px -12px var(--glass-drop);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .footer-glass-pill:hover {
-  background: linear-gradient(145deg, var(--pill-bg-1-hover) 0%, var(--pill-bg-2-hover) 100%);
-  border-color: var(--pill-border-hover);
+  background: linear-gradient(160deg, var(--glass-hi-hover) 0%, var(--glass-lo) 100%);
   box-shadow:
-      0 20px 40px -10px var(--pill-shadow-hover),
-      inset 0 1px 1px var(--pill-highlight-hover);
+      inset 0 1px 0 var(--glass-shine),
+      inset 0 -1px 1px var(--glass-under),
+      inset 0 0 18px var(--glass-inner),
+      0 18px 40px -12px var(--glass-drop);
   color: var(--foreground);
 }
 
@@ -206,7 +209,7 @@ export interface CinematicFooterProps {
   primaryLinks: FooterLink[];
   secondaryLinks: FooterLink[];
   copyright: React.ReactNode;
-  credit: { before: string; by: string; name: string };
+  credit?: { before: string; by: string; name: string };
   topLabel: string;
   headingClassName?: string;
   giantClassName?: string;
@@ -372,12 +375,12 @@ export function CinematicFooter({
               {copyright}
             </div>
 
-            <div className="footer-glass-pill px-6 py-3 rounded-full flex items-center gap-2 order-1 md:order-2 cursor-default border-border/50">
+            {credit && <div className="footer-glass-pill px-6 py-3 rounded-full flex items-center gap-2 order-1 md:order-2 cursor-default border-border/50">
               <span className="text-muted-foreground text-[10px] md:text-xs font-bold uppercase tracking-widest">{credit.before}</span>
               <span className="animate-footer-heartbeat text-sm md:text-base text-destructive" aria-label="love">❤</span>
               <span className="text-muted-foreground text-[10px] md:text-xs font-bold uppercase tracking-widest">{credit.by}</span>
               <span className="text-foreground font-black text-xs md:text-sm tracking-normal ml-1">{credit.name}</span>
-            </div>
+            </div>}
 
             <MagneticButton
               as="button"

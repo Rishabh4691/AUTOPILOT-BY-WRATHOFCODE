@@ -15,7 +15,6 @@ const COPY = {
     primary: [['Open the scoreboard', 'board', <Trophy key="t" />], ['See the network', 'network', <Globe2 key="g" />]],
     secondary: [['Shipments', 'shipments'], ['Lessons', 'lessons'], ['Requests', 'rfqs'], ['Features', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack Munich',
-    credit: { before: 'Built with', by: 'by', name: 'WRATHOFCODE' },
     top: 'Back to top',
   },
   de: {
@@ -28,7 +27,6 @@ const COPY = {
     primary: [['Rangliste öffnen', 'board', <Trophy key="t" />], ['Netzwerk ansehen', 'network', <Globe2 key="g" />]],
     secondary: [['Sendungen', 'shipments'], ['Lektionen', 'lessons'], ['Anfragen', 'rfqs'], ['Funktionen', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack München',
-    credit: { before: 'Gebaut mit', by: 'von', name: 'WRATHOFCODE' },
     top: 'Nach oben',
   },
 }
@@ -63,7 +61,6 @@ export default function SiteFooter({ onOpen }) {
       primaryLinks={c.primary.map(link)}
       secondaryLinks={c.secondary.map(link)}
       copyright={c.copyright}
-      credit={c.credit}
       topLabel={c.top}
     />
   )

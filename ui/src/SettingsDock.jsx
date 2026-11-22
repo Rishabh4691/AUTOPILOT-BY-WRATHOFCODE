@@ -54,8 +54,8 @@ export default function SettingsDock() {
       value: lang === 'de' ? 'Design wechseln' : 'Switch theme',
       badge: dark ? 'D' : 'L',
       icon: dark ? <Moon /> : <Sun />,
-      gradientFrom: '#ffa9c6',
-      gradientTo: '#f434e2',
+      gradientFrom: '#a955ff',
+      gradientTo: '#ea51ff',
       onClick: () => setTheme(dark ? 'light' : 'dark'),
     },
     {
@@ -94,11 +94,12 @@ export default function SettingsDock() {
   }
 
   return (
-    <div ref={box} className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
+    <div ref={box} className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2 sm:right-6 sm:bottom-6">
+      {err && open && <span className="glass rounded-full px-3 py-1 text-[11px] text-rose-300">{lang === 'de' ? 'Bot-Einstellungen nicht erreichbar' : 'Bot settings unavailable'}</span>}
+      <div className="flex items-center gap-3 sm:gap-6">
       {open && (
-        <div id="settings-dock" className="flex flex-col items-end gap-2">
+        <div id="settings-dock">
           <GradientMenu items={items} />
-          {err && <span className="rounded-full bg-panel px-3 py-1 text-[11px] text-rose-300 shadow">{lang === 'de' ? 'Bot-Einstellungen nicht erreichbar' : 'Bot settings unavailable'}</span>}
         </div>
       )}
       <button
@@ -107,10 +108,11 @@ export default function SettingsDock() {
         aria-controls="settings-dock"
         aria-label={lang === 'de' ? 'Einstellungen' : 'Settings'}
         onClick={() => setOpen((o) => !o)}
-        className="btn-ink flex size-14 cursor-pointer items-center justify-center rounded-full bg-[linear-gradient(45deg,#ff8a3d,#ff5e62)] text-[#0d0d0d]"
+        className="glass flex size-[60px] shrink-0 cursor-pointer items-center justify-center rounded-full text-accent transition-transform duration-200 hover:scale-105 active:scale-95"
       >
         {open ? <X className="size-6" aria-hidden /> : <Settings2 className="size-6" aria-hidden />}
       </button>
+      </div>
     </div>
   )
 }
