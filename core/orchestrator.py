@@ -56,6 +56,15 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+# Round 199: a customer asking us to match or beat another forwarder's rate.
+PRICE_MATCH = re.compile(
+    r"\bmatch (?:their|the|this|that|a|his|her) (?:rate|price|offer|quote)\b|\b(?:another|other) forwarder\b|"
+    r"\bcompetitor\b|\b\d+\s*(?:percent|%)\s*(?:lower|cheaper|less)\b|\b(?:lower|cheaper|better) (?:rate|price|offer)\b|"
+    r"\bany (?:discount|room)\b|\bcan you (?:do|go) (?:any )?(?:better|lower)\b",
+    re.I,
+)
+
+
 def reply_subject(subject: str) -> str:
     clean = subject.strip()
     return clean if clean.lower().startswith("re:") else f"Re: {clean}".strip()
@@ -313,6 +322,10 @@ class Orchestrator:
             task.add_done_callback(self.tasks.discard)
         if kind is MailKind.FOLLOW_UP:
             task = asyncio.create_task(self.revise_if_changed(mail), name=f"revise-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
+        if kind is MailKind.FOLLOW_UP:
+            task = asyncio.create_task(self.answer_price_match(mail), name=f"match-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
         if self.dg is not None and kind is MailKind.FOLLOW_UP:
@@ -758,6 +771,57 @@ class Orchestrator:
             rfq.mail_id,
         )
         return candidate
+
+    async def answer_price_match(self, mail: Mail) -> None:
+        """Round 199 (12:05): "Another forwarder has offered a rate for the same shipment that is 10
+        percent lower. Would you be able to match their rate?" got no answer at all. Our quote is the
+        real airline rate, so hold it politely and offer to book; the customer then accepted."""
+        from core.agents.booking import is_acceptance
+        from mail.senders import same_address
+        from mail.text import fresh_text
+
+        body = fresh_text(mail.body)
+        if not PRICE_MATCH.search(body) or is_acceptance(body):
+            return
+        done = getattr(self, "_price_match_answered", set())
+        self._price_match_answered = done
+        if mail.id in done:
+            return
+        try:
+            row = self.store._conn.execute(
+                "SELECT id, customer, subject, carrier, total, currency, status FROM rfqs WHERE thread_id=? "
+                "AND total IS NOT NULL ORDER BY received_at DESC LIMIT 1",
+                (str(mail.thread_root_id),),
+            ).fetchone()
+        except Exception:
+            log.exception("price_match_lookup_failed", extra={"rfq": mail.id})
+            return
+        if row is None:
+            return
+        rfq_id, customer, subject, carrier, total, currency, status = row
+        if status not in (Stage.QUOTED.value, Stage.HELD.value) or not same_address(mail.sender, customer or ""):
+            return
+        done.add(mail.id)
+        text = (
+            "Hello,\n\n"
+            "Thank you, and I'm glad the offer works for you. "
+            f"{currency or 'EUR'} {Decimal(str(total)):,.2f} is already our best all-in price: it is built on "
+            f"{carrier}'s current rate for this shipment, so I can't go lower without leaving out something "
+            "the shipment needs.\n\n"
+            "I'm happy to hold this price for you today, and a short yes is all I need to book it. "
+            f"Our reference is WOC-{rfq_id}.\n\n"
+            "Kind regards,\nLena Hartmann\nWRATHOFCODE Air Freight"
+        )
+        try:
+            await self.send_with_retry(
+                OutgoingMail(to=customer, subject=reply_subject(subject or mail.subject), body=text, in_reply_to=mail.id)
+            )
+        except Exception:
+            log.exception("price_match_send_failed", extra={"rfq": rfq_id})
+            return
+        self.emit(Agent.RFQ, "price_match", EventStatus.OK,
+                  f"Customer asked us to match a lower offer on {rfq_id}: kept the price and offered to book.",
+                  int(rfq_id))
 
     def lookalike_held(self, mail: Mail) -> bool:
         """A request from an address that imitates a known customer ("auer.maschinenbau" for
