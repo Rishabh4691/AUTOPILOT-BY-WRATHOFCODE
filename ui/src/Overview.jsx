@@ -79,11 +79,11 @@ const SCREENS = [
 function Heading({ eyebrow, lines, light }) {
   return (
     <div>
-      <span className={light ? 'eyebrow eyebrow-on-navy' : 'eyebrow'}>{eyebrow}</span>
-      <h3 className={`mt-4 text-3xl leading-[1.1] font-medium tracking-[-0.02em] sm:text-4xl ${light ? 'text-[#f5f4f2]' : 'text-white'}`}>
+      <span className={light ? 'eyebrow eyebrow-on-ink' : 'eyebrow'}>{eyebrow}</span>
+      <h3 className={`font-display mt-4 text-3xl leading-[1.1] sm:text-4xl ${light ? 'text-[#f4f1ea]' : 'text-white'}`}>
         {lines[0]}
         <br />
-        <span className="font-light">{lines[1]}</span>
+        <span className="font-serif text-[0.92em] font-normal italic tracking-normal">{lines[1]}</span>
       </h3>
     </div>
   )
@@ -100,16 +100,16 @@ export default function Overview({ sum, onOpen }) {
       <section className="grid gap-12 pt-6 lg:grid-cols-[1.25fr_1fr] lg:items-end">
         <div>
           <span className="eyebrow">{c.eyebrow}</span>
-          <h2 className="mt-5 text-4xl leading-[1.06] font-medium tracking-[-0.025em] text-white sm:text-[56px]">
+          <h2 className="font-display mt-5 text-4xl leading-[1.04] text-white sm:text-[60px]">
             {c.title}
             <br />
-            <span className="font-light">{c.sub}</span>
+            <span className="squiggle font-serif text-[0.9em] font-normal italic tracking-normal">{c.sub}</span>
           </h2>
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-zinc-300">{c.lead}</p>
+          <p className="mt-6 max-w-xl font-serif text-[17px] leading-relaxed text-zinc-300">{c.lead}</p>
           <button
             type="button"
             onClick={() => onOpen('board')}
-            className="mt-8 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-accent px-6 text-[13px] font-medium tracking-[0.04em] text-[#fff] uppercase transition-colors duration-200 hover:bg-sky-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className="btn-ink mt-8 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full bg-accent px-6 text-[14px] font-bold text-[#0d0d0d]"
           >
             {c.screens.board[0]} <ArrowRight className="size-4" aria-hidden />
           </button>
@@ -118,7 +118,7 @@ export default function Overview({ sum, onOpen }) {
           {c.stats.map((label, i) => (
             <div key={label} className="flex min-w-0 flex-col-reverse border-l border-line pl-5">
               <dt className="mt-2 text-[13px] text-muted">{label}</dt>
-              <dd className="truncate text-3xl font-light tracking-tight text-white sm:text-4xl">{stats[i]}</dd>
+              <dd className="font-display truncate text-3xl text-white sm:text-4xl">{stats[i]}</dd>
             </div>
           ))}
         </dl>
@@ -126,18 +126,18 @@ export default function Overview({ sum, onOpen }) {
 
       <section>
         <Heading eyebrow={c.howEyebrow} lines={c.howTitle} />
-        <ol className="mt-10 grid gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-7">
+        <ol className="sketch-card mt-10 grid gap-px overflow-hidden rounded-xl bg-line sm:grid-cols-2 lg:grid-cols-7">
           {c.steps.map(([name, text], i) => {
             const Icon = STEP_ICONS[i]
             return (
               <li key={name} className="bg-panel p-5">
                 <div className="flex items-center justify-between">
-                  <span className="grid size-9 place-items-center rounded-lg bg-sky-500/12 text-sky-300">
+                  <span className="grid size-9 place-items-center rounded-full border-2 border-sketch bg-accent text-[#0d0d0d]">
                     <Icon className="size-[18px]" aria-hidden />
                   </span>
                   <span className="font-mono text-[11px] text-muted">0{i + 1}</span>
                 </div>
-                <div className="mt-4 text-[15px] font-medium text-white">{name}</div>
+                <div className="font-display mt-4 text-[15px] text-white">{name}</div>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{text}</p>
               </li>
             )
@@ -145,7 +145,7 @@ export default function Overview({ sum, onOpen }) {
         </ol>
       </section>
 
-      <section className="navy-band -mx-4 rounded-[28px] px-6 py-14 sm:-mx-6 sm:px-12">
+      <section className="ink-band rounded-[28px] px-6 py-14 sm:px-12">
         <Heading eyebrow={c.roomEyebrow} lines={c.roomTitle} light />
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {SCREENS.map(([key, Icon]) => {
@@ -155,14 +155,14 @@ export default function Overview({ sum, onOpen }) {
                 key={key}
                 type="button"
                 onClick={() => onOpen(key)}
-                className={`${key === 'board' ? 'sm:col-span-2' : ''} group flex cursor-pointer flex-col rounded-2xl border border-[#ffffff1a] bg-[#ffffff0f] p-6 text-left transition-colors duration-200 hover:border-[#ffffff40] hover:bg-[#ffffff1a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f08a66]`}
+                className={`${key === 'board' ? 'sm:col-span-2' : ''} group flex cursor-pointer flex-col rounded-2xl border-2 border-[#f4f1ea40] bg-[#1d1d20] p-6 text-left transition-[transform,border-color] duration-200 hover:-translate-y-1 hover:-rotate-1 hover:border-[#f4f1ea] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f08a66]`}
               >
-                <span className="grid size-10 place-items-center rounded-xl bg-[#ffffff1a] text-[#f5f4f2]">
+                <span className="grid size-10 place-items-center rounded-full border-2 border-[#f4f1ea] bg-[#ff8a3d] text-[#0d0d0d]">
                   <Icon className="size-5" aria-hidden />
                 </span>
-                <span className="mt-5 text-lg font-medium text-[#f5f4f2]">{name}</span>
-                <span className="mt-1.5 text-[14px] leading-relaxed text-[#c9cfdd]">{text}</span>
-                <span className="mt-6 inline-flex items-center gap-1.5 text-[12px] font-medium tracking-[0.06em] text-[#f08a66] uppercase">
+                <span className="font-display mt-5 text-lg text-[#f4f1ea]">{name}</span>
+                <span className="mt-1.5 text-[14px] leading-relaxed text-[#c9c4ba]">{text}</span>
+                <span className="mt-6 inline-flex items-center gap-1.5 text-[12px] font-medium tracking-[0.06em] text-[#ffa66b] uppercase">
                   {c.open}
                   <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden />
                 </span>

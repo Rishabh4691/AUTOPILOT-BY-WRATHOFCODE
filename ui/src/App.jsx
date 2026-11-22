@@ -10,6 +10,7 @@ import Network from './Network'
 import Overview from './Overview'
 import { useT, useTheme } from './prefs'
 import Shipments from './Shipments'
+import SiteFooter from './SiteFooter'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -97,10 +98,11 @@ export default function App() {
   ]
 
   return (
+    <>
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
       <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
         <div className="flex shrink-0 items-center gap-2.5">
-          <span className="text-[15px] font-semibold tracking-tight text-white">AUTOPILOT</span>
+          <span className="font-display text-[16px] text-white">AUTOPILOT</span>
         </div>
         <nav className="app-tabs flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
           {tabs.map(([k, label]) => (
@@ -183,5 +185,7 @@ export default function App() {
 
       {open && <RfqDetail id={open} tick={tick} now={now} operator={operator} onClose={() => setOpen(null)} />}
     </div>
+    <SiteFooter onOpen={setTab} />
+    </>
   )
 }

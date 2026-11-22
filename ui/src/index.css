@@ -1,78 +1,132 @@
 @import "tailwindcss";
 
+/* Sketchbook theme: paper, black ink lines, hard offset shadows, orange accent.
+   Dark ("night") is the default token set below; light ("paper") overrides it. */
 @theme {
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Fragment Mono", ui-monospace, monospace;
-  --color-ink: #2a3350;
-  --color-panel: #34405f;
-  --color-line: #47547a;
-  --color-muted: #a9b3cc;
-  --color-accent: #de5531;
-  --color-sky-200: #f6b49c;
-  --color-sky-300: #f08a66;
-  --color-sky-400: #e26a42;
-  --color-sky-500: #de5531;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-display: "Archivo Black", "Arial Black", Helvetica, sans-serif;
+  --color-ink: #0e0e10;
+  --color-panel: #17171a;
+  --color-line: #2c2c31;
+  --color-muted: #a8a39a;
+  --color-accent: #ff8a3d;
+  --color-sketch: #f4f1ea;
+  --color-dot: #ffffff12;
+  --color-sky-200: #ffc29a;
+  --color-sky-300: #ffa66b;
+  --color-sky-400: #ff8a3d;
+  --color-sky-500: #ff8a3d;
   --radius-md: 0.625rem;
   --radius-lg: 0.875rem;
   --radius-xl: 1.25rem;
 }
 
+[data-theme="light"] {
+  --color-ink: #fffdf8;
+  --color-panel: #ffffff;
+  --color-line: #ebe5da;
+  --color-muted: #6b665e;
+  --color-accent: #ff6b2c;
+  --color-sketch: #0d0d0d;
+  --color-dot: #0d0d0d14;
+  --color-white: #0d0d0d;
+  --color-zinc-100: #0d0d0d;
+  --color-zinc-200: #1c1b19;
+  --color-zinc-300: #3a3733;
+  --color-zinc-400: #57534d;
+  --color-zinc-500: #6b665e;
+  --color-zinc-600: #a49e94;
+  --color-sky-200: #a3380f;
+  --color-sky-300: #b93f10;
+  --color-sky-400: #ff6b2c;
+  --color-sky-500: #ff6b2c;
+  --color-emerald-300: #18794e;
+  --color-rose-200: #9f3038;
+  --color-rose-300: #b33840;
+  --color-amber-300: #95620c;
+  --color-violet-300: #5b4a8a;
+  color-scheme: light;
+}
+
 body {
   @apply bg-ink text-zinc-200 font-sans antialiased;
   letter-spacing: -0.01em;
+  background-image: radial-gradient(var(--color-dot) 1px, transparent 1.2px);
+  background-size: 22px 22px;
 }
 
 @keyframes blip {
   0%, 100% { opacity: 1 }
   50% { opacity: .35 }
 }
-
 .blip { animation: blip 1.4s ease-in-out infinite }
 
+/* ---- sketchbook surfaces ---- */
+/* Every rounded panel becomes an inked card with a hard offset shadow. */
+.bg-panel.border[class*="rounded"] {
+  border: 2px solid var(--color-sketch);
+  box-shadow: 4px 4px 0 var(--color-sketch);
+}
+.sketch-card {
+  border: 2px solid var(--color-sketch);
+  box-shadow: 4px 4px 0 var(--color-sketch);
+  background: var(--color-panel);
+}
+.pill-shadow { box-shadow: 4px 4px 0 var(--color-sketch) }
+.app-header { border: 2px solid var(--color-sketch) !important }
+
+/* Tabs and switches: the current one is an orange sticker with an ink edge. */
+.app-tabs [aria-current="page"] {
+  background: var(--color-accent);
+  color: #0d0d0d;
+  box-shadow: inset 0 0 0 2px var(--color-sketch);
+}
+
 .eyebrow {
-  @apply inline-block rounded-md px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.08em];
-  background: color-mix(in oklab, var(--color-accent) 14%, transparent);
+  @apply inline-block rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.1em];
+  border: 1.5px dashed var(--color-sketch);
   color: var(--color-sky-300);
+  background: var(--color-panel);
 }
 
-.pill-shadow { box-shadow: 0 8px 24px -16px rgba(29, 27, 24, .24), 0 1px 0 rgba(255, 255, 255, .8) inset }
+.btn-ink {
+  border: 2px solid var(--color-sketch);
+  box-shadow: 0 3px 0 var(--color-sketch);
+  transition: transform .18s cubic-bezier(.3, 1.4, .5, 1), box-shadow .18s cubic-bezier(.3, 1.4, .5, 1);
+}
+.btn-ink:hover { transform: translateY(-2px) rotate(-1.2deg); box-shadow: 0 5px 0 var(--color-sketch) }
+.btn-ink:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-sketch); transition-duration: .06s }
 
-[data-theme="light"] {
-  --color-ink: #f5f4f2;
-  --color-panel: #ffffff;
-  --color-line: #e7e4e0;
-  --color-muted: #77736f;
-  --color-white: #171614;
-  --color-zinc-100: #171614;
-  --color-zinc-200: #282623;
-  --color-zinc-300: #48443f;
-  --color-zinc-400: #625e58;
-  --color-zinc-500: #77736f;
-  --color-zinc-600: #aaa59e;
-  --color-sky-200: #bd4827;
-  --color-sky-300: #bd4827;
-  --color-sky-400: #d95732;
-  --color-sky-500: #df5733;
-  --color-emerald-300: #18794e;
-  --color-rose-200: #9f3038;
-  --color-rose-300: #b33840;
-  --color-amber-300: #95620c;
-  --color-violet-300: #6a5b83;
-  color-scheme: light;
+.font-display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.02em }
+
+/* A hand-drawn underline under a word. */
+.squiggle {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 8' preserveAspectRatio='none'%3E%3Cpath d='M1 5 C10 1 16 7 25 4 S40 1 50 4 S66 7 75 4 S90 1 99 4' fill='none' stroke='%23ff6b2c' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") bottom / 100% .28em no-repeat;
+  padding-bottom: .12em;
 }
 
-[data-theme="light"] .map-sea { fill: #f1efeb }
-[data-theme="light"] .map-land { fill: #e3e0db; stroke: #d6d2cc }
-[data-theme="dark"] .map-sea { fill: #0d1218 }
-[data-theme="dark"] .map-land { fill: #1a222c; stroke: #26303c }
+/* The dark band on the Overview: night page with an orange offset shadow. */
+.ink-band {
+  background: #141414;
+  color: #f4f1ea;
+  border: 2px solid var(--color-sketch);
+  box-shadow: 6px 6px 0 var(--color-accent);
+}
+.eyebrow-on-ink { background: #141414; color: #ffa66b; border-color: #f4f1ea }
 
-/* Keep data surfaces quiet and editorial throughout the dashboard. */
+/* ---- map ---- */
+[data-theme="light"] .map-sea { fill: #fbf8f1 }
+[data-theme="light"] .map-land { fill: #ece6da; stroke: #0d0d0d; stroke-width: .6 }
+[data-theme="dark"] .map-sea { fill: #121215 }
+[data-theme="dark"] .map-land { fill: #1f1f23; stroke: #f4f1ea55 }
+
+/* ---- header on small screens ---- */
 button { -webkit-tap-highlight-color: transparent }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px }
 @media (max-width: 1200px) {
   .app-header { flex-wrap: wrap; row-gap: .4rem; border-radius: 1.25rem; padding: .5rem .75rem .65rem }
   .app-header .app-tabs { order: 3; flex: 1 0 100%; flex-wrap: wrap; overflow: visible; gap: .125rem }
-  .app-header .app-status { margin-left: auto }
   .app-header .app-tabs button { padding-inline: .6rem; font-size: .7rem }
 }
 @media (max-width: 640px) {
@@ -81,19 +135,15 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--color-accen
   .app-header .app-tabs button { padding-inline: .45rem; font-size: .65rem }
 }
 [data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover,
-[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover { background-color: #f8f6f3 }
-[data-theme="light"] .bg-white\/\[0\.03\] { background-color: #f8f6f3 }
-[data-theme="light"] .bg-white\/\[0\.05\] { background-color: #f3f0ec }
+[data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover { background-color: #fbf6ec }
+[data-theme="light"] .bg-white\/\[0\.03\] { background-color: #fbf6ec }
+[data-theme="light"] .bg-white\/\[0\.05\] { background-color: #f7f0e3 }
 
-/* 5U-style navy band; fixed colours so it reads the same in both themes */
-.navy-band { background: linear-gradient(180deg, #2f3a5a 0%, #3f4e73 100%); color: #f5f4f2 }
-.eyebrow-on-navy { background: rgba(255, 255, 255, .1); color: #f6c3ae }
-
-/* Accessibility: visible keyboard focus, pointer on clickables, calm motion when asked */
+/* ---- accessibility: visible keyboard focus, pointer on clickables, calm motion when asked ---- */
 button, [role="button"], a[href], summary { cursor: pointer }
 :where(button, a[href], input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: 2px dashed var(--color-sketch);
+  outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important }
