@@ -50,6 +50,7 @@ class Seen:
     transit_days: int
     seen_at: str
     breaks: tuple[Decimal, ...] = ()
+    dataset: str = ""
 
     @property
     def per_kg(self) -> Decimal:
@@ -57,7 +58,7 @@ class Seen:
 
 
 def record(origin: str, destination: str, airline: str, code: str | None, chargeable_kg, total,
-           currency: str, transit_days: int, breaks=(), path: Path | None = None) -> None:
+           currency: str, transit_days: int, breaks=(), path: Path | None = None, dataset=None) -> None:
     """Remember one portal price (called for every portal answer while the portal works)."""
     try:
         row = {
@@ -65,6 +66,7 @@ def record(origin: str, destination: str, airline: str, code: str | None, charge
             "chargeable_kg": str(chargeable_kg), "total": str(total), "currency": currency,
             "transit_days": int(transit_days), "seen_at": datetime.now(UTC).isoformat(timespec="seconds"),
             "breaks": [str(b) for b in breaks or ()],
+            "dataset": "" if dataset is None else str(dataset),
         }
         target = path or cache_path()
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -87,12 +89,19 @@ def load(path: Path | None = None) -> list[Seen]:
             seen = Seen(r["origin"], r["destination"], r["airline"], r.get("code"),
                         Decimal(r["chargeable_kg"]), Decimal(r["total"]), r.get("currency", "EUR"),
                         int(r["transit_days"]), r.get("seen_at", ""),
-                        tuple(Decimal(b) for b in r.get("breaks") or ()))
+                        tuple(Decimal(b) for b in r.get("breaks") or ()), str(r.get("dataset") or ""))
         except (ValueError, KeyError, InvalidOperation, TypeError):
             continue
         if seen.chargeable_kg > 0 and seen.total > 0:
             out.append(seen)
     return out
+
+
+def latest_dataset(rows: list[Seen]) -> str:
+    """The portal dataset version seen most recently ("" when no row carries one)."""
+    versioned = [s for s in rows if s.dataset]
+    # stable sort: rows saved in the same second keep file order, and the file is append-only
+    return sorted(versioned, key=lambda s: s.seen_at)[-1].dataset if versioned else ""
 
 
 def same_break(a: Decimal, b: Decimal, breaks: tuple[Decimal, ...] = ()) -> bool:
@@ -106,6 +115,13 @@ def estimate(origin: str, destination: str, chargeable_kg: Decimal, seen: list[S
 
     Also tries the next break up (the portal keeps the cheaper of own weight and next break)."""
     rows = seen if seen is not None else load(path)
+    # Round 122: a price from an older portal dataset (3.95 EUR/kg) was quoted while the current
+    # one was higher -> too_low. Only the newest dataset the portal has shown us counts, and the
+    # newest price inside it; a price saved without a version is used only if nothing newer exists.
+    current = latest_dataset(rows)
+    if current:
+        rows = [s for s in rows if s.dataset == current]
+    rows = sorted(rows, key=lambda s: s.seen_at)
     lane = [s for s in rows if s.origin == origin.upper() and s.destination == destination.upper()]
     out = []
     for airline in sorted({s.airline for s in lane}):
@@ -131,6 +147,7 @@ def estimate(origin: str, destination: str, chargeable_kg: Decimal, seen: list[S
         out.append({
             "airline": airline, "code": s.code, "total": total.quantize(CENT, rounding=ROUND_HALF_UP),
             "currency": s.currency, "transit_days": s.transit_days, "chargeable_kg": chargeable_kg,
-            "basis": f"{how}: {s.total} for {s.chargeable_kg} kg seen {s.seen_at}",
+            "basis": f"{how}: {s.total} for {s.chargeable_kg} kg seen {s.seen_at} (dataset {s.dataset or '?'})",
+            "seen_at": s.seen_at, "dataset": s.dataset,
         })
     return out

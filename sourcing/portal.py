@@ -290,7 +290,7 @@ class PortalClient:
         hit = self._brackets.get(airline.upper())
         portal_cache.record(rate.origin, rate.destination, rate.airline, rate.airline_code,
                             rate.chargeable_weight_kg, rate.total, rate.currency, rate.transit_days,
-                            breaks=[Decimal(b) for b in hit[1]] if hit else ())
+                            breaks=[Decimal(b) for b in hit[1]] if hit else (), dataset=rate.dataset_version)
         return rate
 
     # ------------------------------------------------------------ booking

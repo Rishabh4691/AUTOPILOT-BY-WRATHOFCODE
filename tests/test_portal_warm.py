@@ -35,13 +35,6 @@ def test_one_weight_per_break_from_100_kg() -> None:
     assert portal_warm.weights_for([]) == list(portal_warm.DEFAULT_WEIGHTS)
 
 
-async def test_warm_up_is_off_by_default(monkeypatch) -> None:
-    from core.main import portal_warm_up
-
-    monkeypatch.delenv("PORTAL_WARM", raising=False)
-    await asyncio.wait_for(portal_warm_up(SimpleNamespace(api_key="k", base_url="http://x"), asyncio.Event()), 1)
-
-
 async def test_warm_up_is_off_when_disabled(monkeypatch) -> None:
     from core.main import portal_warm_up
 
@@ -52,7 +45,7 @@ async def test_warm_up_is_off_when_disabled(monkeypatch) -> None:
 async def test_warm_up_fills_every_break_then_an_outage_is_priced() -> None:
     client, stop = FakeClient(), asyncio.Event()
     portal_warm._last_live = 0.0
-    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))
+    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))  # noqa: E501
     for _ in range(50):
         await asyncio.sleep(0.01)
         if len(client.calls) == 4:
@@ -68,17 +61,24 @@ async def test_warm_up_fills_every_break_then_an_outage_is_priced() -> None:
 
 async def test_warm_up_steps_aside_for_live_quotes_and_low_budget() -> None:
     client = FakeClient()
-    client.rate_remaining = 20  # less than half of 60 left: live quotes need it
+    client.rate_limit, client.rate_remaining = 10, 7  # live quotes may need these reads
     assert not portal_warm.room(client)
-    client.rate_remaining = 50
+    client.rate_remaining = 8
     assert portal_warm.room(client)
 
 
 async def test_outage_stops_the_pass() -> None:
     client, stop = FakeClient(fail_after=1), asyncio.Event()
     portal_warm._last_live = 0.0
-    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))
+    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))  # noqa: E501
     await asyncio.sleep(0.1)
     stop.set()
     await task
     assert len(client.calls) == 1
+
+
+def test_refresh_only_in_the_quiet_part_of_a_round(monkeypatch) -> None:
+    monkeypatch.setattr(portal_warm, "_last_live", 1000.0)
+    assert not portal_warm.in_quiet_window(1030.0)  # live quote still running
+    assert portal_warm.in_quiet_window(1120.0)
+    assert not portal_warm.in_quiet_window(1300.0)  # next round is about to start

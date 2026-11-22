@@ -25,6 +25,10 @@ log = logging.getLogger("sourcing.portal_warm")
 DEFAULT_WEIGHTS = (Decimal(100), Decimal(300), Decimal(500), Decimal(1000), Decimal(2000))
 FRESH = timedelta(hours=6)
 LIVE_QUIET_S = 60.0
+# Rounds come every ~6 min 4 s. Refresh only from 1 min after a live quote until 5 min after it,
+# so the next round always starts with an untouched per-minute budget (10 reads in dataset v3).
+WINDOW_END_S = 290.0
+KEEP_FREE = 2  # never take one of the last free reads a live quote could need
 _last_live = 0.0
 
 
@@ -41,8 +45,11 @@ def weights_for(breaks) -> list[Decimal]:
     return picked or list(DEFAULT_WEIGHTS)
 
 
-def have(rows, origin: str, destination: str, airline: str, weight: Decimal, breaks, now: datetime) -> bool:
+def have(rows, origin: str, destination: str, airline: str, weight: Decimal, breaks, now: datetime,
+         current: str = "") -> bool:
     for r in rows:
+        if current and r.dataset != current:
+            continue  # a price from an older dataset is not fresh (round 122)
         if (r.origin, r.destination) != (origin, destination) or airline not in (r.code, r.airline):
             continue
         if not portal_cache.same_break(r.chargeable_kg, weight, tuple(Decimal(str(b)) for b in breaks or ())):
@@ -58,7 +65,12 @@ def have(rows, origin: str, destination: str, airline: str, weight: Decimal, bre
 async def plan(client) -> list[tuple[str, str, str, Decimal]]:
     lanes = await client.ports()
     rows = portal_cache.load()
+    current = getattr(client, "dataset_version", None) or portal_cache.latest_dataset(rows)
     now = datetime.now(UTC)
+    asked: dict[tuple[str, str], int] = {}
+    for r in rows:  # lanes customers already asked for come first
+        asked[(r.origin, r.destination)] = asked.get((r.origin, r.destination), 0) + 1
+    lanes = sorted(lanes, key=lambda l: -asked.get((l.origin.upper(), l.destination.upper()), 0))
     todo = []
     for lane in lanes:
         for airline in lane.airlines:
@@ -67,20 +79,29 @@ async def plan(client) -> list[tuple[str, str, str, Decimal]]:
             except Exception:
                 breaks = []
             for w in weights_for(breaks):
-                if not have(rows, lane.origin.upper(), lane.destination.upper(), airline.code, w, breaks, now):
+                if not have(rows, lane.origin.upper(), lane.destination.upper(), airline.code, w, breaks, now,
+                            str(current or "")):
                     todo.append((lane.origin.upper(), lane.destination.upper(), airline.code, w))
     return todo
 
 
 def room(client) -> bool:
-    """Leave at least half of the per-minute portal budget to live quotes."""
+    """Only read while almost the whole per-minute budget is free (live quotes come first)."""
     limit, left = getattr(client, "rate_limit", None), getattr(client, "rate_remaining", None)
     if limit is None or left is None:
         return True
-    return left > limit / 2
+    return left >= max(1, limit - KEEP_FREE)
 
 
-async def warm_forever(client, stop: asyncio.Event, gap_s: float = 4.0, idle_s: float = 600.0) -> None:
+def in_quiet_window(now: float | None = None) -> bool:
+    """Between 1 and ~5 minutes after the last live quote: never near the start of a round."""
+    since = (now if now is not None else time.monotonic()) - _last_live
+    if _last_live == 0.0:
+        return True  # just started, no round seen yet: room() still guards the budget
+    return LIVE_QUIET_S <= since <= WINDOW_END_S
+
+
+async def warm_forever(client, stop: asyncio.Event, gap_s: float = 30.0, idle_s: float = 600.0) -> None:
     from sourcing.portal import PortalUnavailable, RateLimited
 
     while not stop.is_set():
@@ -95,7 +116,7 @@ async def warm_forever(client, stop: asyncio.Event, gap_s: float = 4.0, idle_s: 
         for origin, destination, code, weight in todo:
             if stop.is_set():
                 return
-            while time.monotonic() - _last_live < LIVE_QUIET_S or not room(client):
+            while not in_quiet_window() or not room(client):
                 await _sleep(stop, 5)
                 if stop.is_set():
                     return

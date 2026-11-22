@@ -221,9 +221,10 @@ async def recheck_bookings(orchestrator, stop: asyncio.Event, every_s: float = 3
 
 async def portal_warm_up(settings: Settings, stop: asyncio.Event) -> None:
     """Rounds 93-97: keep portal prices on disk so a portal outage can still be priced."""
-    # Off unless PORTAL_WARM=1: the portal allows only 10 calls a minute per team (dataset v3),
-    # and a lane with 4 airlines needs 8+ of them; the warm-up must never take those from a quote.
-    if os.environ.get("PORTAL_WARM", "0") != "1":
+    # On by default in its safe form (rounds 120-123: the outage winner books the same airline
+    # within ~1 min, from fresh saved prices): at most one read per 30 s, only while 8 of the 10
+    # reads per minute are free, and only 1-5 min after a live quote. PORTAL_WARM=0 turns it off.
+    if os.environ.get("PORTAL_WARM", "1") == "0":
         return
     import sourcing
     from sourcing.portal_warm import warm_forever

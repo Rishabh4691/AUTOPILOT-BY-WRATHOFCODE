@@ -51,3 +51,20 @@ def test_unknown_lane_and_broken_file(tmp_path: Path) -> None:
     path.write_text('not json\n{"origin": "X"}\n')
     assert pc.estimate("DUS", "MEX", D("500"), path=path) == []
     assert pc.estimate("DUS", "MEX", D("500"), path=tmp_path / "missing.jsonl") == []
+
+
+def test_round_122_newest_dataset_wins(tmp_path: Path) -> None:
+    """Tamarind FRA-LOS: 3.95 EUR/kg in an older dataset, 4.47 in the current one."""
+    path = tmp_path / "cache.jsonl"
+    pc.record("FRA", "LOS", "Tamarind Airways", "TM", D("1075"), D("4246.25"), "EUR", 3, path=path, dataset="v2")
+    pc.record("FRA", "LOS", "Tamarind Airways", "TM", D("1378"), D("6158.54"), "EUR", 3, path=path, dataset="v3")
+    pc.record("DUS", "JFK", "Fjordline Air Cargo", "FQ", D("127"), D("433.07"), "EUR", 3, path=path, dataset="v3")
+    [e] = pc.estimate("FRA", "LOS", D("1162"), path=path)
+    assert e["dataset"] == "v3" and e["total"] == (D("6158.54") / D("1378") * D("1162")).quantize(D("0.01"))
+
+
+def test_old_dataset_alone_is_not_used_once_a_newer_one_exists(tmp_path: Path) -> None:
+    path = tmp_path / "cache.jsonl"
+    pc.record("FRA", "LOS", "Tamarind Airways", "TM", D("1075"), D("4246.25"), "EUR", 3, path=path, dataset="v2")
+    pc.record("DUS", "JFK", "Fjordline Air Cargo", "FQ", D("127"), D("433.07"), "EUR", 3, path=path, dataset="v3")
+    assert pc.estimate("FRA", "LOS", D("1162"), path=path) == []  # only a stale price: no estimate
