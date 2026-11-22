@@ -1113,7 +1113,9 @@ class Orchestrator:
                 "seconds_left": round(deadline - time.time()),
             },
         )
-        while time.time() < deadline:
+        # Round 94: the draft came after the deadline and auto-sent past an existing hold. Read the
+        # decision at least once, also when the deadline has already passed.
+        while True:
             if decision_path.exists():
                 try:
                     decision = json.loads(decision_path.read_text(encoding="utf-8"))
@@ -1132,7 +1134,9 @@ class Orchestrator:
                     updates["total"] = Decimal(str(decision["total"]))
                     updates["currency"] = str(decision["currency"])
                 return quote.model_copy(update=updates) if updates else quote
-            await asyncio.sleep(1.0)
+            if time.time() >= deadline:
+                break
+            await asyncio.sleep(0.2)
         log.info("review_timeout_autosend", extra={"rfq": quote.rfq_mail_id})
         return quote
 
