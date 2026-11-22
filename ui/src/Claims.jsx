@@ -16,9 +16,9 @@ const COPY = {
     empty: 'No claims yet. No customer has reported a problem with a booked shipment.',
     kindsTitle: 'What the bot files',
     kinds: {
-      lost: ['Lost', '“never arrived”, “went missing”, “nicht angekommen”, “perdu en transit”'],
-      misplaced: ['Misplaced', '“sent to the wrong airport”, “misrouted”, “fehlgeleitet”, “mal acheminé”'],
-      damaged: ['Damaged', '“arrived damaged”, “broken”, “crushed”, “beschädigt”, “danneggiato”'],
+      lost: ['Lost'],
+      misplaced: ['Misplaced'],
+      damaged: ['Damaged'],
     },
     flowTitle: 'How a claim runs, with no human in the loop',
     flow: [
@@ -29,15 +29,14 @@ const COPY = {
     ],
     fieldsTitle: 'Every claim records',
     fields: ['Claim no.', 'Type', '5U booking', 'Our reference', 'Customer', 'Airline', 'Airline email', 'Customer’s description', 'Filed at', 'Status'],
-    code: 'In the code: core/agents/claims.py, tested in tests/core/test_updates_claims.py',
   },
   de: {
     empty: 'Noch keine Schäden. Kein Kunde hat ein Problem mit einer gebuchten Sendung gemeldet.',
     kindsTitle: 'Was der Bot meldet',
     kinds: {
-      lost: ['Verloren', '„nicht angekommen“, „verloren gegangen“, „never arrived“, „perdu en transit“'],
-      misplaced: ['Fehlgeleitet', '„fehlgeleitet“, „falsch zugestellt“, „sent to the wrong airport“, „misrouted“'],
-      damaged: ['Beschädigt', '„beschädigt“, „zerbrochen“, „arrived damaged“, „danneggiato“'],
+      lost: ['Verloren'],
+      misplaced: ['Fehlgeleitet'],
+      damaged: ['Beschädigt'],
     },
     flowTitle: 'So läuft ein Schaden, ohne Menschen dazwischen',
     flow: [
@@ -48,7 +47,6 @@ const COPY = {
     ],
     fieldsTitle: 'Jeder Schaden enthält',
     fields: ['Schadensnr.', 'Art', '5U-Buchung', 'Unsere Referenz', 'Kunde', 'Airline', 'Airline-Mail', 'Beschreibung des Kunden', 'Gemeldet am', 'Status'],
-    code: 'Im Code: core/agents/claims.py, getestet in tests/core/test_updates_claims.py',
   },
 }
 
@@ -63,13 +61,12 @@ function Empty({ c }) {
 
       <section className="glass lb-rise rounded-[28px] p-6">
         <h3 className="text-[11px] tracking-[0.16em] text-muted uppercase">{c.kindsTitle}</h3>
-        <ul className="mt-4 grid gap-3 sm:grid-cols-3">
+        <ul className="mt-4 flex flex-wrap gap-3">
           {Object.entries(KINDS).map(([k, { color, Icon }]) => (
-            <li key={k} className="rounded-2xl border border-[color-mix(in_oklch,var(--color-foreground)_10%,transparent)] p-4">
+            <li key={k}>
               <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[12px] font-bold text-[#fff]" style={{ background: color }}>
                 <Icon className="size-3.5" aria-hidden /> {c.kinds[k][0]}
               </span>
-              <p className="mt-3 text-[13px] text-zinc-400">{c.kinds[k][1]}</p>
             </li>
           ))}
         </ul>
@@ -99,7 +96,6 @@ function Empty({ c }) {
             <li key={f} className="rounded-full border border-[color-mix(in_oklch,var(--color-foreground)_12%,transparent)] px-3 py-1.5 text-[13px] text-zinc-300">{f}</li>
           ))}
         </ul>
-        <p className="mt-4 font-mono text-[12px] text-muted">{c.code}</p>
       </section>
     </div>
   )
