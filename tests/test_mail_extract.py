@@ -256,3 +256,17 @@ def test_korean_lots_one_consignment_round_167():
     )
     pieces, gross, cbm = parse_lots(text)
     assert (pieces, str(gross), str(cbm)) == (13, "1223", "9.226")
+
+
+@pytest.mark.parametrize(
+    "text, ready",
+    [
+        ("Yük, 2026-11-28 tarihinde 40073 Duesseldorf, Germany adresindeki tesisimizden teslim alınmaya hazır olacak.",
+         "2026-11-28"),  # round 171
+        ("Yük 2026-12-04 tarihinde alıma hazır olacak.", "2026-12-04"),  # round 131
+    ],
+)
+def test_turkish_ready_date(text, ready):
+    from mail.extract import find_ready
+
+    assert str(find_ready(text)) == ready

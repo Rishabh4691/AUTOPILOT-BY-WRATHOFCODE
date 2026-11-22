@@ -250,6 +250,10 @@ SELF_DROP_DATE = re.compile(
     rf"entregaremos|consegneremo|dostarczymy)[^.\d]{{0,60}}?{READY_DATE}",
     re.I,
 )
+# Round 171 (Turkish): "Yük, 2026-11-28 tarihinde 40073 Duesseldorf ... teslim alınmaya hazır olacak". The
+# date comes first, "tarihinde" (on the date) follows, and "hazır" (ready) closes the sentence, often
+# after a postcode. Without it the arrival was counted from today (rounds 126, 131, 171).
+READY_TR = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\s+tarih\w*[^.!?\n]{0,160}?\bhaz[ıi]r", re.I)
 READY_SAME_SENTENCE = re.compile(r"\b(?:ready|abholbereit|bereit)\b[^.!?\n]{0,90}?\b(\d{4})-(\d{2})-(\d{2})\b", re.I)
 # Same, with "30.11.2026" or "30 Nov 2026" (fuzz: R2 and R29 lost the ready date in those formats).
 # The dotted date's own dots are allowed; any other full stop ends the sentence.
@@ -654,6 +658,9 @@ def find_ready(text: str) -> date | None:
             cjk = READY_CJK_AFTER.search(text or "") or READY_CJK_BEFORE.search(text or "")
             if cjk:
                 return date(int(cjk.group(1)), int(cjk.group(2)), int(cjk.group(3)))
+            tr = READY_TR.search(text or "")
+            if tr:
+                return date(int(tr.group(1)), int(tr.group(2)), int(tr.group(3)))
         except ValueError:
             return None
         return None
