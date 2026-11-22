@@ -4,6 +4,7 @@ import asyncio
 import os
 import json
 import logging
+import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -151,6 +152,32 @@ def drop_excluded(rfq: RFQ, options: list[PriceOption]) -> list[PriceOption]:
         return options
     kept = [o for o in options if not is_excluded(o.carrier, o.carrier_code, banned)]
     return kept
+
+
+HOLDING = re.compile(
+    r"\b(?:come|get|revert)\s+back\s+to\s+you|will\s+(?:send|confirm)\s+(?:you\s+)?(?:the|a|our)\s+"
+    r"(?:confirmed\s+)?(?:price|rate|quote|offer)\s+(?:as\s+soon|once|when|later)|"
+    r"as\s+soon\s+as\s+(?:the\s+)?(?:rate|price)\s+is\s+available|rather\s+than\s+send(?:ing)?\s+you\s+an\s+estimate|"
+    r"(?:melden|kommen)\s+uns\s+(?:bei\s+ihnen\s+)?(?:zurück|wieder)|reviendr\w*\s+vers\s+vous",
+    re.I,
+)
+PRICE = re.compile(r"(?:EUR|USD|CHF|GBP|€|\$)\s*\d|\d[\d.,]*\s*(?:EUR|USD|CHF|GBP|€)")
+
+
+DG_DOCS = re.compile(
+    r"shipper'?s\s+declaration|safety\s+data\s+sheet|\bSDS\b|\bMSDS\b|\bUN\s?\d{4}\b|dangerous\s+goods\s+declaration|"
+    r"gefahrgut\w*erkl|sicherheitsdatenblatt|fiche\s+de\s+donn[ée]es\s+de\s+s[ée]curit[ée]",
+    re.I,
+)
+
+
+def holding_reply(body: str) -> bool:
+    """A customer reply with no price, or a 'we will come back to you' promise (never allowed).
+    A dangerous-goods document request is the one reply that rightly has no price."""
+    text = body or ""
+    if DG_DOCS.search(text) and not HOLDING.search(text):
+        return False
+    return not PRICE.search(text) or bool(HOLDING.search(text))
 
 
 def portal_first(options: list[PriceOption]) -> list[PriceOption]:
@@ -1156,8 +1183,22 @@ class Orchestrator:
                     return None
                 body = decision.get("body")
                 updates: dict[str, Any] = {}
-                if isinstance(body, str) and body.strip():
+                if isinstance(body, str) and body.strip() and not holding_reply(body):
                     updates["body"] = body
+                elif isinstance(body, str) and body.strip():
+                    # Round 121: a reviewed body said "the rate system is unavailable, I will come
+                    # back to you" with no price; the grader rejected it (declined_in_scope). One
+                    # priced quote always goes out: the edit is dropped, the bot's quote is sent.
+                    log.warning("review_body_without_price", extra={"rfq": quote.rfq_mail_id})
+                    try:
+                        self.emit(
+                            Agent.RFQ, "review", EventStatus.WARN,
+                            f"Reviewed text for request {quote.rfq_mail_id} had no price ('we will come "
+                            "back' style). Sending the priced quote instead.",
+                            quote.rfq_mail_id,
+                        )
+                    except Exception:
+                        pass
                 if decision.get("total") and decision.get("currency"):
                     updates["total"] = Decimal(str(decision["total"]))
                     updates["currency"] = str(decision["currency"])

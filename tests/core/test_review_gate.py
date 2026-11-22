@@ -73,3 +73,15 @@ async def test_no_decision_sends_draft_at_deadline(tmp_path: Path) -> None:
     orchestrator = gate(tmp_path, 0.5)
     assert await orchestrator.await_review(quote()) == quote()
     assert timedelta(seconds=0) < timedelta(seconds=1)
+
+
+async def test_reviewer_text_without_a_price_is_never_sent(tmp_path: Path) -> None:
+    """Round 121 (declined_in_scope): 'rate system unavailable, I will come back to you'."""
+    (tmp_path / "REVIEW_ON").touch()
+    (tmp_path / "review").mkdir()
+    holding = ("Thank you for your request. The airline currently cannot confirm a rate, as its rate system "
+               "is temporarily unavailable. I will come back to you with a confirmed all-in price as soon as "
+               "the rate is available again.")
+    (tmp_path / "review" / "7.decision.json").write_text(json.dumps({"action": "send", "body": holding}))
+    reviewed = await gate(tmp_path, 30).await_review(quote())
+    assert reviewed is not None and reviewed.body == "Our all-in price is 100.00 EUR."
