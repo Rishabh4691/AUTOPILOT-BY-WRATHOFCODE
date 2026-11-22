@@ -87,7 +87,9 @@ def short_day(value, lang: str = "en") -> str:
     d = as_date(value)
     if d is None:
         return ""
-    name = WEEKDAYS.get(lang, WEEKDAYS["en"]).split()[d.weekday()]
+    if lang not in WEEKDAYS:
+        return f"{d.day:02d}.{d.month:02d}.{d.year}"
+    name = WEEKDAYS[lang].split()[d.weekday()]
     if lang == "en":
         return f"{name[:3]} {d.day} {d.strftime('%b')}"
     return f"{name} {d.day:02d}.{d.month:02d}"
@@ -159,7 +161,7 @@ def facts(rfq: dict, price: dict) -> tuple[str, dict]:
     values = {
         "FIRST": (rfq.get("first_name") or "").strip() or {"de": "zusammen", "fr": "", "es": "", "it": "", "pl": ""}.get(lang, "there"),
         "REF": str(rfq["reference"]),
-        "ROUTE": f"{place(rfq['origin'])} to {place(rfq['destination'])}",
+        "ROUTE": f"{place(rfq['origin'])}{' to ' if lang == 'en' else ' - '}{place(rfq['destination'])}",
         "PIECES": f"{pieces} {unit[0] if pieces == 1 else unit[1]}",
         "GROSS": kg(rfq["gross_kg"], lang),
         "CHARGEABLE": kg(rfq["chargeable_kg"], lang),
@@ -492,8 +494,60 @@ End with exactly:
 {agent}
 {company}"""
 
-GREETING = {"en": "Hi", "de": "Hallo", "fr": "Bonjour", "es": "Hola", "it": "Ciao", "pl": "Dzień dobry"}
-SIGNOFF = {"en": "Cheers,", "de": "Viele Grüße", "fr": "Bien à vous,", "es": "Un saludo,", "it": "Un saluto,", "pl": "Pozdrawiam,"}
+GREETING = {
+    "en": "Hi", "de": "Hallo", "fr": "Bonjour", "es": "Hola", "it": "Ciao", "pl": "Dzień dobry",
+    "tr": "Merhaba", "pt": "Olá", "nl": "Hallo", "sv": "Hej", "da": "Hej", "no": "Hei", "fi": "Hei",
+    "cs": "Dobrý den", "ro": "Bună ziua", "id": "Halo", "ru": "Здравствуйте", "uk": "Вітаю",
+    "zh": "您好", "ja": "こんにちは", "ko": "안녕하세요", "ar": "مرحباً",
+}
+SIGNOFF = {
+    "en": "Cheers,", "de": "Viele Grüße", "fr": "Bien à vous,", "es": "Un saludo,", "it": "Un saluto,", "pl": "Pozdrawiam,",
+    "tr": "Saygılarımla,", "pt": "Atenciosamente,", "nl": "Met vriendelijke groet,", "sv": "Vänliga hälsningar,",
+    "da": "Venlig hilsen,", "no": "Vennlig hilsen,", "fi": "Ystävällisin terveisin,", "cs": "S pozdravem,",
+    "ro": "Cu stimă,", "id": "Salam,", "ru": "С уважением,", "uk": "З повагою,",
+    "zh": "此致", "ja": "よろしくお願いいたします。", "ko": "감사합니다.", "ar": "مع أطيب التحيات،",
+}
+
+
+def native_slots(prompt: str, values: dict, rfq: dict, language: str, native: bool) -> tuple[str, dict]:
+    """Round 126: a Turkish quote carried English slot sentences ("Thanks for the details.", "cheapest",
+    "air freight, fuel and security", "for you today"). Outside English the model writes those phrases
+    itself in the customer's language; code still sets every number, date and price."""
+    values = dict(values)
+    pref = "fastest" if str(rfq.get("preference") or "").startswith("fast") else "cheapest"
+    goods = str(rfq.get("goods") or "").strip()
+    values["CARGO"] = goods or values.get("GROSS", "")
+    values["WARM"] = ""
+    prompt = prompt.replace(
+        "then [WARM] exactly as written to open the first paragraph",
+        f"then open the first paragraph with one short friendly line of your own in {language}",
+    )
+    prompt = re.sub(r"(?m)^(\[(?:WARM|REF)\] .*?) \[PREF\]", r"\1", prompt)
+    prompt = prompt.replace("[PREF]", f"{pref} (that word in {language})")
+    facts_needed = []
+    if values.get("PICKUP_LINE", "").strip() and rfq.get("door_pickup"):
+        town = str(rfq.get("pickup_town") or "").strip()
+        values["PICKUP_TOWN"] = town
+        where = "their site in [PICKUP_TOWN]" if town else "their site"
+        facts_needed.append(f"we collect it from {where} by truck and bring it to [ORIGIN_CITY] airport first")
+    if values.get("VOLUME_NOTE", "").strip():
+        facts_needed.append("the airline bills it on [CHARGEABLE] rather than [GROSS] because of the volume")
+    values["PICKUP_LINE"] = ""
+    values["VOLUME_NOTE"] = ""
+    if not native:
+        english = ", ".join(INCLUDED["en"].get(i, i) for i in ["freight", "fuel", "security"])
+        if "door pickup" in values.get("INCLUDED", ""):
+            english += ", door pickup"
+        prompt = prompt.replace("covering [INCLUDED]", f"covering {english} (in {language})")
+        prompt = prompt.replace(" [INCLUDED]", "")
+        values["INCLUDED"] = ""
+        for slot in ("PIECES", "TRANSIT"):
+            values[slot] = ""
+            prompt = prompt.replace(f" [{slot}]", "")
+    prompt = prompt.replace("[WARM] [REF]", "[REF]")
+    if facts_needed:
+        prompt += "\nAlso say, in your own words in " + language + ": " + "; ".join(facts_needed) + "."
+    return prompt, values
 
 
 DASHES = re.compile(r"\s*[\u2014\u2013]\s*")
@@ -574,7 +628,7 @@ def fill(text: str, values: dict) -> str:
     return capitalize_sentences(re.sub(r"\n{3,}", "\n\n", text).strip())
 
 
-GREET_LINE = re.compile(r"^\s*[^\n]{0,40}?,\s*$")
+GREET_LINE = re.compile(r"^\s*[^\n]{0,40}?[,，、]\s*$")
 
 
 ABBREVIATIONS = ("e.g.", "i.e.", "approx.", "ca.", "no.", "nr.", "vs.", "etc.", "z.b.", "bzw.", "inkl.", "ggf.")
@@ -677,9 +731,9 @@ ALTERNATIVES = {
     "all": r"alternativ|\boptions?\b|\bor we can\b|\binsurance\b|\bcheaper\b|\bfaster\b|\banother (routing|carrier|quote|offer)\b|\b(check|look into|compare)\b",
     "en": r"\bor (?:we|you|i) (?:can|could)\b|\bor else\b|\banother (?:airline|flight)\b",
     "de": r"\boder\b|versicherung|günstiger|schneller|\bandere[nsr]? (option|route|möglichkeit|angebot)|\bmöglichkeit",
-    "fr": r"\bou\b|assurance|moins cher|plus rapide|\bautre (option|solution|offre)|\bsolution",
-    "es": r"\bo\b|opci[oó]n|seguro\b|más barat|más rápid|\botra (ruta|oferta)",
-    "it": r"\bo\b|\boppure\b|opzion|assicura|più economic|più velo|\baltra (rotta|offerta)",
+    "fr": r"\bou\b|assurance|(?<!la )(?<!le )moins cher|(?<!la )(?<!le )plus rapide|\bautre (option|solution|offre)|\bsolution",
+    "es": r"\bo\b|opci[oó]n|seguro\b|(?<!la )(?<!el )más barat|(?<!la )(?<!el )más rápid|\botra (ruta|oferta)",
+    "it": r"\bo\b|\boppure\b|opzion|assicura|(?<!la )(?<!il )più economic|(?<!la )(?<!il )più velo|\baltra (rotta|offerta)",
     "pl": r"\blub\b|\balbo\b|opcj|ubezpiecz|taniej|szybciej|\binn[aąey] (ofert|tras)",
 }
 
@@ -753,19 +807,36 @@ def template(lang: str, values: dict) -> str:
 
 async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     lang, values = facts(rfq, price)
+    spoken = str(rfq.get("language") or lang)
+    if spoken not in LANG_NAMES:
+        spoken = lang
+    native = spoken == lang
+    if not native:
+        depart = departure_date(as_date(price.get("ready_date")))
+        values["ARRIVAL"] = short_day(quote_arrival(price), spoken)
+        values["DEPARTURE"] = short_day(depart + timedelta(days=1), spoken)
+        values["PICKUP_DATE"] = short_day(depart, spoken)
+        values["VALID"] = valid_text(price, spoken) if price.get("valid_until") else short_day(date.today(), spoken)
+        if spoken not in ("zh", "ja", "ko", "ar", "he", "th", "hi"):
+            values["TOTAL"] = money(price["total"], price["currency"], spoken)
     subject = reply_subject(rfq.get("subject") or f"Air freight quote {rfq['origin']}-{rfq['destination']}")
     pref = preference(rfq.get("preference"))
+    language = LANG_NAMES.get(spoken, "English")
+    english = spoken == "en"
     prompt = PROMPT.format(
-        language=LANG_NAMES.get(rfq.get("language") or lang, LANG_NAMES.get(lang, "English")),
-        greeting=GREETING.get(lang, "Hi"),
+        language=language,
+        greeting=GREETING.get(spoken, "Hi"),
         pref=pref,
-        valid="HOLD" if lang == "en" else "VALID",
+        valid="HOLD" if english else "VALID",
         questions=question_slots(rfq, values, lang),
         snippet=snippet(rfq.get("customer_text", "")),
-        signoff=values["SIGNOFF"] if lang == "en" else SIGNOFF.get(lang, "Cheers,"),
+        signoff=values["SIGNOFF"] if english else SIGNOFF.get(spoken, "Cheers,"),
         agent=AGENT_NAME,
         company=COMPANY,
     )
+    base = values
+    if not english:
+        prompt, values = native_slots(prompt, values, rfq, language, native)
     prompt = optional_slots(prompt, values)
     # A quote sent without any model call scores 0 cost points (rounds 7, 11 and 28 each lost
     # about 38), so a failed call is retried once. A failed call returns no text, so this is
@@ -778,10 +849,10 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
         except gateway.GatewayError as e:
             error = e
     if reply is None:
-        return Email(subject, template(lang, values), used_llm=False, fallback_reason=str(error))
+        return Email(subject, template(lang, base), used_llm=False, fallback_reason=str(error))
 
     tokens = {"in": reply.prompt_tokens, "out": reply.completion_tokens, "model": reply.model}
-    draft = tidy(fix_greeting(reply.text.strip().strip("`").strip(), lang))
+    draft = tidy(fix_greeting(reply.text.strip().strip("`").strip(), spoken))
     # Round 49: the model wrote "valid until [HOLD]", which reads "until for you today" and
     # threw the whole draft away. [HOLD] already carries its own preposition.
     # Round 56: "hold it at [HOLD]" read "hold it at for you today".
@@ -791,5 +862,5 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     if not issues:
         issues = check_final(body, values, lang)
     if issues:
-        body = template(lang, values)
+        body = template(lang, base)
     return Email(subject, body, used_llm=True, cost_usd=reply.cost_usd, fallback_reason="; ".join(issues) or None, tokens=tokens)
