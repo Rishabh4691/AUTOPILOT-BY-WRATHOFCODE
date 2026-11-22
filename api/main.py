@@ -612,6 +612,7 @@ async def shipments():
     for b in map(_live_booking, board):
         own = by_ref.get(b["booking_reference"])
         if own:
+            own.setdefault("weight_kg", b["weight_kg"])
             (delivered if own["delivered"] else booked).append(own)
         else:
             booked.append(b)
