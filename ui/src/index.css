@@ -162,4 +162,6 @@ button, [role="button"], a[href], summary { cursor: pointer }
 }
 
 /* Dot Field intro: shadcn's bg-muted is a surface, ours is a text grey. */
-.dotfield-scope { --color-muted: var(--color-panel) }
+.dotfield-scope, .shadcn-scope { --color-muted: var(--color-panel) }
+.shadcn-scope { --color-card: var(--color-panel); --color-card-foreground: var(--color-foreground) }
+.shadcn-scope li .text-sm { font-size: 1rem }

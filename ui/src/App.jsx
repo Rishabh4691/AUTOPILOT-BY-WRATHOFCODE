@@ -12,6 +12,7 @@ import { useT, useTheme } from './prefs'
 import Shipments from './Shipments'
 import SiteFooter from './SiteFooter'
 import Intro from './Intro'
+import Features from './Features'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -106,7 +107,12 @@ export default function App() {
 
   return (
     <>
-    {!deepLink && <Intro onTour={() => enter()} onLeaderboard={() => enter('board')} />}
+    {!deepLink && (
+      <>
+        <Intro onTour={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} onLeaderboard={() => enter('board')} />
+        <Features />
+      </>
+    )}
     <div id="app" className="mx-auto max-w-7xl scroll-mt-4 px-4 pb-16 sm:px-6">
       <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
         <div className="flex shrink-0 items-center gap-2.5">
