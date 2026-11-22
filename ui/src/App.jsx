@@ -4,7 +4,7 @@ import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
 import Claims from './Claims'
-import Controls from './Controls'
+import SettingsDock from './SettingsDock'
 import Lessons from './Lessons'
 import Network from './Network'
 import { useT, useTheme } from './prefs'
@@ -131,7 +131,6 @@ export default function App() {
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs">
         <p className="text-muted">{t('tagline')}</p>
         <div className="flex flex-wrap items-center gap-3">
-          <Controls />
           {fake && <span className="rounded-full bg-sky-500/10 px-2.5 py-1 text-sky-300">{t('demo')}</span>}
         </div>
       </div>
@@ -194,6 +193,7 @@ export default function App() {
     </div>
     )}
     <SiteFooter onOpen={enter} />
+    <SettingsDock />
     </>
   )
 }
