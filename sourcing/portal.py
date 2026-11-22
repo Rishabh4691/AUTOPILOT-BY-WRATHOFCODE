@@ -365,6 +365,9 @@ async def get_portal_options(
     probe_next_break: bool = True,
 ) -> tuple[list[PriceOption], list[str]]:
     """One option per airline on the lane (cheapest of: own weight, next break up)."""
+    from sourcing import portal_warm
+
+    portal_warm.mark_live()  # the background cache warm-up steps aside for live quotes
     s = rfq if isinstance(rfq, Shipment) else Shipment.model_validate(rfq)
     notes: list[str] = []
     events_before = len(portal.events)

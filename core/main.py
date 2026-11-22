@@ -219,6 +219,24 @@ async def recheck_bookings(orchestrator, stop: asyncio.Event, every_s: float = 3
             log.exception("booking_recheck_failed")
 
 
+async def portal_warm_up(settings: Settings, stop: asyncio.Event) -> None:
+    """Rounds 93-97: keep portal prices on disk so a portal outage can still be priced."""
+    if os.environ.get("PORTAL_WARM", "1") == "0":
+        return
+    import sourcing
+    from sourcing.portal_warm import warm_forever
+
+    client = sourcing.PortalClient(api_key=settings.api_key, base_url=settings.base_url)
+    try:
+        await warm_forever(client, stop)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        log.exception("portal_warm_failed")
+    finally:
+        await client.aclose()
+
+
 async def run_once(settings: Settings, stop: asyncio.Event) -> None:
     warmup = asyncio.create_task(warm_speech(), name="speech-warmup")
     try:
@@ -260,6 +278,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                     log.exception("booking_recover_failed")
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
             rechecker = asyncio.create_task(recheck_bookings(orchestrator, stop), name="booking-recheck")
+            warmer = asyncio.create_task(portal_warm_up(settings, stop), name="portal-warm")
             await reprocess(orchestrator)
             try:
                 await poll_loop(orchestrator, settings.poll_interval_s, stop)
@@ -267,6 +286,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
             finally:
                 sender.cancel()
                 rechecker.cancel()
+                warmer.cancel()
                 for task in list(orchestrator.tasks):
                     task.cancel()
     finally:
