@@ -306,3 +306,7 @@ button, [role="button"], a[href], summary { cursor: pointer }
   body.invoice-open .invoice-paper { box-shadow: none; border-radius: 0; padding: 0 }
   @page { margin: 16mm }
 }
+
+/* Network map: dashes flowing outward along the busiest lanes. */
+.lane-flow { animation: lane-flow 2s linear infinite }
+@keyframes lane-flow { to { stroke-dashoffset: -21 } }

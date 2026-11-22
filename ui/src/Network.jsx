@@ -28,60 +28,111 @@ const path = geoPath(projection)
 
 const volume = (l) => Math.max(l.requests, l.booked)
 const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)} %`)
+const TOP = 15
 
 function tone(rate) {
-  if (rate == null) return '#df5733'
-  if (rate >= 0.6) return '#4b8d6b'
-  if (rate >= 0.3) return '#c08a2e'
-  return '#c14f55'
+  if (rate == null) return 'var(--color-accent)'
+  if (rate >= 0.6) return '#2fb37a'
+  if (rate >= 0.3) return '#e0a030'
+  return '#e5484d'
 }
 
-function Panel({ title, note, children }) {
+function Card({ title, note, children, className = '' }) {
   return (
-    <section className="rounded-xl border border-line bg-panel">
-      <header className="border-b border-line px-4 py-3">
-        <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted">{title}</h3>
-        {note && <p className="mt-1 text-xs text-muted">{note}</p>}
-      </header>
-      <div className="overflow-x-auto px-4 py-3">{children}</div>
+    <section className={`glass lb-rise rounded-[28px] p-5 sm:p-6 ${className}`}>
+      <h3 className="text-[11px] tracking-[0.16em] text-muted uppercase">{title}</h3>
+      {note && <p className="mt-1 text-[13px] text-zinc-400">{note}</p>}
+      <div className="mt-4">{children}</div>
     </section>
   )
 }
 
+function Bar({ value, max, color = 'var(--color-accent)' }) {
+  return (
+    <span className="block h-1.5 w-full overflow-hidden rounded-full bg-[color-mix(in_oklch,var(--color-foreground)_8%,transparent)]">
+      <span className="block h-full rounded-full" style={{ width: `${max ? Math.max(4, (value / max) * 100) : 0}%`, background: color }} />
+    </span>
+  )
+}
+
+const calm = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 function WorldMap({ lanes, focus, setFocus }) {
-  const max = Math.max(1, ...lanes.map(volume))
   const drawn = lanes.filter((l) => AIRPORTS[l.origin] && AIRPORTS[l.destination])
-  const ports = new Set(drawn.flatMap((l) => [l.origin, l.destination]))
+  const ranked = [...drawn].sort((a, b) => volume(b) - volume(a))
+  const top = new Set(ranked.slice(0, TOP).map((l) => `${l.origin}-${l.destination}`))
+  const max = Math.max(1, ...drawn.map(volume))
+  const hubs = new Set(drawn.map((l) => l.origin))
+  const labelled = new Set(ranked.slice(0, TOP).map((l) => l.destination))
+  const order = [...drawn].sort((a, b) => top.has(`${a.origin}-${a.destination}`) - top.has(`${b.origin}-${b.destination}`))
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Lanes on a world map">
-      <path d={path({ type: 'Sphere' })} className="map-sea" fill="#f1efeb" />
-      <path d={path(land)} className="map-land" fill="#e3e0db" stroke="#d6d2cc" strokeWidth="0.5" />
-      {drawn.map((l) => {
+      <defs>
+        <filter id="lane-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="2.2" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <path d={path(land)} fill="color-mix(in oklch, var(--color-foreground) 7%, transparent)" stroke="color-mix(in oklch, var(--color-foreground) 14%, transparent)" strokeWidth="0.4" />
+      {order.map((l) => {
         const key = `${l.origin}-${l.destination}`
         const line = { type: 'LineString', coordinates: [AIRPORTS[l.origin], AIRPORTS[l.destination]] }
+        const main = top.has(key)
         const on = focus === key
+        const dim = focus && !on
         return (
           <path
             key={key}
             d={path(line)}
             fill="none"
-            stroke={tone(l.win_rate)}
-            strokeOpacity={focus && !on ? 0.15 : 0.85}
-            strokeWidth={1 + (5 * volume(l)) / max + (on ? 1.5 : 0)}
+            stroke={main || on ? tone(l.win_rate) : 'color-mix(in oklch, var(--color-foreground) 22%, transparent)'}
+            strokeOpacity={dim ? 0.12 : main || on ? 0.9 : 0.5}
+            strokeWidth={main || on ? 1.4 + (3.2 * volume(l)) / max + (on ? 1.2 : 0) : 0.6}
             strokeLinecap="round"
+            filter={main && !dim ? 'url(#lane-glow)' : undefined}
             className="cursor-pointer transition-[stroke-opacity]"
             onMouseEnter={() => setFocus(key)}
             onMouseLeave={() => setFocus(null)}
           />
         )
       })}
-      {[...ports].map((code) => {
+      {!calm &&
+        ranked.slice(0, TOP).map((l, i) => {
+          const key = `${l.origin}-${l.destination}`
+          const d = path({ type: 'LineString', coordinates: [AIRPORTS[l.origin], AIRPORTS[l.destination]] })
+          const dim = focus && focus !== key
+          const dur = 3.2 + (i % 5) * 0.7
+          return (
+            <g key={`fx-${key}`} pointerEvents="none" opacity={dim ? 0.1 : 1}>
+              <path d={d} fill="none" stroke="#fff" strokeOpacity="0.55" strokeWidth="1.1" strokeLinecap="round" strokeDasharray="1.5 9" className="lane-flow" style={{ animationDuration: `${dur * 0.6}s` }} />
+              {[0, 0.5].map((offset) => (
+                <circle key={offset} r="2.6" fill={tone(l.win_rate)} filter="url(#lane-glow)">
+                  <animateMotion dur={`${dur}s`} repeatCount="indefinite" path={d} begin={`${-(offset * dur + i * 0.37).toFixed(2)}s`} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.45 0 0.55 1" />
+                </circle>
+              ))}
+            </g>
+          )
+        })}
+      {[...hubs].map((code) => {
         const [x, y] = projection(AIRPORTS[code])
-        const german = AIRPORTS[code][0] > 5 && AIRPORTS[code][0] < 15 && AIRPORTS[code][1] > 47
         return (
           <g key={code}>
-            <circle cx={x} cy={y} r={german ? 2.5 : 3} fill={german ? '#817c74' : '#df5733'} />
-            {!german && <text x={x + 5} y={y - 4} className="fill-zinc-400 font-mono text-[9px]">{code}</text>}
+            {!calm && (
+              <circle cx={x} cy={y} r="4" fill="none" stroke="var(--color-accent)" strokeWidth="1.2">
+                <animate attributeName="r" values="4;16" dur="2.4s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.8;0" dur="2.4s" repeatCount="indefinite" />
+              </circle>
+            )}
+            <circle cx={x} cy={y} r="3.6" fill="var(--color-accent)" stroke="var(--color-background)" strokeWidth="1.2" />
+          </g>
+        )
+      })}
+      {[...labelled].map((code) => {
+        const [x, y] = projection(AIRPORTS[code])
+        return (
+          <g key={code}>
+            <circle cx={x} cy={y} r="2.6" fill="var(--color-foreground)" />
+            <text x={x + 5} y={y - 4} className="fill-zinc-300 font-mono text-[9px] font-semibold">{code}</text>
           </g>
         )
       })}
@@ -107,22 +158,25 @@ export default function Network() {
     }
   }, [period])
 
-  const focused = useMemo(
-    () => data?.lanes.find((l) => `${l.origin}-${l.destination}` === focus),
-    [data, focus],
-  )
+  const focused = useMemo(() => data?.lanes.find((l) => `${l.origin}-${l.destination}` === focus), [data, focus])
   const sum = data?.totals
+  const lanes = [...(data?.lanes ?? [])].sort((a, b) => volume(b) - volume(a))
+  const airlines = [...(data?.airlines ?? [])].sort((a, b) => b.booked - a.booked)
+  const laneMax = Math.max(1, ...lanes.map(volume))
+  const airMax = Math.max(1, ...airlines.map((a) => a.booked))
+  const yes = sum?.quoted ? sum.won / sum.quoted : null
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div />
-        <div className="flex overflow-hidden rounded-lg border border-line text-xs">
+    <div className="space-y-6">
+      <div className="flex justify-center">
+        <div className="glass flex gap-1 rounded-full p-1.5">
           {PERIODS.map(([k, label]) => (
             <button
               key={k}
+              type="button"
+              aria-pressed={period === k}
               onClick={() => setPeriod(k)}
-              className={`px-3 py-1.5 ${period === k ? 'bg-sky-500/15 text-sky-300' : 'text-muted hover:text-zinc-200'}`}
+              className={`min-h-9 cursor-pointer rounded-full px-4 text-[13px] font-semibold transition-colors ${period === k ? 'bg-[linear-gradient(45deg,#ffa15c,var(--color-accent))] text-[#0d0d0d]' : 'text-zinc-300 hover:text-white'}`}
             >
               {label}
             </button>
@@ -130,39 +184,40 @@ export default function Network() {
         </div>
       </div>
 
-      {err && <p className="text-sm text-rose-300">Could not load insights ({err}).</p>}
+      {err && <p className="text-center text-sm text-rose-300">Could not load insights ({err}).</p>}
 
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+      <dl className="glass lb-rise grid grid-cols-2 gap-y-5 rounded-[28px] px-6 py-6 sm:grid-cols-3 lg:grid-cols-6">
         {[
           ['Lanes', sum?.lanes],
           ['Requests', sum?.requests],
           ['Quoted', sum?.quoted],
           ['Customer yes', sum?.won],
           ['Booked', sum?.booked],
-          ['Delays reported', sum?.delays],
+          ['Yes rate', yes == null ? null : pct(yes)],
         ].map(([k, v]) => (
-          <div key={k} className="min-w-0 bg-panel px-4 py-3">
-            <div className="text-[11px] uppercase tracking-wider text-muted">{k}</div>
-            <div className="mt-1 font-mono text-lg text-white">{v ?? '—'}</div>
+          <div key={k} className="min-w-0 text-center">
+            <dt className="text-[11px] tracking-[0.12em] text-muted uppercase">{k}</dt>
+            <dd className={`font-display mt-1 text-[clamp(1.3rem,2.4vw,1.9rem)] ${k === 'Yes rate' ? 'text-accent' : 'text-white'}`}>{v ?? '—'}</dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      <section className="relative overflow-hidden rounded-xl border border-line bg-panel p-2">
+      <section className="glass lb-rise relative overflow-hidden rounded-[28px] p-3 sm:p-5">
         {data && <WorldMap lanes={data.lanes} focus={focus} setFocus={setFocus} />}
-        <div className="pointer-events-none absolute bottom-3 left-4 flex flex-wrap gap-4 text-[11px] text-muted">
-          <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded bg-emerald-400" />customers say yes</span>
-          <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded bg-amber-400" />mixed</span>
-          <span className="flex items-center gap-1.5"><span className="h-1 w-4 rounded bg-rose-400" />price loses</span>
-          <span>line width = volume</span>
+        <div className="pointer-events-none absolute bottom-4 left-5 flex flex-wrap items-center gap-4 text-[11px] text-zinc-400">
+          <span className="flex items-center gap-1.5"><i className="h-1 w-5 rounded-full bg-[#2fb37a]" />customers say yes</span>
+          <span className="flex items-center gap-1.5"><i className="h-1 w-5 rounded-full bg-[#e0a030]" />mixed</span>
+          <span className="flex items-center gap-1.5"><i className="h-1 w-5 rounded-full bg-[#e5484d]" />price loses</span>
+          <span className="flex items-center gap-1.5"><i className="size-2 rounded-full bg-accent" />German hub</span>
+          <span>top {TOP} lanes bright · hover any lane</span>
         </div>
         {focused && (
-          <div className="pointer-events-none absolute right-4 top-4 w-60 rounded-lg border border-line bg-ink/90 p-3 text-xs">
-            <div className="font-mono text-sm text-white">{focused.origin} → {focused.destination}</div>
-            <div className="mt-2 grid grid-cols-2 gap-y-1 text-muted">
+          <div className="glass pointer-events-none absolute top-5 right-5 w-64 rounded-2xl p-4 text-xs">
+            <div className="font-display text-lg text-white">{focused.origin} → {focused.destination}</div>
+            <div className="mt-2 grid grid-cols-2 gap-y-1.5 text-muted">
               <span>Requests</span><span className="text-right font-mono text-zinc-200">{focused.requests}</span>
               <span>Booked</span><span className="text-right font-mono text-zinc-200">{focused.booked}</span>
-              <span>Customer yes</span><span className="text-right font-mono text-zinc-200">{pct(focused.win_rate)}</span>
+              <span>Customer yes</span><span className="text-right font-mono" style={{ color: tone(focused.win_rate) }}>{pct(focused.win_rate)}</span>
               <span>Avg quote</span><span className="text-right font-mono text-zinc-200">{focused.avg_total ? money(focused.avg_total, 'EUR') : '—'}</span>
               <span>Top airline</span><span className="truncate text-right text-zinc-200">{focused.top_carrier ?? '—'}</span>
             </div>
@@ -170,64 +225,71 @@ export default function Network() {
         )}
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Panel title="Busiest lanes" note="Where customers buy most often.">
-          <table className="w-full text-sm">
-            <thead className="text-left text-[11px] uppercase tracking-wider text-muted">
-              <tr><th className="pb-2">Lane</th><th className="pb-2 text-right">Requests</th><th className="pb-2 text-right">Booked</th><th className="pb-2 text-right">Yes</th><th className="pb-2 text-right">Reply</th></tr>
-            </thead>
-            <tbody>
-              {(data?.lanes ?? []).slice(0, 8).map((l) => (
-                <tr key={`${l.origin}-${l.destination}`} className="border-t border-line" onMouseEnter={() => setFocus(`${l.origin}-${l.destination}`)} onMouseLeave={() => setFocus(null)}>
-                  <td className="py-1.5 font-mono text-zinc-200">{l.origin} → {l.destination}</td>
-                  <td className="py-1.5 text-right font-mono">{l.requests}</td>
-                  <td className="py-1.5 text-right font-mono">{l.booked}</td>
-                  <td className="py-1.5 text-right font-mono">{pct(l.win_rate)}</td>
-                  <td className="py-1.5 text-right font-mono text-muted">{l.avg_response_s != null ? `${Math.round(l.avg_response_s)} s` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card title="Busiest lanes" note="Where customers buy most often. Hover to light it up on the map.">
+          <ol className="space-y-3">
+            {lanes.slice(0, 8).map((l, i) => {
+              const key = `${l.origin}-${l.destination}`
+              return (
+                <li key={key} className={`cursor-default rounded-2xl px-3 py-2 transition-colors ${focus === key ? 'bg-[color-mix(in_oklch,var(--color-accent)_12%,transparent)]' : ''}`} onMouseEnter={() => setFocus(key)} onMouseLeave={() => setFocus(null)}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="flex items-baseline gap-3">
+                      <span className="font-display w-5 text-zinc-400">{i + 1}</span>
+                      <span className="font-mono font-semibold text-white">{l.origin} → {l.destination}</span>
+                    </span>
+                    <span className="text-[12px] text-zinc-400">
+                      {l.requests} req · {l.booked} booked · <span style={{ color: tone(l.win_rate) }}>{pct(l.win_rate)} yes</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 pl-8"><Bar value={volume(l)} max={laneMax} color={tone(l.win_rate)} /></div>
+                </li>
+              )
+            })}
+          </ol>
+        </Card>
 
-        <Panel title="Airline league" note="Bookings, how often a quote turned into a yes, transit and delays.">
-          <table className="w-full text-sm">
-            <thead className="text-left text-[11px] uppercase tracking-wider text-muted">
-              <tr><th className="pb-2">Airline</th><th className="pb-2 text-right">Booked</th><th className="pb-2 text-right">Yes rate</th><th className="pb-2 text-right">Transit</th><th className="pb-2 text-right">Delays</th></tr>
-            </thead>
-            <tbody>
-              {(data?.airlines ?? []).slice(0, 8).map((a) => (
-                <tr key={a.carrier} className="border-t border-line">
-                  <td className="py-1.5 text-zinc-200">{a.carrier}</td>
-                  <td className="py-1.5 text-right font-mono">{a.booked}</td>
-                  <td className="py-1.5 text-right font-mono">{pct(a.acceptance)}</td>
-                  <td className="py-1.5 text-right font-mono">{a.avg_transit_days != null ? `${a.avg_transit_days} d` : '—'}</td>
-                  <td className={`py-1.5 text-right font-mono ${a.delays ? 'text-rose-300' : 'text-muted'}`}>{a.delays}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
+        <Card title="Airline league" note="Bookings per airline and how often its quote turned into a yes.">
+          <ol className="space-y-3">
+            {airlines.slice(0, 8).map((a, i) => (
+              <li key={a.carrier} className="px-3 py-2">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex min-w-0 items-baseline gap-3">
+                    <span className="font-display w-5 text-zinc-400">{i + 1}</span>
+                    <span className="truncate font-semibold text-white">{a.carrier}</span>
+                  </span>
+                  <span className="shrink-0 text-[12px] text-zinc-400">
+                    {a.booked} booked · <span style={{ color: tone(a.acceptance) }}>{pct(a.acceptance)} yes</span>
+                    {a.avg_transit_days != null && <> · {a.avg_transit_days} d</>}
+                  </span>
+                </div>
+                <div className="mt-1.5 pl-8"><Bar value={a.booked} max={airMax} /></div>
+              </li>
+            ))}
+          </ol>
+        </Card>
       </div>
 
-      <Panel title="Talk to the airline" note="Lanes with steady demand where our price was rejected or customers said no. A sharper rate here wins repeat business.">
+      <Card title="Talk to the airline" note="Lanes with steady demand where our price was rejected or customers said no. A sharper rate here wins repeat business.">
         {data?.pressure?.length ? (
-          <ul className="space-y-2 text-sm">
-            {data.pressure.map((p) => (
-              <li key={`${p.origin}-${p.destination}`} className="flex flex-wrap items-baseline justify-between gap-2 border-t border-line pt-2 first:border-0 first:pt-0">
-                <span className="font-mono text-zinc-200">{p.origin} → {p.destination}</span>
-                <span className="text-muted">
-                  {p.requests} requests · yes {pct(p.win_rate)}
-                  {p.too_high > 0 && <span className="text-rose-300"> · {p.too_high} rejected as too high</span>}
-                  {p.top_carrier && <> · ask <span className="text-zinc-200">{p.top_carrier}</span> for a better rate</>}
-                </span>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.pressure.slice(0, 9).map((p) => (
+              <li key={`${p.origin}-${p.destination}`} className="rounded-2xl border border-[color-mix(in_oklch,var(--color-foreground)_10%,transparent)] p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-display text-white">{p.origin} → {p.destination}</span>
+                  <span className="font-mono text-[12px]" style={{ color: tone(p.win_rate) }}>{pct(p.win_rate)} yes</span>
+                </div>
+                <p className="mt-1.5 text-[12px] text-zinc-400">
+                  {p.requests} requests
+                  {p.too_high > 0 && <span className="text-[#e5484d]"> · {p.too_high} rejected as too high</span>}
+                </p>
+                {p.top_carrier && <p className="mt-2 text-[12px] text-zinc-300">Ask <span className="font-semibold text-white">{p.top_carrier}</span> for a better rate</p>}
               </li>
             ))}
           </ul>
         ) : (
           <p className="text-sm text-muted">No lane under price pressure in this period.</p>
         )}
-      </Panel>
+      </Card>
     </div>
   )
 }
