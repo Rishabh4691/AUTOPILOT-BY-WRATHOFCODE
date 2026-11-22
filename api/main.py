@@ -128,6 +128,17 @@ async def stats():
     if cost:
         out["llm_per_quote"] = round(0.10 * (1 - sum(cost) / len(cost) / 40), 5)
         out["cost_points"] = round(sum(cost) / len(cost), 2)
+        out["llm_total_usd"] = round(sum(0.10 * (1 - c / 40) for c in cost), 4)
+        out["cost_rounds"] = len(cost)
+        try:
+            from sourcing.fx import get_rate
+
+            fx = float(get_rate("USD") or 0.92)
+        except Exception:
+            fx = 0.92
+        out["eur_per_usd"] = fx
+        out["llm_per_quote_eur"] = round(out["llm_per_quote"] * fx, 5)
+        out["llm_total_eur"] = round(out["llm_total_usd"] * fx, 4)
     live = await _live_rounds()
     if not live:
         return out

@@ -132,6 +132,8 @@ def test_summary_and_list_add_live_board_rounds(client):
     assert s["rfqs"] == 3 and s["live_rounds"] == 2
     assert s["quoted"] == 1 and s["median_s"] == 30
     assert s["llm_per_quote"] == pytest.approx(0.005)
+    assert s["llm_total_usd"] == pytest.approx(0.005)
+    assert s["llm_total_eur"] == pytest.approx(0.005 * s["eur_per_usd"])
     rows = client.get("/api/rfqs?limit=1000").json()
     assert [r["id"] for r in rows] == ["R8", "R7", "A"]
     assert rows[1]["status"] == "BOOKED" and rows[1]["live"] is True
