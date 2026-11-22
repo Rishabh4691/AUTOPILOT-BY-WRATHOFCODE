@@ -148,6 +148,7 @@ The full review is in [docs/SECURITY.md](docs/SECURITY.md).
 | `docs/mailbox.md` | Mailbox and threading |
 | `docs/KIT.md` | Start kit and how the sheets are read |
 | `docs/SOURCING.md` | Price sources and booking |
+| `docs/FEATURES.md` | Every feature, the Control Room and today's verification |
 | `docs/SECURITY.md` | Security review |
 
 ## Team
