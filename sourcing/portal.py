@@ -19,6 +19,7 @@ asks for the next break up and keeps the cheaper rate.
 from __future__ import annotations
 
 import asyncio
+import re
 import os
 import time
 from datetime import UTC, datetime
@@ -352,6 +353,15 @@ def _option_from_rate(rate: PortalRate, gross: Decimal, cbm: Decimal, note: str 
     )
 
 
+RATE_LIMIT_WAIT_MAX_S = 60.0
+
+
+def retry_after_s(error: Exception) -> float:
+    """Seconds a RateLimited error asks us to wait (its message says \"retry after 44s\")."""
+    found = re.search(r"retry after (\d+(?:\.\d+)?)", str(error))
+    return float(found.group(1)) if found else 30.0
+
+
 async def get_portal_options(
     rfq,
     portal: PortalClient,
@@ -387,10 +397,25 @@ async def get_portal_options(
                 notes.append(f"{airline.code} brackets: {e}")
         best: tuple[Decimal, PortalRate] | None = None
         for w in weights:
-            try:
-                r = await portal.rate(s.origin, s.destination, airline.code, w, cbm)
-            except PortalError as e:
-                notes.append(f"{airline.code} rate at {w} kg: {type(e).__name__}: {e}")
+            r = None
+            for attempt in range(2):
+                try:
+                    r = await portal.rate(s.origin, s.destination, airline.code, w, cbm)
+                    break
+                except RateLimited as e:
+                    # Round 150 (one_of_two): two shipments burst the 10/min limit, the 1000 kg break
+                    # probe for TLV (2970.00 < 3138.30 at 951 kg) was skipped and the dearer price went
+                    # out. Wait out the limit once instead of quoting without the cheaper break.
+                    wait = retry_after_s(e)
+                    if attempt == 0 and wait <= RATE_LIMIT_WAIT_MAX_S:
+                        notes.append(f"{airline.code} rate at {w} kg: rate limited, waiting {wait:.0f}s")
+                        await asyncio.sleep(wait + 0.5)
+                        continue
+                    notes.append(f"{airline.code} rate at {w} kg: {type(e).__name__}: {e}")
+                except PortalError as e:
+                    notes.append(f"{airline.code} rate at {w} kg: {type(e).__name__}: {e}")
+                    break
+            if r is None:
                 continue
             if best is None or r.total < best[1].total:
                 best = (w, r)
