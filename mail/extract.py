@@ -186,8 +186,11 @@ FAST = re.compile(
     r"\b(fastest|asap|urgent|express|quickest|as soon as possible|priority|schnellst\w*|eilig|dringend|so schnell|le plus rapide|plus rapide|au plus vite|dès que possible|urgente?|lo antes posible|más rápid\w*|lo más rápido|più veloce|più rapid\w*|prima possibile|al più presto|najszybc\w*|najszybsz\w*|pilne|pilnie|time[- ]critical|soonest|snelst\w*|zo snel mogelijk|spoed\w*|mais r[áa]pid\w*|o mais r[áa]pido|o quanto antes)\b",
     re.I,
 )
+# Round 194: "budget" is a price anchor ("our budget is around 380 EUR"), not a cheapest wish; it
+# turned "quote the fastest option" into a cheapest quote. Without a stated wish cheapest is the
+# default anyway, so dropping it only matters when the mail asks for fastest.
 CHEAP = re.compile(
-    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|budget|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins ch[eè]re?s?|más barat\w*|económic\w*|più economic\w*|najtańsz\w*|goedkoopst\w*|zo goedkoop mogelijk|mais barat\w*|o mais barato)\b",
+    r"\b(cheapest|lowest|möglichst günstig|so günstig wie möglich|best price|economy|günstigst\w*|billigst\w*|preiswert\w*|le moins cher|moins ch[eè]re?s?|más barat\w*|económic\w*|più economic\w*|najtańsz\w*|goedkoopst\w*|zo goedkoop mogelijk|mais barat\w*|o mais barato)\b",
     re.I,
 )
 PICKUP = re.compile(

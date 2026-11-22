@@ -22,3 +22,11 @@ BASE = "Pickup at our site 36030 Fulda, Germany, to KUL (Kuala Lumpur, MY). 12 p
 def test_preference_in_other_scripts(wish, pref):
     x = extract("Air freight quote to KUL", BASE + wish, "c@hackloop.mail", "1")
     assert x.preference == pref and x.preference_stated
+
+
+def test_budget_is_an_anchor_not_a_cheapest_wish_round_194():
+    body = ("Could you please quote the fastest air freight option from STR to MIA and include the all-in price "
+            "in EUR? 4 pieces, 172 kg, 0.71 cbm, ready on 2026-11-27, we deliver to STR ourselves.\n\n"
+            "Our budget for this shipment is around 380 EUR all-in, so I hope you can get close to that.")
+    x = extract("Air freight quote request: STR to MIA", body, "c@hackloop.mail", "58359")
+    assert x.preference == "fastest" and x.preference_stated
