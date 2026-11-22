@@ -462,6 +462,9 @@ class BookingAgent:
         our_address = (self.settings.our_address or "").lower()
         if our_address and ours.sender.strip().lower() != our_address:
             return None
+        # Only the address our quote went to can accept it (a lookalike cannot adopt it and book).
+        if ours.to and mail.sender.strip().lower() != ours.to.strip().lower():
+            return None
         found = quote_from_mail(ours.body, [c.name for c in self.directory.airlines()])
         if found is None:
             orch.emit(
@@ -548,11 +551,33 @@ class BookingAgent:
             raise
         orch.store.mark_outbox_sent(mail.thread_root_id, Stage.BOOKED, sent.id)
 
+    def _stranger(self, orch: Any, mail: Mail, lots: list[dict]) -> str | None:
+        """The customer address of this thread when the reply comes from a different address."""
+        from mail.senders import same_address
+
+        row = lots[0] if lots else self._quoted(orch, mail.thread_root_id)
+        owner = str((row or {}).get("customer") or "")
+        if owner and not same_address(mail.sender, owner):
+            return owner
+        return None
+
     async def on_reply(self, orch: Any, mail: Mail) -> None:
         if mail.id in self.declined:
             return
         accepted = is_acceptance(mail.body) or is_acceptance(mail.subject)
         lots = self._lots(orch, mail.thread_root_id)
+        # A "yes" from any address but the customer's (a lookalike such as "auer.maschinenbau" for
+        # "auer-maschinenbau") must not book, and the booking confirmation must not go to it.
+        owner = self._stranger(orch, mail, lots)
+        if owner is not None:
+            self.declined.add(mail.id)
+            orch.emit(
+                Agent.BOOKING, "sender", EventStatus.HOLD,
+                f"Reply {mail.id} in thread {mail.thread_root_id} came from {mail.sender}, not the customer "
+                f"{owner}: not booked, not answered. A person should look.",
+                mail.thread_root_id,
+            )
+            return
         if lots:
             from mail.multilot import partial_acceptance
 

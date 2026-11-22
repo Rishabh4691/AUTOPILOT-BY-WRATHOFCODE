@@ -666,6 +666,8 @@ class Orchestrator:
             mail.id,
             cost=extract_cost,
         )
+        if self.lookalike_held(mail):
+            return
         if await self.out_of_scope_declined(mail, rfq):
             return
         if self.dg is not None:
@@ -753,6 +755,33 @@ class Orchestrator:
             rfq.mail_id,
         )
         return candidate
+
+    def lookalike_held(self, mail: Mail) -> bool:
+        """A request from an address that imitates a known customer ("auer.maschinenbau" for
+        "auer-maschinenbau") gets no reply and is held for a person (phishing, rounds 160/173)."""
+        from mail.senders import lookalike_of
+
+        try:
+            known = {
+                str(r[0])
+                for r in self.store._conn.execute("SELECT DISTINCT customer FROM rfqs").fetchall()
+                if r[0]
+            }
+            real = lookalike_of(mail.sender, known)
+        except Exception:
+            log.exception("lookalike_check_failed", extra={"rfq": mail.id})
+            return False
+        if real is None:
+            return False
+        self.emit(
+            Agent.RFQ,
+            "phishing",
+            EventStatus.HOLD,
+            f"Mail {mail.id} from {mail.sender} imitates our customer {real}: not answered. A person should look.",
+            mail.id,
+        )
+        self.store.update_rfq(str(mail.id), status=Stage.HELD.value)
+        return True
 
     async def out_of_scope_declined(self, mail: Mail, rfq: RFQ) -> bool:
         """Round 159 (accepted): an air import INTO Germany is outside the brief ("Air export RFQs
