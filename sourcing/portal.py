@@ -284,6 +284,13 @@ class PortalClient:
         self.dataset_version = rate.dataset_version
         if rate.fx_eur_per_usd is not None:
             fx.set_rate(rate.currency, rate.fx_eur_per_usd)
+        # Rounds 93-97: keep every portal price, so a portal outage can still be priced.
+        from sourcing import portal_cache
+
+        hit = self._brackets.get(airline.upper())
+        portal_cache.record(rate.origin, rate.destination, rate.airline, rate.airline_code,
+                            rate.chargeable_weight_kg, rate.total, rate.currency, rate.transit_days,
+                            breaks=[Decimal(b) for b in hit[1]] if hit else ())
         return rate
 
     # ------------------------------------------------------------ booking

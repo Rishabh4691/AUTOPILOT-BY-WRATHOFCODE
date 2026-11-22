@@ -107,10 +107,41 @@ class SourcingPortalPriceSource:
         if notes:
             log.info("portal_notes", extra={"rfq": rfq.mail_id, "notes": notes[:5]})
         if not options and any(re.search(r"unavailable|503", note, re.I) for note in notes):
+            cached = self.from_cache(rfq)
+            if cached:
+                return cached
             raise PortalDown(notes[0])
         if not options:
             raise SourceUnavailable(notes[0] if notes else "portal returned no prices")
         return convert_all(options, self.now(), self.name)
+
+    def from_cache(self, rfq: RFQ) -> list[PriceOption]:
+        """Portal down (rounds 93-97): price the portal airlines from prices seen earlier in the
+        same weight break. Only exact-break estimates; nothing when the cache has no match."""
+        from decimal import Decimal
+
+        from sourcing import portal_cache
+        from sourcing.weights import chargeable_weight_kg
+
+        try:
+            chargeable = chargeable_weight_kg(to_shipment(rfq))
+        except Exception:
+            chargeable = max(Decimal(str(rfq.gross_kg)), Decimal(str(rfq.volume_cbm or 0)) * Decimal(167))
+        out = []
+        for e in portal_cache.estimate(rfq.origin, rfq.destination, Decimal(str(chargeable))):
+            if e["currency"] != "EUR":
+                continue
+            try:
+                out.append(PriceOption(
+                    source="portal", carrier=e["airline"], carrier_code=e["code"], rate_id=None,
+                    total=e["total"], currency="EUR", transit_days=e["transit_days"], includes_pickup=False,
+                    breakdown=Breakdown(chargeable_kg=e["chargeable_kg"]),
+                ))
+            except ValueError:
+                continue
+        if out:
+            log.warning("portal_down_priced_from_cache", extra={"rfq": rfq.mail_id, "options": len(out)})
+        return out
 
     async def aclose(self) -> None:
         await self.portal.aclose()

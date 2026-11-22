@@ -14,6 +14,7 @@ def isolated_customer_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     from mail import exclusions
 
     monkeypatch.setattr(exclusions, "MEMORY_PATH", tmp_path / "carrier_exclusions.json")
+    monkeypatch.setenv("PORTAL_CACHE_PATH", str(tmp_path / "portal_cache.jsonl"))
     yield
 
 
