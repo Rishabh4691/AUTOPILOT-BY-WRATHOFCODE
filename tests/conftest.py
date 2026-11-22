@@ -16,6 +16,8 @@ def isolated_customer_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(exclusions, "MEMORY_PATH", tmp_path / "carrier_exclusions.json")
     monkeypatch.setenv("PORTAL_CACHE_PATH", str(tmp_path / "portal_cache.jsonl"))
     monkeypatch.setenv("PORTAL_WARM", "0")  # tests never start the background portal warm-up
+    monkeypatch.setenv("OUTAGE_LEARN_PATH", str(tmp_path / "outage_learn.json"))
+    monkeypatch.setenv("OUTAGE_RETRY_GAP_S", "0")
     yield
 
 

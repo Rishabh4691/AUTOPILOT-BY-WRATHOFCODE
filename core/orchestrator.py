@@ -948,6 +948,30 @@ class Orchestrator:
         ).fetchone()
         return bool(row) and row[0] in (Stage.QUOTED.value, Stage.ACCEPTED.value, Stage.BOOKED.value)
 
+    async def outage_premium(self, rfq: RFQ, total: Decimal) -> Decimal:
+        """Rounds 93-100: during a portal outage the expected price sits above the price we can
+        find. Add the learned premium; the board's verdict on this quote moves it next time."""
+        import httpx
+
+        from core.agents import outage
+
+        state = outage.load()
+        try:
+            async with httpx.AsyncClient() as client:
+                state = outage.learn(state, await outage.board_requests(client, self.settings))
+        except Exception:
+            log.warning("outage_learn_failed", exc_info=True)
+        pct = outage.current_pct(state, rfq.preference.value)
+        outage.save(outage.record(state, rfq.preference.value, rfq.received_at.isoformat(), pct))
+        new_total = outage.apply(total, pct)
+        self.emit(
+            Agent.RFQ, "outage", EventStatus.WARN,
+            f"Portal outage on request {rfq.mail_id}: air price {total} + {pct}% outage premium = {new_total} "
+            "(learned from earlier outage verdicts).",
+            rfq.mail_id,
+        )
+        return new_total
+
     async def build_quote(
         self, rfq: RFQ, options: list[PriceOption], pickup: PickupPrice | None
     ) -> Quote | None:
@@ -989,6 +1013,10 @@ class Orchestrator:
         option = select(usable, rfq.preference)
         self.review_context[rfq.mail_id] = review_facts(rfq, usable, pickup)
         total = option.total
+        from core.agents import outage
+
+        if outage.hit_outage(rfq.mail_id):
+            total = await self.outage_premium(rfq, total)
         if pickup is not None and pickup.currency != option.currency:
             converted = convert_money(pickup.total, pickup.currency, option.currency)
             if converted is not None:

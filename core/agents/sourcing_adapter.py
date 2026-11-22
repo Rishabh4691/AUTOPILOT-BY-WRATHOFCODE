@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import logging
 from collections.abc import Callable, Iterable
@@ -102,11 +103,30 @@ class SourcingPortalPriceSource:
         self.last_notes: list[str] = []
 
     async def quote(self, rfq: RFQ) -> list[PriceOption]:
+        from core.agents import outage
+
+        def is_down(notes: list[str]) -> bool:
+            return any(re.search(r"unavailable|\b503\b", note, re.I) for note in notes)
+
         options, notes = await sourcing.get_portal_options(to_shipment(rfq), self.portal)
+        down = is_down(notes)
+        # Rounds 96, 99, 100: the portal flickered and some airlines answered a little later. Retry a
+        # few times inside the round instead of quoting without the missing (often fastest) airline.
+        tries = int(os.environ.get("OUTAGE_RETRIES", "3")) if outage.enabled() else 0
+        while down and tries > 0:
+            outage.mark_down(rfq.mail_id)
+            tries -= 1
+            await asyncio.sleep(float(os.environ.get("OUTAGE_RETRY_GAP_S", "15")))
+            again, notes = await sourcing.get_portal_options(to_shipment(rfq), self.portal)
+            seen = {o.airline for o in options}
+            options = [*options, *(o for o in again if o.airline not in seen)]
+            down = is_down(notes)
+        if down:
+            outage.mark_down(rfq.mail_id)
         self.last_notes = list(notes)
         if notes:
             log.info("portal_notes", extra={"rfq": rfq.mail_id, "notes": notes[:5]})
-        if not options and any(re.search(r"unavailable|503", note, re.I) for note in notes):
+        if not options and down:
             cached = self.from_cache(rfq)
             if cached:
                 return cached
