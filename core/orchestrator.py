@@ -322,6 +322,26 @@ class Orchestrator:
             rfq_id=mail.thread_root_id if kind is MailKind.FOLLOW_UP else None,
         )
 
+    def flag_special_wishes(self, mail: Mail) -> list[str]:
+        """Wishes the engine does not price (foreign pickup, delivery at destination, insurance): warn, quote as usual."""
+        try:
+            from mail.reply_files import request_text
+            from mail.special import special_wishes
+            from mail.text import fresh_text
+
+            wishes = special_wishes(f"{fresh_text(mail.body)}\n{request_text(mail.id)}")
+        except Exception:
+            return []
+        if wishes:
+            self.emit(
+                Agent.RFQ,
+                "special_request",
+                EventStatus.WARN,
+                f"Request {mail.id} asks for {', '.join(wishes)}, which the engine does not price. Check the quote.",
+                mail.id,
+            )
+        return wishes
+
     def flag_social_engineering(self, mail: Mail) -> None:
         from core.agents.guard import social_engineering
 
@@ -599,6 +619,7 @@ class Orchestrator:
                 log.exception("dg_check_failed", extra={"rfq": mail.id})
         elif await self.dangerous_goods_blocked(mail, rfq):
             return
+        self.flag_special_wishes(mail)
         from mail.multilot import split_shipments
 
         shared, lots = split_shipments(mail.body)
