@@ -4,6 +4,19 @@ An autonomous air freight desk: it reads every customer request, prices it in co
 
 Built at START Hack Munich 2026 for the 5U AI challenge.
 
+## Results
+
+Live from the 5U board at submission, Sunday 22 November 2026:
+
+| | |
+|---|---|
+| Rank | **#6 of 15 teams**, 16,330 points |
+| Requests answered | 195 of 199 |
+| Quotes accepted by customers | 159 (80 %) |
+| Sold | **€384,173** in 127 confirmed bookings |
+| Median time to answer | 46 s |
+| AI spend for the whole run | **€0.73**, about half a cent per quote |
+
 ## How it works
 
 One mailbox receives everything: customer requests, trucker and airline offers, rate desk answers, tariff updates, booking confirmations and tracking questions. A new request arrives every six minutes. The bot handles each one without a person in the loop.
@@ -49,6 +62,7 @@ Request lifecycle: `NEW → EXTRACTED → SOURCING → PRICED → QUOTED → ACC
 | Writer | One reply email in the customer's language and tone | One call |
 | Booking | Books the accepted offer by rate reference and confirms in the thread | No |
 | Tracking | Answers status questions from our own booking records | No |
+| Claims | Files lost, misplaced and damaged cargo claims with the airline and confirms to the customer | No |
 | Tariff intake | Turns new airline tariff mails into versioned prices | No |
 
 ## Scoring strategy
@@ -76,11 +90,19 @@ uvicorn api.main:app --port 8000
 cd ui && npm install && npm run dev   # http://localhost:5173
 ```
 
-The Control Room shows the live 5U scoreboard; a network map of every lane with volume, customer acceptance, airline transit and delays, and the lanes where a better airline rate would win more business; shipments, booked and delivered; cargo claims; the agents; each request with its pipeline and the sent email, where every number set by code is highlighted; and the lessons from every lost round. It switches between English and German and between dark and light.
+The Control Room (http://localhost:5173) opens on the WRATHOFCODE home page, with our results one click away. Inside:
 
-Two switches in the header change the running bot: the quote writer's model (gpt-4.1-mini or gpt-4.1) and daily shipment updates (off by default; when on, one status mail per booking a day and an arrival note, at most 10 mails a minute). They take effect only when the Control Room runs on the machine that runs the bot.
+- **Network**: a world map of every lane; the 15 busiest glow by customer acceptance with live flights along them, plus the busiest lanes, an airline league and the lanes where a better airline rate would win more business.
+- **Shipments**: every booking confirmed on the 5U board, with a printable invoice for each.
+- **Agent Control Room**: what each agent did and how long it took.
+- **RFQs**: every request with its pipeline and the email sent, where every number set by code is highlighted. Rounds newer than the local database come straight from the 5U board.
+- **Claims** and **Missed leads**: cargo claims, and the lesson from every lost round.
 
-When a customer reports a lost or damaged shipment, the bot files claim `CLM-<ref>` with the airline that flew it and confirms to the customer. No person is involved.
+It switches between English and German and between dark and light. Totals, booked value and answer times come from the 5U board; the AI spend in euros is derived from the board's cost points.
+
+A floating settings button holds theme and language, and on the Control Room screens two switches for the running bot: the quote writer's model (gpt-4.1-mini or gpt-4.1) and daily shipment updates (off by default; when on, one status mail per booking a day and an arrival note, at most 10 mails a minute). The bot reads them before every mail, without a restart. They take effect only when the Control Room runs on the machine that runs the bot, and the menu says so otherwise.
+
+When a customer reports a lost, misplaced or damaged shipment, the bot files claim `CLM-<ref>` with the airline that flew it and confirms to the customer. No person is involved.
 
 Only one bot may run for the whole team. `data/bot.lock` stops a second one on the same machine; `touch data/STOP` stops it cleanly. `FAKE_DATA=1` runs the Control Room on demo traffic.
 
@@ -113,7 +135,7 @@ core/       bot: orchestrator, agents, pricing, mailbox, store
 sourcing/   rate sheets, portal client, offers, booking, tariff ingestion
 mail/       extraction rules, attachment reading, email writer, reply files
 api/        FastAPI over the bot database
-ui/         React Control Room: scoreboard, network map, agents, requests, lessons
+ui/         React Control Room: results, network map, shipments and invoices, agents, requests, claims, missed leads
 scripts/    kit download, deployer, dry replay, secret scan, speech setup
 tests/      pytest suites, with real mails and attachments from past rounds
 docs/       API and portal notes, security review
