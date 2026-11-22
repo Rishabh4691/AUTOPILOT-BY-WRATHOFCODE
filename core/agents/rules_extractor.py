@@ -200,6 +200,16 @@ class RulesFirstExtractor:
         try:
             body = clean_body(mail.body)
             x = rules_extract(mail.subject, body, mail.sender, str(mail.id))
+            if x.shipment is None:
+                # Round 103: "the same shipment as in my earlier request ... new destination LAX".
+                from mail import repeat_request
+
+                rebuilt = repeat_request.rebuild(mail.sender, mail.subject, body)
+                if rebuilt:
+                    y = rules_extract(mail.subject, rebuilt, mail.sender, str(mail.id))
+                    if y.shipment is not None:
+                        log.info("repeat_request_rebuilt", extra={"rfq": mail.id})
+                        x, body = y, rebuilt
             if (
                 (x.shipment is None or not x.problems == [])
                 and mail.attachments
@@ -234,6 +244,12 @@ class RulesFirstExtractor:
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, *extra_charges.notes_for(found))})
                     log.info("extras_requested", extra={"rfq": mail.id, "extras": [e["label"] for e in found]})
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
+                try:
+                    from mail import repeat_request
+
+                    repeat_request.remember(mail.sender, mail.subject, body)
+                except Exception:
+                    pass
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})
         except Exception as error:

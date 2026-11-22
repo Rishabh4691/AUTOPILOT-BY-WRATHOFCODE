@@ -200,3 +200,31 @@ def test_extra_charges_are_added_to_the_total() -> None:
     assert labels == ["export handling fee", "documentation fee"]
     assert not extras.worth_asking("1497 kg gross and 13.89 cbm, cheapest please.")
     assert extras.worth_asking("please add the 2.5 % handling fee")
+
+
+def test_same_shipment_as_earlier_request_round_103(tmp_path, monkeypatch) -> None:
+    from mail import repeat_request
+    from mail.extract import extract
+
+    monkeypatch.setattr(repeat_request, "PATH", tmp_path / "requests.json")
+    earlier = (
+        "Dear Sir or Madam,\n\nCould you please provide an all-in air freight quote in EUR from STR to MEL "
+        "(Melbourne, AU)? The shipment will be ready on 2026-11-26, and we will deliver it to STR ourselves.\n\n"
+        "The shipment consists of 6 pieces of printed marketing material, with a gross weight of 1841 kg and a "
+        "total volume of 4.63 cbm.\n\nKind regards\nAnna Sonnberg"
+    )
+    repeat_request.remember("sonnberg-roesterei@hackloop.mail", "Air freight quote request: STR to MEL", earlier)
+    new = (
+        "Hello,\n\nCould you please quote the same shipment as in my earlier request, \"Air freight quote request: "
+        "STR to MEL\", sent on 2026-11-21 at 23:18 UTC for destination MEL? The cargo and pickup details are "
+        "unchanged, and you already have them from that request.\n\nThe new destination is LAX, and the shipment "
+        "will be ready for pickup on 2026-11-29. Please send me an all-in price in EUR for the cheapest option."
+    )
+    rebuilt = repeat_request.rebuild("sonnberg-roesterei@hackloop.mail", "Air freight quote request to LAX", new)
+    assert rebuilt is not None
+    x = extract("Air freight quote request to LAX", rebuilt, "sonnberg-roesterei@hackloop.mail", "30362")
+    assert x.shipment is not None
+    assert (x.shipment.origin, x.shipment.destination) == ("STR", "LAX")
+    assert x.shipment.gross_weight == Decimal("1841")
+    assert str(x.shipment.ready_date) == "2026-11-29"
+    assert x.shipment.door_pickup is False
