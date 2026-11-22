@@ -64,7 +64,7 @@ export default function AgentCard({ a, now, onOpen }) {
         <Stat label="Tasks done" value={a.tasks_done} />
         <Stat label="Success" value={a.tasks_done ? `${Math.round(a.success_rate * 100)}%` : '—'} />
         <Stat label="Avg time" value={secs(a.avg_ms)} />
-        <Stat label="LLM cost" value={`$${a.llm_cost_usd.toFixed(4)}`} />
+        <Stat label="Model cost" value={`$${a.llm_cost_usd.toFixed(4)}`} />
       </div>
 
       <Score value={a.productivity} />

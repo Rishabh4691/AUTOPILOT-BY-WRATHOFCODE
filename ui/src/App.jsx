@@ -19,14 +19,14 @@ function Summary({ s }) {
     ['Quoted', s ? `${s.quoted}${s.quoted ? ` (${s.under_2min} < 2 min)` : ''}` : '—'],
     ['Failed', s?.failed ?? '—', s?.failed > 0],
     ['Median time', mmss(s?.median_s)],
-    ['LLM / quote', s?.llm_per_quote != null ? `$${s.llm_per_quote.toFixed(5)}` : '—'],
+    ['Model / quote', s?.llm_per_quote != null ? `$${s.llm_per_quote.toFixed(5)}` : '—'],
     ['Booked value', booked],
   ]
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
       {items.map(([k, v, bad]) => (
         <div key={k} className="min-w-0 border-l border-line pl-4">
-          <div className={`truncate text-2xl font-light tracking-tight ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
+          <div className={`truncate text-xl font-light tracking-tight sm:text-2xl ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
           <div className="mt-1 text-[12px] text-muted">{k}</div>
         </div>
       ))}
@@ -47,7 +47,7 @@ export default function App() {
   const [alarm, setAlarm] = useState(null)
   const [fake, setFake] = useState(false)
   const [down, setDown] = useState(false)
-  const [operator, setOperator] = useOperator()
+  const [operator] = useOperator()
   const now = useNow()
   const timer = useRef()
 
@@ -71,7 +71,7 @@ export default function App() {
     return () => clearInterval(slow)
   }, [load])
 
-  const live = useStream(
+  useStream(
     (e) => {
       if (['fail', 'failed', 'error', 'hold'].includes(String(e.status).toLowerCase())) setAlarm(e)
       clearTimeout(timer.current)
@@ -98,42 +98,30 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
-      <header className="sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
+      <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
         <div className="flex shrink-0 items-center gap-2.5">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-accent text-white">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg>
-          </div>
           <span className="text-[15px] font-semibold tracking-tight text-white">AUTOPILOT</span>
         </div>
-        <nav className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
+        <nav className="app-tabs flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
           {tabs.map(([k, label]) => (
             <button
               key={k}
+              type="button"
+              aria-current={tab === k ? 'page' : undefined}
               onClick={() => setTab(k)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-medium uppercase tracking-[0.02em] transition-colors ${tab === k ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300 hover:text-white'}`}
+              className={`shrink-0 cursor-pointer rounded-full px-3.5 py-2 text-[12.5px] font-medium uppercase tracking-[0.02em] transition-colors duration-200 ${tab === k ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300 hover:bg-sky-500/8 hover:text-white'}`}
             >
               {label}
             </button>
           ))}
         </nav>
-        <span className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[12px] font-medium uppercase tracking-[0.04em] ${down ? 'bg-rose-500/15 text-rose-300' : 'bg-ink text-white'}`}>
-          <span className={`h-2 w-2 rounded-full ${down ? 'bg-rose-500' : live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
-          {down ? t('apiDown') : live ? t('live') : t('reconnecting')}
-        </span>
       </header>
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs">
         <p className="text-muted">{t('tagline')}</p>
         <div className="flex flex-wrap items-center gap-3">
           <Controls />
-          {fake && <span className="rounded-md bg-violet-500/15 px-2 py-1 text-violet-300">{t('demo')}</span>}
-          <input
-            value={operator}
-            onChange={(e) => setOperator(e.target.value)}
-            placeholder="Your name"
-            maxLength={40}
-            className="w-28 rounded-md border border-line bg-panel px-2 py-1 text-zinc-200 placeholder:text-muted focus:border-sky-500 focus:outline-none"
-          />
+          {fake && <span className="rounded-full bg-sky-500/10 px-2.5 py-1 text-sky-300">{t('demo')}</span>}
         </div>
       </div>
 
@@ -161,12 +149,12 @@ export default function App() {
         </div>
       )}
 
-      <div className="mt-8"><Summary s={sum} /></div>
+      {tab !== 'overview' && <div className="mt-8"><Summary s={sum} /></div>}
 
       <div className="mb-8" />
 
       {tab === 'overview' ? (
-        <Overview onOpen={(k) => { setTab(k); window.scrollTo({ top: 0 }) }} />
+        <Overview sum={sum} onOpen={(k) => { setTab(k); window.scrollTo({ top: 0 }) }} />
       ) : tab === 'board' ? (
         <Scoreboard />
       ) : tab === 'network' ? (

@@ -30,10 +30,10 @@ const volume = (l) => Math.max(l.requests, l.booked)
 const pct = (v) => (v == null ? '—' : `${Math.round(v * 100)} %`)
 
 function tone(rate) {
-  if (rate == null) return '#38bdf8'
-  if (rate >= 0.6) return '#34d399'
-  if (rate >= 0.3) return '#fbbf24'
-  return '#fb7185'
+  if (rate == null) return '#df5733'
+  if (rate >= 0.6) return '#4b8d6b'
+  if (rate >= 0.3) return '#c08a2e'
+  return '#c14f55'
 }
 
 function Panel({ title, note, children }) {
@@ -54,8 +54,8 @@ function WorldMap({ lanes, focus, setFocus }) {
   const ports = new Set(drawn.flatMap((l) => [l.origin, l.destination]))
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Lanes on a world map">
-      <path d={path({ type: 'Sphere' })} className="map-sea" fill="#0d1218" />
-      <path d={path(land)} className="map-land" fill="#1a222c" stroke="#26303c" strokeWidth="0.5" />
+      <path d={path({ type: 'Sphere' })} className="map-sea" fill="#f1efeb" />
+      <path d={path(land)} className="map-land" fill="#e3e0db" stroke="#d6d2cc" strokeWidth="0.5" />
       {drawn.map((l) => {
         const key = `${l.origin}-${l.destination}`
         const line = { type: 'LineString', coordinates: [AIRPORTS[l.origin], AIRPORTS[l.destination]] }
@@ -80,7 +80,7 @@ function WorldMap({ lanes, focus, setFocus }) {
         const german = AIRPORTS[code][0] > 5 && AIRPORTS[code][0] < 15 && AIRPORTS[code][1] > 47
         return (
           <g key={code}>
-            <circle cx={x} cy={y} r={german ? 2.5 : 3} fill={german ? '#e4e4e7' : '#38bdf8'} />
+            <circle cx={x} cy={y} r={german ? 2.5 : 3} fill={german ? '#817c74' : '#df5733'} />
             {!german && <text x={x + 5} y={y - 4} className="fill-zinc-400 font-mono text-[9px]">{code}</text>}
           </g>
         )
