@@ -35,6 +35,13 @@ def test_one_weight_per_break_from_100_kg() -> None:
     assert portal_warm.weights_for([]) == list(portal_warm.DEFAULT_WEIGHTS)
 
 
+async def test_warm_up_is_off_by_default(monkeypatch) -> None:
+    from core.main import portal_warm_up
+
+    monkeypatch.delenv("PORTAL_WARM", raising=False)
+    await asyncio.wait_for(portal_warm_up(SimpleNamespace(api_key="k", base_url="http://x"), asyncio.Event()), 1)
+
+
 async def test_warm_up_is_off_when_disabled(monkeypatch) -> None:
     from core.main import portal_warm_up
 
