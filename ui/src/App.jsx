@@ -189,7 +189,7 @@ export default function App() {
         </div>
       )}
 
-      <div className="mt-12"><Summary s={sum} /></div>
+      {!['rfqs', 'claims'].includes(tab) && <div className="mt-12"><Summary s={sum} /></div>}
 
       <div className="mb-10" />
 
