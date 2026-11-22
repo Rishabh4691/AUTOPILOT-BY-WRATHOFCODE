@@ -181,3 +181,5 @@ The full review is in [docs/SECURITY.md](docs/SECURITY.md).
 | Aryan | Sourcing, portal and booking (`sourcing/`) |
 | Aditi | Mail layer (`mail/`) |
 | Rishabh | Control Room, API, integration and pitch (`api/`, `ui/`) |
+
+We used AI coding assistants (Claude Code and Codex) to help write and review code during the hackathon. The team designed the system, made the decisions and checked every change.
