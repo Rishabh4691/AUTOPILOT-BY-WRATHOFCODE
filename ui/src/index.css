@@ -213,3 +213,49 @@ button, [role="button"], a[href], summary { cursor: pointer }
   backdrop-filter: blur(22px) saturate(180%);
   -webkit-backdrop-filter: blur(22px) saturate(180%);
 }
+
+/* ---- Leaderboard page: same light as the home page footer ---- */
+.lb-aurora {
+  background: radial-gradient(circle at 50% 50%,
+    color-mix(in oklch, var(--color-accent) 22%, transparent) 0%,
+    color-mix(in oklch, var(--color-secondary) 14%, transparent) 40%,
+    transparent 70%);
+  animation: lb-breathe 9s ease-in-out infinite alternate;
+}
+@keyframes lb-breathe {
+  from { transform: translateX(-50%) scale(1); opacity: .7 }
+  to { transform: translateX(-50%) scale(1.08); opacity: 1 }
+}
+.lb-grid {
+  background-size: 60px 60px;
+  background-image:
+    linear-gradient(to right, color-mix(in oklch, var(--color-foreground) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklch, var(--color-foreground) 4%, transparent) 1px, transparent 1px);
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+  -webkit-mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+.lb-glow {
+  background: linear-gradient(180deg, var(--color-foreground) 0%, color-mix(in oklch, var(--color-foreground) 45%, transparent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 22px color-mix(in oklch, var(--color-foreground) 14%, transparent));
+}
+.lb-gold {
+  background: linear-gradient(180deg, #ffb15c 0%, var(--color-accent) 60%, #e0461f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.glass.lb-us {
+  border-color: color-mix(in oklch, var(--color-accent) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    0 0 0 1px color-mix(in oklch, var(--color-accent) 35%, transparent),
+    0 14px 40px -14px color-mix(in oklch, var(--color-accent) 70%, transparent);
+}
+.lb-rise { animation: lb-rise .7s cubic-bezier(.2, .9, .25, 1) both }
+@keyframes lb-rise {
+  from { opacity: 0; transform: translateY(14px) }
+  to { opacity: 1; transform: none }
+}

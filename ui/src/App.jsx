@@ -11,7 +11,7 @@ import { useT, useTheme } from './prefs'
 import Shipments from './Shipments'
 import SiteFooter from './SiteFooter'
 import Intro from './Intro'
-import Scoreboard from './Scoreboard'
+import Leaderboard from './Leaderboard'
 
 function Summary({ s }) {
   const booked = s?.booked?.length ? s.booked.map((b) => money(b.total, b.currency)).join(' + ') : '—'
@@ -88,7 +88,6 @@ export default function App() {
 
   const tabs = [
     ['overview', t('overview')],
-    ['board', t('board')],
     ['network', t('network')],
     ['shipments', t('shipments')],
     ['claims', t('claims')],
@@ -107,7 +106,8 @@ export default function App() {
   return (
     <>
     {home && <Intro onTour={() => enter('network')} onLeaderboard={() => enter('board')} />}
-    {!home && (
+    {tab === 'board' && <Leaderboard onHome={() => enter('overview')} />}
+    {!home && tab !== 'board' && (
     <div id="app" className="mx-auto max-w-7xl scroll-mt-4 px-4 pb-16 sm:px-6">
       <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
         <div className="flex shrink-0 items-center gap-2.5">
@@ -163,9 +163,7 @@ export default function App() {
 
       <div className="mb-8" />
 
-      {tab === 'board' ? (
-        <Scoreboard />
-      ) : tab === 'network' ? (
+      {tab === 'network' ? (
         <Network />
       ) : tab === 'shipments' ? (
         <Shipments />

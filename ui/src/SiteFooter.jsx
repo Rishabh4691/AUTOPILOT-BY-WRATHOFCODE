@@ -1,4 +1,4 @@
-import { BarChart3, Globe2, Trophy } from 'lucide-react'
+import { Globe2 } from 'lucide-react'
 import { CinematicFooter } from './components/ui/motion-footer'
 import { useLang } from './prefs'
 
@@ -12,7 +12,7 @@ const COPY = {
         Ready for <span className="font-serif italic font-normal">take-off?</span>
       </>
     ),
-    primary: [['Open the scoreboard', 'board', <Trophy key="t" />], ['See the network', 'network', <Globe2 key="g" />]],
+    primary: [['See the network', 'network', <Globe2 key="g" />]],
     secondary: [['Shipments', 'shipments'], ['Lessons', 'lessons'], ['Requests', 'rfqs'], ['Features', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack Munich',
     top: 'Back to top',
@@ -24,7 +24,7 @@ const COPY = {
         Bereit zum <span className="font-serif italic font-normal">Abheben?</span>
       </>
     ),
-    primary: [['Rangliste öffnen', 'board', <Trophy key="t" />], ['Netzwerk ansehen', 'network', <Globe2 key="g" />]],
+    primary: [['Netzwerk ansehen', 'network', <Globe2 key="g" />]],
     secondary: [['Sendungen', 'shipments'], ['Lektionen', 'lessons'], ['Anfragen', 'rfqs'], ['Funktionen', `${REPO}/blob/main/docs/FEATURES.md`], ['GitHub', REPO]],
     copyright: '© 2026 WRATHOFCODE · START Hack München',
     top: 'Nach oben',
