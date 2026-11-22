@@ -476,7 +476,7 @@ class Orchestrator:
 
     async def revise_if_changed(self, mail: Mail) -> bool:
         """Customer sends new figures after our quote ("details have changed, please update your offer"):
-        quote again once, in the same thread, with the new pieces, weight and volume."""
+        quote again in the same thread with the new pieces, weight and volume, for every real change."""
         from core.agents.booking import is_acceptance
         from mail.extract import revised_figures
         from mail.text import fresh_text
@@ -488,13 +488,23 @@ class Orchestrator:
         if not figures or is_acceptance(body):
             return False
         root = mail.thread_root_id
-        revised = getattr(self, "_revised", set())
-        self._revised = revised
-        if root in revised:
+        # A 2nd or 3rd change must be quoted too (user, 09:23). Remember each change MAIL, not the
+        # thread, and carry earlier changes forward: "weight is now 1400 kg" keeps the new volume.
+        # The same figures again ("as said: 5 pieces, 1317 kg ...") are not a change.
+        seen = getattr(self, "_revised", set())
+        self._revised = seen
+        if mail.id in seen:
             return False
         if self.store.outbox_status(root, Stage.QUOTED) is None and self.store.outbox_status(root, Stage.HELD) is None:
             return False
-        revised.add(root)
+        latest: dict[int, dict] = getattr(self, "_revision_figures", {})
+        self._revision_figures = latest
+        merged = {**latest.get(root, {}), **{k: v for k, v in figures.items() if v is not None}}
+        seen.add(mail.id)
+        if merged == latest.get(root):
+            return False
+        latest[root] = merged
+        figures = merged
         try:
             original = await self.mailbox.read_one(root)
             rfq, usage = await self.extractor.extract(original)

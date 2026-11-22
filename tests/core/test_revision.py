@@ -95,3 +95,31 @@ async def test_change_mail_without_our_quote_is_ignored(tmp_path: Path):
     h.orchestrator.route(change)
     await drain(h)
     assert h.mailbox.sent == []
+
+
+async def test_second_and_third_change_are_quoted_and_keep_earlier_changes(tmp_path: Path):
+    # User, 09:23 (after round 172): every further change must be quoted again, not just the first.
+    h = harness(tmp_path, now=NOW + timedelta(seconds=5))
+    request = mail(24388)
+    h.orchestrator.mailbox = Box(h.mailbox, request)
+    h.orchestrator.route(request)
+    await drain(h)
+    first = mail(24642, subject="Re: Quote request FRA to ORD", body=ROUND86, in_reply_to=10_001, references=(24388, 10_001))
+    h.orchestrator.route(first)
+    await drain(h)
+    assert len(h.mailbox.sent) == 2
+    second = mail(24650, subject="Re: Quote request FRA to ORD",
+                  body="Sorry, one more change: the gross weight is now 1400 kg. Please update your offer.",
+                  in_reply_to=10_002, references=(24388, 10_002))
+    h.orchestrator.route(second)
+    await drain(h)
+    assert len(h.mailbox.sent) == 3 and h.mailbox.sent[2].in_reply_to == 24650
+    revised = [e.message for e in h.sink.events if e.step == "revised"]
+    assert "1400" in revised[-1] and "8.18" in revised[-1]  # the earlier new volume is kept
+    third = mail(24660, subject="Re: Quote request FRA to ORD",
+                 body="Final change, promise: 6 pieces, 1450 kg gross weight, 8.5 cbm. Please update the offer.",
+                 in_reply_to=10_003, references=(24388, 10_003))
+    h.orchestrator.route(third)
+    await drain(h)
+    assert len(h.mailbox.sent) == 4
+    assert "1450" in [e.message for e in h.sink.events if e.step == "revised"][-1]
