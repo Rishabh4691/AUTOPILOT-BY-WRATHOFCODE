@@ -99,3 +99,17 @@ def test_round_126_turkish_pdf_has_the_price_as_text() -> None:
 )
 def test_polite_asian_pdf_requests(text, formats):
     assert reply_files.wanted(text) == formats
+
+
+@pytest.mark.parametrize(
+    "text, formats",
+    [
+        # round 189 (no_pdf_offer): "your ... attached" was read as "our ... attached"
+        ("Please send your all-in price in EUR as a PDF attached to your reply so our purchasing department "
+         "can file it.", ["pdf"]),
+        ("Our packing list is attached as a PDF.", []),  # still their own file
+        ("We have attached our specification as a PDF.", []),
+    ],
+)
+def test_your_offer_attached_is_a_request(text, formats):
+    assert reply_files.wanted(text) == formats

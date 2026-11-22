@@ -35,7 +35,9 @@ ASK = (
 )
 THEIR_OWN = (
     r"please find|find (?:our|the|attached)|attached (?:is|are|you will find|please find)|is attached|are attached|"
-    r"we (?:have )?attach|i (?:have )?attach|our [^.]{0,60} attached|anbei (?:finden|erhalten|senden|die|unsere)|"
+    # \b: round 189 lost its PDF because "our ... attached" matched inside "y-our all-in price ... as a
+    # PDF attached to your reply" (a request), so it was taken for the customer's own attachment.
+    r"\bwe (?:have )?attach|\bi (?:have )?attach|\bour [^.]{0,60} attached|anbei (?:finden|erhalten|senden|die|unsere)|"
     r"im anhang (?:finden|erhalten|senden)|ci-joint (?:notre|nos|la|le)|vous trouverez|adjunto (?:le|les|encontrará)|"
     r"in allegato (?:trova|le invio|la nostra)|w załączniku (?:przesyłam|znajdzie)|附件是我们|随附我们的|添付しました|첨부했습니다"
 )
