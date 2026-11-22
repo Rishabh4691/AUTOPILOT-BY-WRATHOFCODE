@@ -83,6 +83,7 @@ export const DotField = React.forwardRef<DotFieldHandle, DotFieldProps>(function
     W: 0, H: 0, N: 0, P: new Float32Array(0), t0: 0,
     scrollP: 0, btnP: 0, btnT: 0, scatter: 0, last: 0, kick: 0,
     mouse: { x: -9999, y: -9999, on: false },
+    snapped: false,
     restart: () => {},
   });
 
@@ -204,10 +205,14 @@ export const DotField = React.forwardRef<DotFieldHandle, DotFieldProps>(function
           if (s.kick > 0.01) fl = Math.max(fl, Math.min(1, s.kick) * 0.9);
 
           if (reduce) {
+            // Reduced motion: no fly-in, flow or sweep, but the dots still give way to the cursor.
             const d = isT ? 1 - q : 0;
-            P[o] = P[o + 4] + ((isT ? P[o + 6] : P[o + 4]) - P[o + 4]) * d;
-            P[o + 1] = P[o + 5] + ((isT ? P[o + 7] : P[o + 5]) - P[o + 5]) * d;
-          } else {
+            tx = P[o + 4] + ((isT ? P[o + 6] : P[o + 4]) - P[o + 4]) * d;
+            ty = P[o + 5] + ((isT ? P[o + 7] : P[o + 5]) - P[o + 5]) * d;
+            if (!s.snapped) { P[o] = tx; P[o + 1] = ty; }
+            k = 0.12; fl = 0;
+          }
+          {
             let ax = (tx - P[o]) * k, ay = (ty - P[o + 1]) * k;
             if (fl > 0) { const a = FLOW(P[o], P[o + 1], t); ax += Math.cos(a) * 2.2 * fl; ay += Math.sin(a) * 2.2 * fl; }
             if (m.on && R > 0) {
@@ -233,6 +238,7 @@ export const DotField = React.forwardRef<DotFieldHandle, DotFieldProps>(function
           }
         }
         ctx.globalAlpha = 1; gtx.globalAlpha = 1;
+        s.snapped = true;
       }
       raf = requestAnimationFrame(frame);
     };
