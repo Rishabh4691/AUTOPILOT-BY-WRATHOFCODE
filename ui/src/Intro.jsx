@@ -8,14 +8,14 @@ const COPY = {
     description: 'An air freight forwarder that runs itself. Every request read, priced, answered and booked, with no human in the loop.',
     tour: 'Let’s have a tour',
     board: 'Leaderboard',
-    hint: { scatter: 'Ready for take off? Scroll', gather: 'Scroll up to land' },
+    hint: { scatter: 'Ready for take-off!', gather: 'Scroll up to land' },
   },
   de: {
     eyebrow: 'START Hack München 2026',
     description: 'Ein Luftfracht-Spediteur, der sich selbst steuert. Jede Anfrage gelesen, berechnet, beantwortet und gebucht, ohne Menschen dazwischen.',
     tour: 'Starte die Tour',
     board: 'Rangliste',
-    hint: { scatter: 'Bereit zum Abheben? Scrollen', gather: 'Hochscrollen zum Landen' },
+    hint: { scatter: 'Bereit zum Abheben!', gather: 'Hochscrollen zum Landen' },
   },
 }
 
