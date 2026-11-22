@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* shadcn-style `dark:` follows our theme switch, not the OS setting. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 /* Sketchbook theme: paper, black ink lines, hard offset shadows, orange accent.
    Dark ("night") is the default token set below; light ("paper") overrides it. */
 @theme {
@@ -14,6 +17,11 @@
   --color-accent: #ff8a3d;
   --color-sketch: #f4f1ea;
   --color-dot: #ffffff12;
+  /* shadcn token names, used by components/ui */
+  --color-background: #0e0e10;
+  --color-foreground: #f4f1ea;
+  --color-muted-foreground: #a8a39a;
+  --color-border: #3a3a40;
   --color-sky-200: #ffc29a;
   --color-sky-300: #ffa66b;
   --color-sky-400: #ff8a3d;
@@ -31,6 +39,10 @@
   --color-accent: #ff6b2c;
   --color-sketch: #0d0d0d;
   --color-dot: #0d0d0d14;
+  --color-background: #fffdf8;
+  --color-foreground: #0d0d0d;
+  --color-muted-foreground: #6b665e;
+  --color-border: #0d0d0d;
   --color-white: #0d0d0d;
   --color-zinc-100: #0d0d0d;
   --color-zinc-200: #1c1b19;
@@ -148,3 +160,6 @@ button, [role="button"], a[href], summary { cursor: pointer }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important }
 }
+
+/* Dot Field intro: shadcn's bg-muted is a surface, ours is a text grey. */
+.dotfield-scope { --color-muted: var(--color-panel) }
