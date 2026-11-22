@@ -93,3 +93,17 @@ def test_german_fallback_route_has_no_english_word() -> None:
 def test_french_superlative_is_not_an_alternative(phrase: str) -> None:
     assert writer.alternatives(f"C'est {phrase} sur cette ligne.", "fr") == []
     assert writer.alternatives("Une option plus rapide existe.", "fr")
+
+
+def test_country_and_un_codes_are_not_italian_round_184():
+    # Round 184: an English mail was answered in Italian; its packing list had "Tel Aviv, IL" and "UN1950".
+    from mail import lang
+
+    packing = ("Packing List\nConsignee:: Tel Aviv Distribution Inc., Tel Aviv, IL\nGoods description:: maintenance "
+               "spray cans\nTotal pieces:: 11\nDangerous goods:: UN1950, Class 2.1, Aerosols, flammable\n"
+               "Length (cm) | Width (cm) | Gross weight (kg) | Height (cm) | Pieces")
+    assert lang.detect(packing) != "it"
+    body = ("Could you please check the fastest air freight option from Stuttgart Airport (STR) to Tel Aviv (TLV, IL) "
+            "and send us your all-in price in EUR? The shipment will be ready on 2026-11-27, and we will deliver it "
+            "to STR ourselves. The packing list is attached.")
+    assert lang.confident(body) == "en"

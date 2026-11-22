@@ -102,24 +102,42 @@ def _script(text: str) -> str | None:
     return code
 
 
-def detect(text: str, default="en") -> str:
+def confident(text: str) -> str | None:
+    """The language when the text clearly is one (a script, or two or more of its words), else None.
+
+    Short all-capital codes are not words: round 184's packing list read as Italian because "Tel
+    Aviv, IL" (Israel) and "UN1950" gave "il" and "un".
+    """
     script = _script(text or "")
     if script:
         return script
-    tokens = re.findall(r"[^\W\d_][^\W\d_']*", (text or "").lower())
+    raw = re.findall(r"[^\W\d_][^\W\d_']*", text or "")
+    tokens = [t.lower() for t in raw if not (t.isupper() and len(t) <= 3)]
     if not tokens:
-        return default
+        return None
     scores = {lang: sum(1 for t in tokens if t in set(words)) for lang, words in WORDS.items()}
     best = max(scores, key=scores.get)
-    return best if scores[best] >= 2 else default
+    return best if scores[best] >= 2 else None
+
+
+def detect(text: str, default="en") -> str:
+    return confident(text) or default
 
 
 def for_request(mail_id: int | str, body: str, default="en") -> str:
+    """The customer's language: the mail itself when it clearly is one; attachments (a voice note's
+    transcript, a scanned letter) only when the mail body says too little (round 184: an English
+    mail was answered in Italian because of its packing list)."""
     from .files import CACHE
 
+    said = confident(body)
     attached = "\n".join(
         text for (mid, _aid), (_name, text) in list(CACHE.items.items()) if str(mid) == str(mail_id) and text
     )
     if attached.strip():
-        return detect(attached, detect(body, default))
-    return detect(body, default)
+        doc = confident(attached)
+        # A cover note ("please find our request attached") or an empty body: the request is in the file.
+        thin = len(re.findall(r"[^\W\d_]+", body or "")) < 25
+        if doc and (said is None or thin):
+            return doc
+    return said or default
