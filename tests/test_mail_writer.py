@@ -461,3 +461,10 @@ def test_translated_slot_instruction_never_reaches_the_customer():
     out = writer.fill(draft, values)
     assert "[" not in out and "yerleştir" not in out and "Boş" not in out
     assert "We'll collect it from your site" in out and "EUR 5,870.27" in out and "1,998 kg" in out
+
+
+def test_the_forwarder_holds_the_rate_not_the_customer():
+    # Rounds 144/145 on gpt-4.1-mini: "You can hold it for you today."
+    out = writer.fill("Hi [FIRST],\n\nYou can hold it [VALID]. Our reference is [REF].",
+                      {"FIRST": "Deniz", "VALID": "for you today", "REF": "WOC-1"})
+    assert "I can hold this rate for you today." in out and "You can hold" not in out
