@@ -23,8 +23,7 @@ export default function Lessons() {
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">{t('lessonsTitle')}</h2>
-          <p className="mt-1 text-xs text-muted">Verdict from the 5U board, root cause from the real mails, fix and regression test in git.</p>
+          <p className="text-xs text-muted">Verdict from the 5U board, root cause from the real mails, fix and regression test in git.</p>
         </div>
         <div className="font-mono text-xs text-muted">{LESSONS.length} lessons</div>
       </div>

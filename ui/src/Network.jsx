@@ -116,10 +116,7 @@ export default function Network() {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-white">{t('networkTitle')}</h2>
-          <p className="mt-1 text-xs text-muted">{t('networkNote')}</p>
-        </div>
+        <div />
         <div className="flex overflow-hidden rounded-lg border border-line text-xs">
           {PERIODS.map(([k, label]) => (
             <button

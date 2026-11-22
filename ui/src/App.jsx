@@ -7,11 +7,32 @@ import Claims from './Claims'
 import SettingsDock from './SettingsDock'
 import Lessons from './Lessons'
 import Network from './Network'
-import { useT, useTheme } from './prefs'
+import { useLang, useT, useTheme } from './prefs'
 import Shipments from './Shipments'
 import SiteFooter from './SiteFooter'
 import Intro from './Intro'
 import Leaderboard from './Leaderboard'
+import PageBackdrop from './PageBackdrop'
+import { ArrowLeft } from 'lucide-react'
+
+const SUBS = {
+  en: {
+    network: 'Where customers ship, which airlines deliver, and where our price loses.',
+    shipments: 'Every booking, from the yes to the arrival note.',
+    claims: 'Lost or damaged cargo, filed with the airline the moment it is reported.',
+    agents: 'Five agents, one request at a time. What each is doing right now.',
+    rfqs: 'Every request, every mail, every price. Open one to see how it was answered.',
+    lessons: 'Every lost round became a fix.',
+  },
+  de: {
+    network: 'Wohin Kunden versenden, welche Airlines liefern und wo unser Preis verliert.',
+    shipments: 'Jede Buchung, vom Ja bis zur Ankunftsnachricht.',
+    claims: 'Verlorene oder beschädigte Fracht, sofort bei der Airline gemeldet.',
+    agents: 'Fünf Agenten, eine Anfrage nach der anderen. Was jeder gerade tut.',
+    rfqs: 'Jede Anfrage, jede Mail, jeder Preis. Öffnen, um die Antwort zu sehen.',
+    lessons: 'Jede verlorene Runde wurde zu einem Fix.',
+  },
+}
 
 function Summary({ s }) {
   const booked = s?.booked?.length ? s.booked.map((b) => money(b.total, b.currency)).join(' + ') : '—'
@@ -24,20 +45,21 @@ function Summary({ s }) {
     ['Booked value', booked],
   ]
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+    <dl className="glass lb-rise grid grid-cols-2 gap-y-5 rounded-[28px] px-6 py-6 sm:grid-cols-3 xl:grid-cols-6">
       {items.map(([k, v, bad]) => (
-        <div key={k} className="min-w-0 border-l border-line pl-4">
-          <div className={`truncate text-xl font-light tracking-tight sm:text-2xl ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
-          <div className="mt-1 text-[12px] text-muted">{k}</div>
+        <div key={k} className="min-w-0 text-center">
+          <dt className="text-[11px] tracking-[0.12em] text-muted uppercase">{k}</dt>
+          <dd className={`font-display mt-1 truncate text-[clamp(1.1rem,2vw,1.5rem)] ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</dd>
         </div>
       ))}
-    </div>
+    </dl>
   )
 }
 
 export default function App() {
   const t = useT()
   useTheme()
+  const [lang] = useLang()
   const query = new URLSearchParams(window.location.search)
   const [tab, setTab] = useState(query.get('tab') || (query.has('open') ? 'rfqs' : 'overview'))
   const [agents, setAgents] = useState([])
@@ -87,7 +109,6 @@ export default function App() {
   }
 
   const tabs = [
-    ['overview', t('overview')],
     ['network', t('network')],
     ['shipments', t('shipments')],
     ['claims', t('claims')],
@@ -108,19 +129,25 @@ export default function App() {
     {home && <Intro onTour={() => enter('network')} onLeaderboard={() => enter('board')} />}
     {tab === 'board' && <Leaderboard onHome={() => enter('overview')} />}
     {!home && tab !== 'board' && (
-    <div id="app" className="mx-auto max-w-7xl scroll-mt-4 px-4 pb-16 sm:px-6">
-      <header className="app-header sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
-        <div className="flex shrink-0 items-center gap-2.5">
-          <span className="font-display text-[16px] text-white">AUTOPILOT</span>
-        </div>
-        <nav className="app-tabs flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
+    <main id="app" className="glass-page relative isolate min-h-screen px-4 pt-2 pb-24 sm:px-6">
+      <PageBackdrop />
+      <div className="mx-auto max-w-7xl">
+      <header className="glass-header sticky top-0 z-40 -mx-4 flex items-center gap-3 px-4 pt-3 pb-6 sm:-mx-6 sm:px-6">
+        <button
+          type="button"
+          onClick={() => enter('overview')}
+          className="glass inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-full px-4 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-x-0.5 sm:px-5"
+        >
+          <ArrowLeft className="size-4" aria-hidden /> <span className="hidden sm:inline">{lang === 'de' ? 'Start' : 'Home'}</span>
+        </button>
+        <nav className="glass app-tabs flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-full p-1.5 [scrollbar-width:none]">
           {tabs.map(([k, label]) => (
             <button
               key={k}
               type="button"
               aria-current={tab === k ? 'page' : undefined}
               onClick={() => enter(k)}
-              className={`shrink-0 cursor-pointer rounded-full px-3.5 py-2 text-[12.5px] font-medium uppercase tracking-[0.02em] transition-colors duration-200 ${tab === k ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300 hover:bg-sky-500/8 hover:text-white'}`}
+              className={`shrink-0 cursor-pointer rounded-full px-4 py-2 text-[13px] font-semibold transition-colors duration-200 ${tab === k ? 'text-[#0d0d0d]' : 'text-zinc-300 hover:bg-white/[0.08] hover:text-white'}`}
             >
               {label}
             </button>
@@ -128,11 +155,14 @@ export default function App() {
         </nav>
       </header>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <p className="text-muted">{t('tagline')}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          {fake && <span className="rounded-full bg-sky-500/10 px-2.5 py-1 text-sky-300">{t('demo')}</span>}
-        </div>
+      <div className="mt-14 text-center sm:mt-16">
+        <span className="glass inline-flex h-[30px] items-center gap-2 rounded-full px-3 text-[13px] text-zinc-300">
+          <i className="size-1.5 rounded-full bg-accent shadow-[0_0_10px_var(--color-accent)]" aria-hidden />
+          {t('tagline')}
+          {fake && <span className="text-accent">· {t('demo')}</span>}
+        </span>
+        <h1 className="lb-glow font-display mt-6 text-[clamp(2.6rem,9vw,6.5rem)] leading-[0.92]">{tabs.find(([k]) => k === tab)?.[1].replace(/ \(\d+\)$/, '')}</h1>
+        <p className="mx-auto mt-4 max-w-2xl font-serif text-lg text-zinc-300 italic sm:text-xl">{(SUBS[lang] ?? SUBS.en)[tab]}</p>
       </div>
 
       {down && (
@@ -159,9 +189,9 @@ export default function App() {
         </div>
       )}
 
-      <div className="mt-8"><Summary s={sum} /></div>
+      <div className="mt-12"><Summary s={sum} /></div>
 
-      <div className="mb-8" />
+      <div className="mb-10" />
 
       {tab === 'network' ? (
         <Network />
@@ -188,7 +218,8 @@ export default function App() {
       )}
 
       {open && <RfqDetail id={open} tick={tick} now={now} operator={operator} onClose={() => setOpen(null)} />}
-    </div>
+      </div>
+    </main>
     )}
     <SiteFooter onOpen={enter} />
     <SettingsDock />

@@ -259,3 +259,40 @@ button, [role="button"], a[href], summary { cursor: pointer }
   from { opacity: 0; transform: translateY(14px) }
   to { opacity: 1; transform: none }
 }
+
+/* ---- Control Room screens in the home page's glass style ---- */
+.glass-page { --color-line: color-mix(in oklch, var(--color-foreground) 10%, transparent) }
+.glass-page .bg-panel.border[class*="rounded"],
+.glass-page .sketch-card,
+.glass-page .bg-line.gap-px {
+  background: linear-gradient(160deg, var(--glass-hi) 0%, var(--glass-lo) 100%);
+  border: 1px solid var(--glass-edge);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 var(--glass-shine),
+    inset 0 -1px 1px var(--glass-under),
+    inset 0 0 14px var(--glass-inner),
+    0 10px 30px -12px var(--glass-drop);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+}
+.glass-page .bg-line.gap-px > .bg-panel { background: transparent }
+.glass-page .bg-panel.border[class*="rounded"]:has(> table, > div > table) { overflow: hidden }
+/* Side drawer (request detail): frosted, but solid enough to read. */
+.glass-page .border-l.bg-panel {
+  background: color-mix(in oklch, var(--color-panel) 82%, transparent);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-left: 1px solid var(--glass-edge);
+}
+.glass-page .app-tabs [aria-current="page"] {
+  background: linear-gradient(45deg, #ffa15c, var(--color-accent));
+  color: #0d0d0d;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .5), 0 6px 18px -6px color-mix(in oklch, var(--color-accent) 70%, transparent);
+}
+.glass-page table thead { color: var(--color-muted) }
+.glass-page tbody tr:hover { background: color-mix(in oklch, var(--color-foreground) 4%, transparent) }
+/* Fade behind the floating tab bar so scrolled content slips under it cleanly. */
+.glass-header {
+  background: linear-gradient(to bottom, var(--color-background) 0%, color-mix(in oklch, var(--color-background) 85%, transparent) 55%, transparent 100%);
+}

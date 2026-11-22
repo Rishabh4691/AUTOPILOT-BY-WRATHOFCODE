@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Crown, Medal } from 'lucide-react'
 import { clock, get } from './api'
+import PageBackdrop from './PageBackdrop'
 import { useLang } from './prefs'
 
 const COPY = {
@@ -41,15 +42,6 @@ const COPY = {
 }
 
 const fmt = (n, d = 0) => (n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }))
-
-function Backdrop() {
-  return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10">
-      <div className="lb-aurora absolute top-[-10vh] left-1/2 h-[70vh] w-[90vw] -translate-x-1/2 rounded-[50%] blur-[90px]" />
-      <div className="lb-grid absolute inset-0" />
-    </div>
-  )
-}
 
 function Podium({ team, place, us, c }) {
   const tall = place === 1 ? 'sm:pt-10 sm:pb-9' : place === 2 ? 'sm:pt-7 sm:pb-6' : 'sm:pt-5 sm:pb-5'
@@ -122,7 +114,7 @@ export default function Leaderboard({ onHome }) {
 
   return (
     <main className="relative isolate min-h-screen overflow-hidden px-4 pt-5 pb-24 sm:px-6">
-      <Backdrop />
+      <PageBackdrop />
 
       <div className="mx-auto max-w-5xl">
         <div className="flex items-center justify-between gap-3">
