@@ -22,10 +22,13 @@ function Table({ rows, t }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.rfq_id} className="border-t border-line">
+            <tr key={r.booking_reference || r.rfq_id} className="border-t border-line">
               <td className="px-4 py-2">
-                <div className="font-mono text-zinc-200">{r.team_reference}</div>
-                <div className="font-mono text-[11px] text-muted">{r.booking_reference || 'pending'}</div>
+                <div className="font-mono text-zinc-200">
+                  {r.team_reference || r.booking_reference}
+                  {r.live ? <span className="ml-2 rounded-full bg-accent/20 px-1.5 text-[10px] font-semibold text-accent" title="Confirmed on the live 5U board; customer and price are in the bot laptop's database">5U LIVE</span> : null}
+                </div>
+                <div className="font-mono text-[11px] text-muted">{r.live ? (r.weight_kg ? `${r.weight_kg} kg` : '') : r.booking_reference || 'pending'}</div>
               </td>
               <td className="px-4 py-2 font-mono text-zinc-300">{r.origin && r.destination ? `${r.origin} → ${r.destination}` : '—'}</td>
               <td className="px-4 py-2 text-zinc-300">{r.carrier || '—'}</td>
@@ -34,7 +37,7 @@ function Table({ rows, t }) {
               <td className="px-4 py-2 text-right font-mono text-muted">{r.updates || 0}</td>
               <td className="px-4 py-2">
                 <span className={`rounded-md px-2 py-0.5 text-[11px] ${r.delivered ? 'bg-emerald-500/15 text-emerald-300' : 'bg-sky-500/15 text-sky-300'}`}>
-                  {r.note || r.status || (r.delivered ? t('delivered') : t('booked'))}
+                  {(r.live ? r.status : r.note || r.status) || (r.delivered ? t('delivered') : t('booked'))}
                 </span>
               </td>
             </tr>

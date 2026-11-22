@@ -20,6 +20,13 @@ def client(tmp_path, monkeypatch):
         return board
 
     monkeypatch.setattr(main, "_our_verdicts", fake_board)
+    bookings = []
+
+    async def fake_bookings():
+        return bookings
+
+    monkeypatch.setattr(main, "_our_bookings", fake_bookings)
+    main._test_bookings = bookings
     main._test_board = board
     with TestClient(main.app) as c:
         yield c
@@ -138,6 +145,37 @@ def test_summary_and_list_add_live_board_rounds(client):
     assert [r["id"] for r in rows] == ["R8", "R7", "A"]
     assert rows[1]["status"] == "BOOKED" and rows[1]["live"] is True
     assert client.get("/api/rfqs/R7").json()["verdict"] == "accepted"
+
+
+def test_shipments_take_bookings_from_the_board(client):
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC).timestamp()
+    with store.connect() as db:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS bookings (rfq_id TEXT, booking_reference TEXT, team_reference TEXT, customer TEXT, carrier TEXT, origin TEXT, destination TEXT, eta TEXT, status TEXT, note TEXT, price REAL, currency TEXT, booked_at REAL)"
+        )
+        required = [c[1] for c in db.execute("PRAGMA table_info(bookings)") if c[3] and c[4] is None]
+
+        def book(**row):
+            for col in required:
+                row.setdefault(col, "x")
+            db.execute(f"INSERT INTO bookings ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
+
+        book(rfq_id="RFQ-1", booking_reference="BK-1", team_reference="WOC-1", customer="Acme", carrier="Kestrel", origin="MUC", destination="SIN", status="confirmed", price=1200, currency="EUR", booked_at=now - 100)
+        book(rfq_id="RFQ-2", team_reference="WOC-2", customer="Old", carrier="Orion", origin="FRA", destination="ORD", status="requested", price=900, currency="EUR", booked_at=now - 50000)
+    iso = lambda t: datetime.fromtimestamp(t, UTC).isoformat()
+    main._test_bookings.extend(
+        [
+            {"airline": "Kestrel", "booking_reference": "BK-1", "origin": "MUC", "destination": "SIN", "status": "confirmed", "booked_at": iso(now - 90)},
+            {"airline": "Vega", "booking_reference": "BK-2", "origin": "HAM", "destination": "DXB", "status": "confirmed", "booked_at": iso(now - 10), "weight_kg": 120},
+        ]
+    )
+    d = client.get("/api/shipments").json()
+    rows = d["booked"] + d["delivered"]
+    assert sorted(r["booking_reference"] for r in rows) == ["BK-1", "BK-2"]
+    mine = next(r for r in rows if r["booking_reference"] == "BK-1")
+    assert mine["customer"] == "Acme" and float(mine["price"]) == 1200
 
 
 def test_init_adds_missing_columns(tmp_path, monkeypatch):

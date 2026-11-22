@@ -515,19 +515,54 @@ def save_note(round_no: int, note: Note):
     return {"ok": True}
 
 
-_verdict_cache: dict = {"at": 0.0, "data": []}
+_verdict_cache: dict = {"at": 0.0, "data": [], "bookings": []}
 
 
-async def _our_verdicts() -> list:
+async def _refresh_board_me() -> None:
     if time.time() - _verdict_cache["at"] < 20:
-        return _verdict_cache["data"]
+        return
     try:
         async with _fiveu() as client:
-            _verdict_cache["data"] = (await client.get("/v1/board/me")).json().get("requests", [])
+            me = (await client.get("/v1/board/me")).json()
+        _verdict_cache["data"] = me.get("requests", [])
+        _verdict_cache["bookings"] = me.get("bookings", [])
     except (HTTPException, httpx.HTTPError, ValueError):
         pass
     _verdict_cache["at"] = time.time()
+
+
+async def _our_verdicts() -> list:
+    await _refresh_board_me()
     return _verdict_cache["data"]
+
+
+async def _our_bookings() -> list:
+    await _refresh_board_me()
+    return _verdict_cache["bookings"]
+
+
+def _live_booking(b: dict) -> dict:
+    return {
+        "rfq_id": None,
+        "booking_reference": b.get("booking_reference"),
+        "team_reference": None,
+        "customer": "—",
+        "carrier": b.get("airline"),
+        "origin": b.get("origin"),
+        "destination": b.get("destination"),
+        "eta": None,
+        "status": b.get("status"),
+        "note": "From the live 5U board",
+        "price": None,
+        "currency": None,
+        "weight_kg": b.get("weight_kg"),
+        "booked_at": _stamp(b.get("booked_at")),
+        "updates": 0,
+        "last_update_at": None,
+        "delivered_at": None,
+        "delivered": False,
+        "live": True,
+    }
 
 
 @app.get("/api/insights")
@@ -564,30 +599,48 @@ def set_settings(body: SettingsIn):
 
 
 @app.get("/api/shipments")
-def shipments():
-    def load(db):
-        have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        if "bookings" not in have:
-            return {"booked": [], "delivered": []}
-        updates = "shipment_updates" in have
-        if updates:
-            sql = (
-                "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
-                "u.updates, u.last_update_at, u.delivered_at FROM bookings b "
-                "LEFT JOIN shipment_updates u ON u.rfq_id = b.rfq_id ORDER BY b.booked_at DESC LIMIT 500"
-            )
+async def shipments():
+    local = query(_load_shipments)
+    board = [] if store.FAKE else await _our_bookings()
+    if not board:
+        return local
+    # The board is the truth: every booking 5U confirmed, with our own details where this
+    # machine has them. Local rows 5U never confirmed (no reference) are left out.
+    mine = local["booked"] + local["delivered"]
+    by_ref = {r["booking_reference"]: r for r in mine if r.get("booking_reference")}
+    booked, delivered, live = [], [], 0
+    for b in map(_live_booking, board):
+        own = by_ref.get(b["booking_reference"])
+        if own:
+            (delivered if own["delivered"] else booked).append(own)
         else:
-            sql = (
-                "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
-                "0 AS updates, NULL AS last_update_at, NULL AS delivered_at FROM bookings b ORDER BY b.booked_at DESC LIMIT 500"
-            )
-        rows = store.rows(db, sql)
-        today = time.strftime("%Y-%m-%d")
-        for r in rows:
-            r["delivered"] = bool(r.get("delivered_at")) or bool(r.get("eta") and str(r["eta"])[:10] <= today and r.get("booking_reference"))
-        return {"booked": [r for r in rows if not r["delivered"]], "delivered": [r for r in rows if r["delivered"]]}
+            booked.append(b)
+            live += 1
+    booked.sort(key=lambda r: r.get("booked_at") or 0, reverse=True)
+    return {"booked": booked, "delivered": delivered, "live_bookings": live}
 
-    return query(load)
+
+def _load_shipments(db):
+    have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "bookings" not in have:
+        return {"booked": [], "delivered": []}
+    updates = "shipment_updates" in have
+    if updates:
+        sql = (
+            "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
+            "u.updates, u.last_update_at, u.delivered_at FROM bookings b "
+            "LEFT JOIN shipment_updates u ON u.rfq_id = b.rfq_id ORDER BY b.booked_at DESC LIMIT 500"
+        )
+    else:
+        sql = (
+            "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
+            "0 AS updates, NULL AS last_update_at, NULL AS delivered_at FROM bookings b ORDER BY b.booked_at DESC LIMIT 500"
+        )
+    rows = store.rows(db, sql)
+    today = time.strftime("%Y-%m-%d")
+    for r in rows:
+        r["delivered"] = bool(r.get("delivered_at")) or bool(r.get("eta") and str(r["eta"])[:10] <= today and r.get("booking_reference"))
+    return {"booked": [r for r in rows if not r["delivered"]], "delivered": [r for r in rows if r["delivered"]]}
 
 
 @app.get("/api/claims")
