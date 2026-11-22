@@ -87,8 +87,39 @@ def differs(a: Decimal | None, b: Decimal | None) -> bool:
     return abs(a - b) / b > TOLERANCE
 
 
+def lots_agree(mail: Mail, rfq: RFQ) -> bool:
+    """The code's own lot parser read the lot lines and its totals are what was extracted.
+
+    Rounds 153, 158 and 183: one consignment in three "Lot N:" lines. The code's totals were right
+    each time (423 kg / 1.895 cbm, 1797 kg / 15.278 cbm, 1898 kg / 15.339 cbm); the gpt-4.1 second
+    reader got them wrong, held the quote and cost a model call. When the lot parser agrees with
+    the extraction, the second reader is not asked.
+    """
+    from mail.extract import parse_lots
+
+    if mail.attachments:
+        return False
+    try:
+        lots = parse_lots(fresh_text(mail.body))
+    except Exception:
+        return False
+    if not lots or lots[1] <= 0:
+        return False
+    ours_cbm = rfq.volume_cbm if rfq.volume_cbm is not None else (volume_cbm(rfq.pieces) if rfq.pieces else None)
+    same_kg = not differs(lots[1], rfq.gross_kg)
+    same_cbm = lots[2] == 0 or ours_cbm is None or not differs(lots[2], ours_cbm)
+    return same_kg and same_cbm
+
+
 async def cross_check(orch: Any, mail: Mail, rfq: RFQ, attachments=None) -> None:
     if not tricky(mail):
+        return
+    if lots_agree(mail, rfq):
+        orch.emit(
+            Agent.RFQ, "cross_check", EventStatus.OK,
+            f"Lot lines of request {mail.id} read by the code: {rfq.gross_kg} kg, {rfq.volume_cbm} cbm.",
+            mail.id,
+        )
         return
     try:
         docs = ""
