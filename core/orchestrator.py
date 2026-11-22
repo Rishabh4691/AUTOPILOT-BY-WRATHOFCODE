@@ -85,32 +85,34 @@ def review_facts(
 
 
 def lots_body(mail: Mail, rfqs: list[RFQ], quotes: list[Quote]) -> str:
+    from mail import lang as language
     from mail.extract import find_first_name
-    from mail.writer import money, place, short_day
+    from mail.lots_text import day, price, route, words
 
-    first = find_first_name(mail.sender, mail.body) or "there"
+    lang = language.for_request(mail.id, mail.body)
+    w = words(lang)
+    first = find_first_name(mail.sender, mail.body) or ""
     lines = []
     for i, (rfq, quote) in enumerate(zip(rfqs, quotes, strict=True), 1):
-        days = quote.option.transit_days
-        eta = short_day(arrival_date(rfq.ready_date, days), "en")
         count = next((n[8:] for n in rfq.notes if n.startswith("pieces: ")), "")
-        what = f"{count} pieces, " if count else ""
-        pickup = "the truck from your site to the airport, " if quote.pickup is not None else ""
         lines.append(
-            f"{i}. {place(rfq.origin)} to {place(rfq.destination)}, {what}{rfq.gross_kg} kg: I would go with "
-            f"{quote.option.carrier}, the {rfq.preference.value} choice, {days} day{'s' if days != 1 else ''} in transit, "
-            f"arriving around {eta}. All-in price {money(quote.total, quote.currency, 'en')}, including {pickup}air freight, fuel and security."
+            w["line"].format(
+                i=i,
+                route=route(rfq.origin, rfq.destination, lang),
+                what=w["pieces"].format(n=count) if count else "",
+                kg=rfq.gross_kg,
+                carrier=quote.option.carrier,
+                pref=w["pref"].get(rfq.preference.value, rfq.preference.value),
+                days=quote.option.transit_days,
+                eta=day(arrival_date(rfq.ready_date, quote.option.transit_days), lang),
+                price=price(quote.total, quote.currency, lang),
+                truck=w["truck"] if quote.pickup is not None else "",
+            )
         )
+    head = w["hi"].format(first=first) if first else w["hi"].replace("{first}", "").replace(" ,", ",").strip(" ，,")
     return (
-        f"Hi {first},\n\nthanks for the request. Here are your {len(rfqs)} shipments, each priced on its own as you asked:\n\n"
-        + "\n\n".join(lines)
-        + f"\n\nBoth prices are valid today, and a yes for one or all of them is all I need to book. "
-        f"Our reference is WOC-{mail.id}.\n\nCheers,\nLena\nWRATHOFCODE Air Freight"
-    ) if len(rfqs) == 2 else (
-        f"Hi {first},\n\nthanks for the request. Here are your {len(rfqs)} shipments, each priced on its own as you asked:\n\n"
-        + "\n\n".join(lines)
-        + f"\n\nAll prices are valid today, and a yes for one or all of them is all I need to book. "
-        f"Our reference is WOC-{mail.id}.\n\nCheers,\nLena\nWRATHOFCODE Air Freight"
+        f"{head}\n\n{w['intro'].format(n=len(rfqs))}\n\n" + "\n\n".join(lines)
+        + f"\n\n{w['end'].format(ref=f'WOC-{mail.id}')}\n\n{w['sign']}\nLena\nWRATHOFCODE Air Freight"
     )
 
 
@@ -383,6 +385,27 @@ class Orchestrator:
                 "used_llm": any(q.used_llm for q in quotes),
             }
         )
+        for lot_rfq, quote in zip(rfqs, quotes, strict=True):
+            self.store.update_rfq(
+                str(lot_rfq.mail_id),
+                status=Stage.QUOTED.value,
+                quoted_at=self.clock(),
+                origin=lot_rfq.origin,
+                destination=lot_rfq.destination,
+                carrier=quote.option.carrier,
+                total=quote.total,
+                currency=quote.currency,
+                rate_id=quote.option.rate_id,
+                breakdown_json=json.dumps(
+                    {
+                        "lot_of": mail.id,
+                        "origin": lot_rfq.origin,
+                        "destination": lot_rfq.destination,
+                        "transit_days": quote.option.transit_days,
+                        "ready_date": lot_rfq.ready_date.isoformat() if lot_rfq.ready_date else None,
+                    }
+                ),
+            )
         await self.outbox.put(combined)
         return True
 

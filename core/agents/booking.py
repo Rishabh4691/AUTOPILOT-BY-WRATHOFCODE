@@ -471,10 +471,96 @@ class BookingAgent:
         log.info("booking_adopted_quote", extra={"rfq": mail.thread_root_id, "carrier": carrier, "total": total})
         return self._quoted(orch, mail.thread_root_id)
 
+    def _lots(self, orch: Any, root: int) -> list[dict]:
+        ids = [str(int(root) * 10 + i) for i in range(1, 10)]
+        marks = ",".join("?" for _ in ids)
+        rows = orch.store._conn.execute(f"SELECT * FROM rfqs WHERE id IN ({marks}) ORDER BY id", ids).fetchall()  # noqa: S608
+        cols = [d[0] for d in orch.store._conn.execute("SELECT * FROM rfqs LIMIT 0").description]
+        found = [dict(zip(cols, r, strict=False)) for r in rows]
+        return [r for r in found if json.loads(r.get("breakdown_json") or "{}").get("lot_of") == int(root)]
+
+    async def book_lots(self, orch: Any, mail: Mail, lots: list[dict]) -> None:
+        """A yes to one reply with several shipments: book every shipment, confirm once."""
+        open_lots = [r for r in lots if r.get("status") in (Stage.QUOTED.value, Stage.ACCEPTED.value)]
+        if not open_lots:
+            return
+        done: list[tuple[dict, dict, dict]] = []
+        for row in open_lots:
+            orch.store.update_rfq(str(row["id"]), status=Stage.ACCEPTED.value)
+            info = json.loads(row.get("breakdown_json") or "{}")
+            booking = await self.book(orch, row, info)
+            if booking is None:
+                await asyncio.sleep(self.retry_after_s)
+                booking = await self.book(orch, row, info)
+            if booking is None:
+                orch.emit(
+                    Agent.BOOKING, "book", EventStatus.HOLD,
+                    f"Could not book shipment {row['id']} of request {mail.thread_root_id}. A person should book it now.",
+                    mail.thread_root_id,
+                )
+                continue
+            orch.store.update_rfq(str(row["id"]), status=Stage.BOOKED.value, rate_id=booking.get("rate_id"))
+            done.append((row, info, booking))
+        if not done:
+            return
+        orch.emit(
+            Agent.BOOKING, "book", EventStatus.OK,
+            f"Booked {len(done)} of {len(open_lots)} shipments for request {mail.thread_root_id}: "
+            + ", ".join(f"{b.get('carrier') or r.get('carrier')} {b.get('booking_reference') or 'by email'}" for r, _, b in done),
+            mail.thread_root_id,
+        )
+        if not orch.store.claim_outbox(mail.thread_root_id, Stage.BOOKED, mail.id, orch.clock()):
+            return
+        from mail.lots_text import day, price, route, words
+
+        language = lang.detect(fresh_text(mail.body) or mail.subject)
+        w = words(language)
+        first = proper(find_first_name(mail.sender, mail.body))
+        lines = [
+            w["booked_line"].format(
+                i=i,
+                route=route(info.get("origin") or row.get("origin") or "", info.get("destination") or row.get("destination") or "", language),
+                carrier=carrier_name(booking.get("carrier") or row.get("carrier") or ""),
+                bk=booking.get("booking_reference") or "follows shortly",
+                price=price(row.get("total"), row.get("currency") or "EUR", language),
+                eta=day(arrival_date(info.get("ready_date"), info.get("transit_days")), language),
+            )
+            for i, (row, info, booking) in enumerate(done, 1)
+        ]
+        head = w["hi"].format(first=first) if first else w["hi"].replace("{first}", "").replace(" ,", ",").strip(" ，,")
+        body = (
+            f"{head}\n\n{w['booked'].format(n=len(done))}\n\n" + "\n".join(lines)
+            + f"\n\n{w['booked_end'].format(ref=team_reference(str(mail.thread_root_id)))}\n\n{w['sign']}\n{self.agent_name}\n{self.company}"
+        )
+        try:
+            sent = await orch.mailbox.send(
+                OutgoingMail(to=mail.sender, subject=reply_subject(mail.subject), body=body, in_reply_to=mail.id)
+            )
+        except Exception as error:
+            orch.store.mark_outbox_failed(mail.thread_root_id, Stage.BOOKED, type(error).__name__)
+            raise
+        orch.store.mark_outbox_sent(mail.thread_root_id, Stage.BOOKED, sent.id)
+
     async def on_reply(self, orch: Any, mail: Mail) -> None:
         if mail.id in self.declined:
             return
         accepted = is_acceptance(mail.body) or is_acceptance(mail.subject)
+        lots = self._lots(orch, mail.thread_root_id)
+        if lots:
+            from mail.multilot import partial_acceptance
+
+            if accepted:
+                await self.book_lots(orch, mail, lots)
+            elif partial_acceptance(fresh_text(mail.body)):
+                orch.emit(
+                    Agent.BOOKING, "book", EventStatus.HOLD,
+                    f"Customer accepted only some of the {len(lots)} shipments in request {mail.thread_root_id}. "
+                    "A person should book the accepted ones now.",
+                    mail.thread_root_id,
+                )
+            else:
+                self.declined.add(mail.id)
+            return
         rfq = self._quoted(orch, mail.thread_root_id)
         if rfq is not None and rfq.get("status") == Stage.BOOKED.value:
             return
