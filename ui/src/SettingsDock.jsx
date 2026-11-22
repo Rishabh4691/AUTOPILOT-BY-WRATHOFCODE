@@ -19,9 +19,13 @@ export default function SettingsDock() {
   const [err, setErr] = useState(false)
   const box = useRef(null)
 
+  // Load the bot settings on start and again each time the menu opens, so a slow or
+  // restarting API never leaves the model and daily mail buttons out.
   useEffect(() => {
-    get('/settings').then(setBot).catch(() => setErr(true))
-  }, [])
+    get('/settings')
+      .then((s) => (setBot(s), setErr(false)))
+      .catch(() => setErr(true))
+  }, [open])
 
   useEffect(() => {
     if (!open) return
