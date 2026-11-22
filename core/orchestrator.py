@@ -991,6 +991,7 @@ class Orchestrator:
         pct = outage.current_pct(state, rfq.preference.value)
         outage.save(outage.record(state, rfq.preference.value, rfq.received_at.isoformat(), pct))
         new_total = outage.apply(total, pct)
+        log.warning("outage_premium_applied", extra={"rfq": rfq.mail_id, "pct": str(pct), "air": str(total), "new": str(new_total)})
         self.emit(
             Agent.RFQ, "outage", EventStatus.WARN,
             f"Portal outage on request {rfq.mail_id}: air price {total} + {pct}% outage premium = {new_total} "
@@ -1132,6 +1133,24 @@ class Orchestrator:
     def review_enabled(self) -> bool:
         return self.review_dir is not None and (self.review_dir.parent / "REVIEW_ON").exists()
 
+    def keep_outage_price(self, quote: Quote, updates: dict[str, Any]) -> dict[str, Any]:
+        """Round 122: the outage quote went out at the plain price (3.95 EUR/kg, same as a normal
+        round) and was rejected too_low. During a portal outage a review may not lower the price or
+        send a body that does not show our total; the premium is the experiment that wins the round."""
+        from core.agents import outage
+
+        if not outage.hit_outage(quote.rfq_mail_id):
+            return updates
+        kept = dict(updates)
+        if "total" in kept and kept["total"] < quote.total:
+            kept.pop("total"), kept.pop("currency", None)
+            log.warning("review_lowered_outage_price", extra={"rfq": quote.rfq_mail_id})
+        body = kept.get("body")
+        if isinstance(body, str) and str(int(quote.total)) not in re.sub(r"\D", "", body):
+            kept.pop("body")
+            log.warning("review_body_without_outage_price", extra={"rfq": quote.rfq_mail_id})
+        return kept
+
     async def await_review(self, quote: Quote) -> Quote | None:
         if not self.review_enabled() or self.review_dir is None:
             return quote
@@ -1202,6 +1221,7 @@ class Orchestrator:
                 if decision.get("total") and decision.get("currency"):
                     updates["total"] = Decimal(str(decision["total"]))
                     updates["currency"] = str(decision["currency"])
+                updates = self.keep_outage_price(quote, updates)
                 return quote.model_copy(update=updates) if updates else quote
             if time.time() >= deadline:
                 break

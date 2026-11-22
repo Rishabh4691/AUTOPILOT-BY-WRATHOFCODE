@@ -85,3 +85,29 @@ async def test_reviewer_text_without_a_price_is_never_sent(tmp_path: Path) -> No
     (tmp_path / "review" / "7.decision.json").write_text(json.dumps({"action": "send", "body": holding}))
     reviewed = await gate(tmp_path, 30).await_review(quote())
     assert reviewed is not None and reviewed.body == "Our all-in price is 100.00 EUR."
+
+
+async def test_review_cannot_strip_the_outage_premium(tmp_path: Path, monkeypatch) -> None:
+    """Round 122: the outage quote went out at the plain price and was rejected too_low."""
+    from core.agents import outage
+
+    monkeypatch.setattr(outage, "_down", {7})
+    (tmp_path / "REVIEW_ON").touch()
+    (tmp_path / "review").mkdir()
+    priced = quote().model_copy(update={"total": Decimal("110.00"), "body": "Our all-in price is 110.00 EUR."})
+    (tmp_path / "review" / "7.decision.json").write_text(json.dumps(
+        {"action": "send", "body": "Our all-in price is 100.00 EUR.", "total": "100.00", "currency": "EUR"}))
+    reviewed = await gate(tmp_path, 30).await_review(priced)
+    assert reviewed.total == Decimal("110.00") and reviewed.body == "Our all-in price is 110.00 EUR."
+
+
+async def test_review_can_still_change_a_normal_quote(tmp_path: Path, monkeypatch) -> None:
+    from core.agents import outage
+
+    monkeypatch.setattr(outage, "_down", set())
+    (tmp_path / "REVIEW_ON").touch()
+    (tmp_path / "review").mkdir()
+    (tmp_path / "review" / "7.decision.json").write_text(json.dumps(
+        {"action": "send", "body": "New body 90.00 EUR.", "total": "90.00", "currency": "EUR"}))
+    reviewed = await gate(tmp_path, 30).await_review(quote())
+    assert reviewed.total == Decimal("90.00") and reviewed.body == "New body 90.00 EUR."
