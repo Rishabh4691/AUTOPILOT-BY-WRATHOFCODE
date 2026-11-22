@@ -76,7 +76,7 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
-      const [a, r, s] = await Promise.all([get('/agents'), get('/rfqs'), get('/summary')])
+      const [a, r, s] = await Promise.all([get('/agents'), get('/rfqs?limit=1000'), get('/summary')])
       setAgents(a)
       setRfqs(r)
       setSum(s)
