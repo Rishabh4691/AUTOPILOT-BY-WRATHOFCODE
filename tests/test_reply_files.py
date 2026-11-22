@@ -75,3 +75,14 @@ async def test_send_posts_attachments_and_omits_empty_list(tmp_path: Path):
         assert json.loads(route.calls.last.request.content)["attachments"] == [pdf]
         await box.send(OutgoingMail(to="c@x", subject="Re", body="Hi", in_reply_to=1))
         assert "attachments" not in json.loads(route.calls.last.request.content)
+
+
+def test_round_126_turkish_pdf_has_the_price_as_text() -> None:
+    from core.agents.attachments import pdf_text
+    from mail.reply_files import pdf_file
+
+    body = "Hassas cihazlarınız için Stuttgart'den Miami'ye taşıma. Nakliye ücreti toplamda EUR 3,680.00. 请确认"
+    data = pdf_file("Quotation WOC-37587", body, {"Total all-in": "3680.00 EUR"})
+    text = " ".join(pdf_text(data).split())
+    assert "3680.00 EUR" in text
+    assert "EUR 3,680.00" in text

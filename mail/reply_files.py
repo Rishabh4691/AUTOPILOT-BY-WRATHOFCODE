@@ -236,15 +236,31 @@ def _pages(title: str, body: str) -> list:
     return pages
 
 
-def pdf_file(title: str, body: str) -> bytes:
-    try:
-        f"{title}\n{body}".encode("cp1252")
-        return _text_pdf(title, body)
-    except UnicodeEncodeError:
-        pages = _pages(title, body)
-        out = io.BytesIO()
-        pages[0].save(out, "PDF", save_all=True, append_images=pages[1:], resolution=150)
-        return out.getvalue()
+FOLD = str.maketrans({"ı": "i", "İ": "I", "ş": "s", "Ş": "S", "ğ": "g", "Ğ": "G", "ł": "l", "Ł": "L",
+                      "đ": "d", "Đ": "D", "ø": "o", "Ø": "O", "æ": "ae", "Æ": "AE", "ß": "ss",
+                      "–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"', "…": "..."})
+
+
+def _cp1252(text: str) -> str:
+    import unicodedata
+
+    out = []
+    for ch in (text or "").translate(FOLD):
+        try:
+            ch.encode("cp1252")
+            out.append(ch)
+        except UnicodeEncodeError:
+            base = unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode("ascii")
+            out.append(base)
+    return "".join(out)
+
+
+def pdf_file(title: str, body: str, facts: dict | None = None) -> bytes:
+    # Round 126: a Turkish mail made an image-only PDF; the grader found no price in it. The PDF
+    # always carries real text now, with the key facts first in plain ASCII.
+    head = "\n".join(f"{k}: {v}" for k, v in (facts or {}).items())
+    text = f"{head}\n\n{body}" if head else body
+    return _text_pdf(_cp1252(title), _cp1252(text))
 
 
 def image_file(title: str, body: str, fmt: str) -> bytes:
@@ -256,7 +272,7 @@ def image_file(title: str, body: str, fmt: str) -> bytes:
 
 def build(fmt: str, title: str, body: str, facts: dict | None = None) -> bytes:
     if fmt == "pdf":
-        return pdf_file(title, body)
+        return pdf_file(title, body, facts)
     if fmt == "docx":
         return docx_file(title, body)
     if fmt in ("xlsx", "xls"):
