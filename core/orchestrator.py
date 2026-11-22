@@ -329,7 +329,13 @@ class Orchestrator:
             from mail.special import special_wishes
             from mail.text import fresh_text
 
-            wishes = special_wishes(f"{fresh_text(mail.body)}\n{request_text(mail.id)}")
+            text = f"{fresh_text(mail.body)}\n{request_text(mail.id)}"
+            wishes = special_wishes(text)
+            if "insurance" in wishes:
+                from mail.insurance import premium
+
+                if premium(text) is not None:
+                    wishes.remove("insurance")
         except Exception:
             return []
         if wishes:

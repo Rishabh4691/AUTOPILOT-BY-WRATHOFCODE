@@ -28,3 +28,14 @@ async def test_warns_but_still_quotes(tmp_path: Path):
     await drain(h)
     assert len(h.mailbox.sent) == 1
     assert any(e.step == "special_request" and e.status.value == "warn" for e in h.sink.events)
+
+
+async def test_priced_insurance_does_not_warn(tmp_path: Path):
+    h = harness(tmp_path, now=NOW)
+    body = (
+        "Please quote FRA to ORD, 100 kg, cheapest. Please include cargo insurance in the all-in price: goods value "
+        "22000 EUR, insured at 110 % of that value, premium rate 0.40 %."
+    )
+    h.orchestrator.route(mail(701, body=body))
+    await drain(h)
+    assert not any(e.step == "special_request" for e in h.sink.events)
