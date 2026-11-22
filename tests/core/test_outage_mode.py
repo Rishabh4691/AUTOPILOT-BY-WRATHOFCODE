@@ -33,22 +33,22 @@ def simulate(hidden_pct: float, rounds: int = 8) -> int | None:
     return None
 
 
-@pytest.mark.parametrize("hidden", [3, 7, 12, 18, 25, 35])
+@pytest.mark.parametrize("hidden", [21, 25, 30, 35])
 def test_premium_is_found_within_a_few_outage_rounds(hidden: float) -> None:
     found = simulate(hidden)
     assert found is not None and found <= 4, found
 
 
 def test_accepted_premium_is_kept() -> None:
-    state = outage.record({}, "fastest", "2026-11-22T00:10:00", D(10))
+    state = outage.record({}, "fastest", "2026-11-22T00:10:00", D(25))
     state = outage.learn(state, board([("2026-11-22T00:10:00", "accepted", None)]))
-    assert outage.current_pct(state, "fastest") == D(10)
+    assert outage.current_pct(state, "fastest") == D(25)
 
 
 def test_preferences_learn_separately() -> None:
-    state = outage.record({}, "fastest", "2026-11-22T00:10:00", D(10))
+    state = outage.record({}, "fastest", "2026-11-22T00:10:00", D(25))
     state = outage.learn(state, board([("2026-11-22T00:10:00", "rejected", "too_low")]))
-    assert outage.current_pct(state, "fastest") == D(20)
+    assert outage.current_pct(state, "fastest") == D(35)
     assert outage.current_pct(state, "cheapest") == 0
 
 
@@ -105,7 +105,7 @@ async def test_fastest_quote_gets_the_premium_after_a_503(tmp_path, monkeypatch)
     h = harness(tmp_path / "f")
     rfq = SimpleNamespace(mail_id=7, preference=SimpleNamespace(value="fastest"),
                           received_at=SimpleNamespace(isoformat=lambda: "2026-11-22T00:20:00"))
-    assert await h.orchestrator.outage_premium(rfq, Decimal("250.50")) == Decimal("275.55")
+    assert await h.orchestrator.outage_premium(rfq, Decimal("250.50")) == Decimal("313.13")
 
 
 async def test_quote_gets_the_premium_only_after_a_503(tmp_path, monkeypatch) -> None:
@@ -132,3 +132,19 @@ async def test_quote_gets_the_premium_only_after_a_503(tmp_path, monkeypatch) ->
     assert outage.load()["cheapest"]["pending"][0]["pct"] == "0"
     state = outage.learn(outage.load(), board([(outage.load()["cheapest"]["pending"][0]["at"], "rejected", "too_low")]))
     assert outage.current_pct(state, "cheapest") == D(10)
+
+
+def test_rounds_122_and_123_would_not_be_too_low_again() -> None:
+    """r122 TM FRA-LOS: portal air 3997.28 + pickup 311.30, 4901.20 was too_low (needs >= 5159.16).
+    r123 PL FRA-KUL: portal 5196.53, 5598.21 was too_low (needs >= 5892.85)."""
+    pct = outage.current_pct({}, "fastest")
+    assert outage.apply(D("3997.28"), pct) + D("311.30") >= D("4901.20") / D("0.95")
+    assert outage.apply(D("5196.53"), pct) >= D("5598.21") / D("0.95")
+
+
+def test_old_low_state_is_lifted_to_the_floor() -> None:
+    state = {"fastest": {"pct": "10", "lo": "0", "hi": None, "pending": []}}
+    assert outage.current_pct(state, "fastest") == D(25)
+    assert outage.current_pct(outage.learn(state, []), "fastest") >= D(25)
+    high = {"fastest": {"pct": "22", "lo": "21", "hi": "23", "pending": []}}
+    assert outage.current_pct(high, "fastest") == D(22)

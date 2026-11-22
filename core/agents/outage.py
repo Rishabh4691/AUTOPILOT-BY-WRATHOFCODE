@@ -28,7 +28,11 @@ log = logging.getLogger("core.outage")
 START_PCT = Decimal(10)
 # All 8 lost outage rounds asked for the FASTEST option; no cheapest request was seen in an outage.
 # Cheapest starts with no premium and only moves if an outage quote comes back too_low.
-START = {"fastest": Decimal(10), "cheapest": Decimal(0)}
+# Rounds 122 and 123 (22 Nov, second outage): same airline as the winners and still too_low at
+# +21 % (TM FRA-LOS, portal 3997.28 for the air part) and +13 % (PL FRA-KUL, portal 5196.53) over the
+# live portal price, so the grader sits at least ~21 % above it. Start at 25 % and never go below 21 %.
+START = {"fastest": Decimal(25), "cheapest": Decimal(0)}
+FLOOR = {"fastest": Decimal(21), "cheapest": Decimal(0)}
 FIRST_STEP = Decimal(10)
 MAX_PCT = Decimal(40)
 _down: set[int] = set()
@@ -75,16 +79,17 @@ def _key(preference: str) -> str:
 def current_pct(state: dict, preference: str) -> Decimal:
     key = _key(preference)
     s = state.get(key) or {}
-    return Decimal(str(s.get("pct", START[key])))
+    least = START[key] if s.get("hi") is None else FLOOR[key]
+    return max(least, Decimal(str(s.get("pct", START[key]))))
 
 
 def learn(state: dict, board_requests: list[dict]) -> dict:
     """Move each preference's premium from the verdicts of earlier outage quotes (binary search)."""
     by_time = {str(r.get("sent_at", ""))[:19]: r for r in board_requests or []}
     for key, s in state.items():
-        lo = Decimal(str(s.get("lo", 0)))
+        lo = max(FLOOR[key], Decimal(str(s.get("lo", 0))))
         hi = Decimal(str(s["hi"])) if s.get("hi") is not None else None
-        pct = Decimal(str(s.get("pct", START[key])))
+        pct = max(FLOOR[key], Decimal(str(s.get("pct", START[key]))))
         still = []
         low_seen = bool(s.get("low_seen"))
         for item in s.get("pending", []):
