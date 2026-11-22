@@ -1,8 +1,67 @@
 import { useEffect, useState } from 'react'
-import { clock, get, money, post, secs } from './api'
+import { clock, get, money, secs } from './api'
 import { Badge, Countdown } from './RfqList'
 
 const DOT = { ok: 'bg-emerald-400', fail: 'bg-rose-500', start: 'bg-sky-400', info: 'bg-zinc-500' }
+
+const CODE = new RegExp(
+  [
+    String.raw`(?:EUR|USD|GBP|CHF|PLN|€|\$|£)\s?\d[\d.,]*\d`,
+    String.raw`\d[\d.,]*\d?\s?(?:EUR|USD|GBP|CHF|PLN|€)`,
+    String.raw`\b(?:WOC|BK|R|TRK)-[A-Za-z0-9_-]+`,
+    String.raw`\b\d{4}-\d{2}-\d{2}\b`,
+    String.raw`\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*\.? \d{1,2} \w{3,9}\b`,
+    String.raw`\b\d[\d.,]*\s?(?:kg|cbm|m³|days?|hours?|pieces?|pcs)\b`,
+    String.raw`\b[A-Z]{3}\b`,
+  ].join('|'),
+  'g',
+)
+
+function CodeVsAi({ text }) {
+  const parts = []
+  let last = 0
+  for (const m of text.matchAll(CODE)) {
+    if (m.index > last) parts.push(<span key={last}>{text.slice(last, m.index)}</span>)
+    parts.push(
+      <span key={`c${m.index}`} className="rounded bg-emerald-500/15 px-0.5 font-mono text-[13px] text-emerald-300">
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  if (last < text.length) parts.push(<span key={last}>{text.slice(last)}</span>)
+  return parts
+}
+
+const STAGES = [
+  ['Received', () => true],
+  ['Read', (e) => /extract|classif/.test(e.step)],
+  ['Priced', (e) => /price|source|sheet|portal|bid/.test(e.step)],
+  ['Written', (e) => /writ|email|draft|review/.test(e.step)],
+  ['Sent', (e) => /send|sent|quote/.test(e.step) && e.status !== 'fail'],
+  ['Booked', (e) => e.agent === 'booking' && /book/.test(e.step) && e.status === 'ok'],
+]
+
+function Pipeline({ r }) {
+  const start = r.received_at
+  const events = r.events ?? []
+  const reached = STAGES.map(([label, test], i) => {
+    if (i === 0) return [label, start]
+    const hit = events.find((e) => test({ ...e, step: String(e.step || '').toLowerCase() }))
+    return [label, hit ? hit.ts : null]
+  })
+  return (
+    <div className="grid grid-cols-6 gap-1">
+      {reached.map(([label, ts], i) => (
+        <div key={label} className="min-w-0">
+          <div className={`h-1.5 rounded-full ${ts ? 'bg-sky-400' : 'bg-line'} ${i === 0 ? 'rounded-l-full' : ''}`} />
+          <div className={`mt-2 truncate text-[11px] ${ts ? 'text-zinc-200' : 'text-muted'}`}>{label}</div>
+          <div className="font-mono text-[11px] text-muted">{ts && start ? `+${Math.max(0, Math.round(ts - start))}s` : '—'}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function Section({ title, children }) {
   return (
@@ -16,7 +75,6 @@ function Section({ title, children }) {
 export default function RfqDetail({ id, tick, now, operator, onClose }) {
   const [r, setR] = useState(null)
   const [err, setErr] = useState(null)
-  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let stale = false
@@ -49,20 +107,6 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
   }
 
   const b = r.breakdown
-  const human = !!r.human_takeover
-
-  const toggle = async () => {
-    setBusy(true)
-    try {
-      await post(`/rfqs/${id}/takeover`, { on: !human, by: operator || 'operator' })
-      setR(await get(`/rfqs/${id}`))
-      setErr(null)
-    } catch (e) {
-      setErr(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <div className="fixed inset-0 z-20 flex justify-end bg-black/50" onClick={onClose}>
@@ -72,6 +116,7 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm text-white">{r.id}</span>
               <Badge status={r.status} />
+              <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-[11px] text-sky-300">Autonomous</span>
             </div>
             <div className="mt-1 text-sm text-zinc-300">{r.customer}</div>
             <div className="font-mono text-xs text-muted">{r.origin} → {r.destination} · wants {r.preference}</div>
@@ -84,19 +129,9 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
           </div>
         </header>
 
-        <div className="px-6 py-4">
-          <button
-            onClick={toggle}
-            disabled={busy}
-            className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
-              human ? 'bg-zinc-200 text-ink hover:bg-white' : 'bg-amber-500 text-ink hover:bg-amber-400'
-            } disabled:opacity-50`}
-          >
-            {human ? 'Hand back to autopilot' : 'Take over'}
-          </button>
-          {human && <p className="mt-2 text-xs text-amber-300">You have the controls. The bot won't send anything on this thread.</p>}
-          {err && <p className="mt-2 text-xs text-rose-300">Something went wrong: {err}</p>}
-        </div>
+        <Section title="Pipeline">
+          <Pipeline r={r} />
+        </Section>
 
         <Section title="Price breakdown">
           {b ? (
@@ -136,7 +171,13 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
 
         <Section title="Email sent">
           {r.email_body ? (
-            <pre className="whitespace-pre-wrap rounded-lg bg-ink/70 p-4 font-sans text-sm leading-relaxed text-zinc-200">{r.email_body}</pre>
+            <>
+              <div className="mb-2 flex gap-4 text-[11px] text-muted">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-emerald-400" />Set by code: prices, dates, weights, references</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-zinc-400" />Written by the model</span>
+              </div>
+              <pre className="whitespace-pre-wrap rounded-lg bg-ink/70 p-4 font-sans text-sm leading-relaxed text-zinc-200"><CodeVsAi text={r.email_body} /></pre>
+            </>
           ) : (
             <p className="text-sm text-muted">Nothing sent yet.</p>
           )}

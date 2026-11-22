@@ -3,6 +3,7 @@ import { get, mmss, money, useNow, useOperator, useStream } from './api'
 import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
+import Lessons from './Lessons'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -79,6 +80,7 @@ export default function App() {
     ['board', 'Live scoreboard'],
     ['agents', 'Agent Control Room'],
     ['rfqs', `RFQs (${rfqs.length})`],
+    ['lessons', 'Lessons'],
   ]
 
   return (
@@ -149,6 +151,8 @@ export default function App() {
 
       {tab === 'board' ? (
         <Scoreboard />
+      ) : tab === 'lessons' ? (
+        <Lessons />
       ) : tab === 'agents' ? (
         <>
         {agents.every((a) => !a.tasks_done) && (
