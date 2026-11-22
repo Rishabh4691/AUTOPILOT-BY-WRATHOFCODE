@@ -38,3 +38,32 @@ def test_exports_are_not_imports(subject, body):
 def test_decline_names_the_route_and_reference():
     text = decline_body("NRT", "HAM", "WOC-47995")
     assert "only handle air exports" in text and "NRT into HAM" in text and "WOC-47995" in text
+
+
+ROUND_177 = (
+    "Hi there,\n\nHope your week's going well! Could you send me an all-in price in EUR for a port-to-port sea freight "
+    "shipment from Hamburg (DEHAM) to Jebel Ali (AEJEA)?\n\nThe furniture samples will be ready on 2026-11-27. It's an "
+    "FCL shipment in 1 x 40ft container, with 6 pieces, a gross weight of 9617 kg and a total volume of 43.5 cbm.\n\n"
+    "Cheers,\nKlaus Weidner"
+)
+
+
+def test_round_177_sea_freight_is_out_of_scope():
+    from mail.scope import sea_decline_body, sea_freight
+
+    assert sea_freight("Sea freight quote: Hamburg to Jebel Ali", ROUND_177)
+    text = sea_decline_body("WOC-53359")
+    assert "only handle air freight exports" in text and "WOC-53359" in text
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "We need air freight for this, sea freight is too slow. 2 pallets, 400 kg, from FRA to JFK.",
+        "Please quote the cheapest air freight option from MUC to SGN, 3 pieces, 820 kg, 4.1 cbm.",
+    ],
+)
+def test_air_requests_are_not_sea_freight(body):
+    from mail.scope import sea_freight
+
+    assert not sea_freight("Air freight quote", body)

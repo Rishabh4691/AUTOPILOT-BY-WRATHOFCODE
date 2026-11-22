@@ -756,20 +756,22 @@ class Orchestrator:
 
     async def out_of_scope_declined(self, mail: Mail, rfq: RFQ) -> bool:
         """Round 159 (accepted): an air import INTO Germany is outside the brief ("Air export RFQs
-        only"); answer with a polite decline instead of pricing the reversed route."""
-        from mail.scope import decline_body, import_into_germany
+        only"); answer with a polite decline instead of pricing the reversed route. Round 177: the
+        same for sea freight (FCL container, port to port), which the brief names out of scope."""
+        from mail.scope import decline_body, import_into_germany, sea_decline_body, sea_freight
 
         try:
-            found = import_into_germany(mail.subject, mail.body)
+            sea = sea_freight(mail.subject, mail.body)
+            found = None if sea else import_into_germany(mail.subject, mail.body)
         except Exception:
             log.exception("scope_check_failed", extra={"rfq": mail.id})
             return False
-        if found is None:
+        if not sea and found is None:
             return False
-        origin, dest = found
+        origin, dest = found if found else ("sea", "freight")
         if not self.store.claim_outbox(rfq.thread_root_id, Stage.HELD, rfq.mail_id, self.clock()):
             return True
-        body = decline_body(origin, dest, f"WOC-{rfq.mail_id}")
+        body = sea_decline_body(f"WOC-{rfq.mail_id}") if sea else decline_body(origin, dest, f"WOC-{rfq.mail_id}")
         outgoing = OutgoingMail(
             to=rfq.customer, subject=reply_subject(rfq.subject), body=body, in_reply_to=rfq.mail_id
         )
@@ -785,7 +787,8 @@ class Orchestrator:
             Agent.RFQ,
             "out_of_scope",
             EventStatus.OK,
-            f"Request {rfq.mail_id} is an air import {origin} to {dest}: declined politely (export only).",
+            (f"Request {rfq.mail_id} is sea freight: declined politely (air export only)." if sea else
+             f"Request {rfq.mail_id} is an air import {origin} to {dest}: declined politely (export only)."),
             rfq.mail_id,
         )
         return True

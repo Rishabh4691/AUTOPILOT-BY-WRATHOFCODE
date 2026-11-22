@@ -69,3 +69,36 @@ def decline_body(origin: str, dest: str, reference: str) -> str:
         f"Our reference is {reference}.\n\n"
         "Cheers,\nLena Hartmann\nWRATHOFCODE Air Freight"
     )
+
+
+# Round 177 (declined by hand): "port-to-port sea freight shipment from Hamburg (DEHAM) to Jebel Ali
+# (AEJEA) ... FCL shipment in 1 x 40ft container". The brief: "Air export RFQs only"; ocean freight is
+# named out of scope. The extractor read it as air HAM to NUE (the signature town) and found no price.
+SEA = re.compile(
+    r"\b(?:sea ?freight|ocean ?freight|seefracht|seeweg|fret maritime|flete mar[ií]timo|trasporto marittimo|"
+    r"fracht morski|zeevracht|FCL|LCL|full container load|less than container load|"
+    r"\d+\s*x\s*(?:20|40|45)\s*(?:ft|foot|feet|')|(?:20|40|45)\s*(?:ft|foot|feet|')\s*(?:hc|high ?cube|container|dry))\b"
+    r"|해상\s*운송|海运|船便|海上輸送",
+    re.I,
+)
+AIR_WISH = re.compile(r"\b(?:air ?freight|by air|luftfracht|per luft|fret a[ée]rien|carga a[ée]rea|trasporto aereo|"
+                      r"airway ?bill|AWB)\b|항공|空运|航空", re.I)
+
+
+def sea_freight(subject: str, body: str) -> bool:
+    """True for a sea/ocean freight request with no wish for air freight."""
+    text = f"{'' if FORWARDED.match(subject or '') else subject or ''}\n{fresh_text(body) or body or ''}"
+    return bool(SEA.search(text)) and not AIR_WISH.search(text)
+
+
+def sea_decline_body(reference: str) -> str:
+    return (
+        "Hello,\n\n"
+        "Thanks for thinking of us. I have to pass on this one, though: we only handle air freight exports out of "
+        "Germany, so a sea freight shipment is outside what we can quote or book.\n\n"
+        "A sea freight forwarder or the shipping line's own booking desk will be able to give you a proper "
+        "all-in price for it.\n\n"
+        "Whenever you have air shipments leaving Germany, we would be glad to quote them straight away. "
+        f"Our reference is {reference}.\n\n"
+        "Cheers,\nLena Hartmann\nWRATHOFCODE Air Freight"
+    )
