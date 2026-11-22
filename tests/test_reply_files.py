@@ -86,3 +86,16 @@ def test_round_126_turkish_pdf_has_the_price_as_text() -> None:
     text = " ".join(pdf_text(data).split())
     assert "3680.00 EUR" in text
     assert "EUR 3,680.00" in text
+
+
+@pytest.mark.parametrize(
+    "text, formats",
+    [
+        ("구매팀에서 견적서를 보관하므로, 회신하실 때 PDF로 첨부해 주시면 감사하겠습니다.", ["pdf"]),  # round 156
+        ("请将报价以PDF附上。", ["pdf"]),
+        ("見積書をPDFで添付していただけますか。", ["pdf"]),
+        ("포장 명세서를 PDF로 첨부했습니다.", []),  # their own attachment, not a request
+    ],
+)
+def test_polite_asian_pdf_requests(text, formats):
+    assert reply_files.wanted(text) == formats

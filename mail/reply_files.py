@@ -28,6 +28,9 @@ ASK = (
     r"attach your|reply with|in (?:the )?form of|bitte|benötigen|brauchen|senden sie|schicken sie|merci de|veuillez|"
     r"pourriez|nous avons besoin|por favor|necesitamos|podría|per favore|potrebbe|abbiamo bisogno|prosimy|proszę|"
     r"graag|alstublieft|vänligen|venligst|lütfen|пожалуйста|прошу|нужн|请|麻烦|需要|お願い|ください|부탁|주세요|"
+    # Round 156: "회신하실 때 PDF로 첨부해 주시면 감사하겠습니다" (polite "if you would attach") had none
+    # of the words above, so no PDF was made.
+    r"주시면|주십시오|주시기 바랍니다|첨부해 주|첨부하여 주|보내 주|附上|发给我|いただけ|添付して|"
     r"من فضلك|يرجى|कृपया"
 )
 THEIR_OWN = (
