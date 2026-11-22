@@ -22,6 +22,9 @@
   --color-foreground: #f4f1ea;
   --color-muted-foreground: #a8a39a;
   --color-border: #3a3a40;
+  --color-primary: #ff8a3d;
+  --color-secondary: #ffc29a;
+  --color-destructive: #ff5d5d;
   --color-sky-200: #ffc29a;
   --color-sky-300: #ffa66b;
   --color-sky-400: #ff8a3d;
@@ -43,6 +46,9 @@
   --color-foreground: #0d0d0d;
   --color-muted-foreground: #6b665e;
   --color-border: #0d0d0d;
+  --color-primary: #ff6b2c;
+  --color-secondary: #c2410c;
+  --color-destructive: #e5484d;
   --color-white: #0d0d0d;
   --color-zinc-100: #0d0d0d;
   --color-zinc-200: #1c1b19;
@@ -165,3 +171,12 @@ button, [role="button"], a[href], summary { cursor: pointer }
 .dotfield-scope, .shadcn-scope { --color-muted: var(--color-panel) }
 .shadcn-scope { --color-card: var(--color-panel); --color-card-foreground: var(--color-foreground) }
 .shadcn-scope li .text-sm { font-size: 1rem }
+
+/* Cinematic footer: it reads shadcn's plain variables. */
+.cinematic-footer-wrapper {
+  --foreground: var(--color-foreground);
+  --background: var(--color-background);
+  --primary: var(--color-primary);
+  --secondary: var(--color-secondary);
+  --destructive: var(--color-destructive);
+}
