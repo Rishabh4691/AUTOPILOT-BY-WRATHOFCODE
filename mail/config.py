@@ -38,8 +38,10 @@ class Settings:
     dry_run: bool = _flag("DRY_RUN", "1")
     kill_switch: bool = _flag("KILL_SWITCH")
     # gpt-4.1-mini: cost points fell 39.78 -> 37.75 per quote as the prompt grew on mini alone;
-    # full gpt-4.1 is about 5x the price per token. Change only with the board's cost points.
-    llm_model: str = os.getenv("WRITER_MODEL") or "gpt-4.1"
+    # full gpt-4.1 is about 5x the price per token. Back to mini at 06:25 (round 142): accuracy is
+    # settled (127-142 all accepted) and we trail the top 4 by about 650 cost points; the slot and
+    # bracket fixes since 19:33 removed the reasons mini drafts used to be thrown away.
+    llm_model: str = os.getenv("WRITER_MODEL") or "gpt-4.1-mini"
     poll_seconds: float = float(os.getenv("POLL_INTERVAL_SECONDS") or 3)
     db_path: Path = _path(os.getenv("DB_PATH"), "data/app.db")
     kit_dir: Path = _path(os.getenv("KIT_DIR"), "data/kit")

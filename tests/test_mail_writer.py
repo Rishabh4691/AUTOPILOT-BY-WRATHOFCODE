@@ -396,11 +396,12 @@ async def test_gateway_down_twice_falls_back_after_two_tries():
     assert len(calls) == 2 and not e.used_llm and one_total(e.body)
 
 
-def test_writer_model_default_is_gpt_4_1():
+def test_writer_model_default_is_gpt_4_1_mini():
+    # Back to mini at round 142 for cost points (see mail/config.py).
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    assert 'or "gpt-4.1"' in (root / "mail" / "config.py").read_text(encoding="utf-8")
+    assert 'or "gpt-4.1-mini"' in (root / "mail" / "config.py").read_text(encoding="utf-8")
     assert "WRITER_MODEL=gpt-4.1-mini" in (root / ".env.example").read_text(encoding="utf-8")
 
 
