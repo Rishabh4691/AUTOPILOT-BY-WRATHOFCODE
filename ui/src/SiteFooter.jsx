@@ -1,4 +1,4 @@
-import DoodleCrewFooter from '@/components/ui/doodle-crew-footer'
+import DoodleCrewFooter from './components/ui/doodle-crew-footer'
 import { useLang, useTheme } from './prefs'
 
 const REPO = 'https://github.com/Rishabh4691/WRATHOFCODE'
