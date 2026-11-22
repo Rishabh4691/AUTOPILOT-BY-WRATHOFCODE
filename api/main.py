@@ -421,3 +421,26 @@ def save_note(round_no: int, note: Note):
     NOTES_PATH.parent.mkdir(parents=True, exist_ok=True)
     NOTES_PATH.write_text(json.dumps(notes, indent=2, ensure_ascii=False))
     return {"ok": True}
+
+
+_verdict_cache: dict = {"at": 0.0, "data": []}
+
+
+async def _our_verdicts() -> list:
+    if time.time() - _verdict_cache["at"] < 60:
+        return _verdict_cache["data"]
+    try:
+        async with _fiveu() as client:
+            _verdict_cache["data"] = (await client.get("/v1/board/me")).json().get("requests", [])
+    except (HTTPException, httpx.HTTPError, ValueError):
+        pass
+    _verdict_cache["at"] = time.time()
+    return _verdict_cache["data"]
+
+
+@app.get("/api/insights")
+async def network(period: str = "all"):
+    from .insights import insights
+
+    verdicts = [] if store.FAKE else await _our_verdicts()
+    return query(lambda db: insights(db, period, board_requests=verdicts))

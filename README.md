@@ -76,6 +76,8 @@ uvicorn api.main:app --port 8000
 cd ui && npm install && npm run dev   # http://localhost:5173
 ```
 
+The Control Room has five tabs: the live 5U scoreboard; a network map of every lane with volume, customer acceptance, airline transit and delays, and the lanes where a better airline rate would win more business; the agents; each request with its pipeline and the sent email, where every number set by code is highlighted; and the lessons from every lost round.
+
 Only one bot may run for the whole team. `data/bot.lock` stops a second one on the same machine; `touch data/STOP` stops it cleanly. `FAKE_DATA=1` runs the Control Room on demo traffic.
 
 Attachments need two system tools: ffmpeg (voice and video) and Tesseract (scanned sheets and images). `python scripts/setup_speech.py` downloads the offline speech model once per machine.
@@ -107,7 +109,7 @@ core/       bot: orchestrator, agents, pricing, mailbox, store
 sourcing/   rate sheets, portal client, offers, booking, tariff ingestion
 mail/       extraction rules, attachment reading, email writer, reply files
 api/        FastAPI over the bot database
-ui/         React Control Room: agents, live requests, scoreboard
+ui/         React Control Room: scoreboard, network map, agents, requests, lessons
 scripts/    kit download, deployer, dry replay, secret scan, speech setup
 tests/      pytest suites, with real mails and attachments from past rounds
 docs/       API and portal notes, security review

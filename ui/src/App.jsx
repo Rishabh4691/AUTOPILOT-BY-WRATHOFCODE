@@ -4,6 +4,7 @@ import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
 import Lessons from './Lessons'
+import Network from './Network'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -80,6 +81,7 @@ export default function App() {
     ['board', 'Live scoreboard'],
     ['agents', 'Agent Control Room'],
     ['rfqs', `RFQs (${rfqs.length})`],
+    ['network', 'Network'],
     ['lessons', 'Lessons'],
   ]
 
@@ -151,6 +153,8 @@ export default function App() {
 
       {tab === 'board' ? (
         <Scoreboard />
+      ) : tab === 'network' ? (
+        <Network />
       ) : tab === 'lessons' ? (
         <Lessons />
       ) : tab === 'agents' ? (

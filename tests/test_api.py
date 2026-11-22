@@ -134,3 +134,31 @@ def test_light():
     assert light({"status": "ok", "ts": now}, {"status": "ok", "ts": now}, now) == "green"
     assert light({"status": "ok", "ts": now}, {"status": "fail", "ts": now}, now) == "red"
     assert light({"status": "ok", "ts": now - 2000}, {"status": "ok", "ts": now - 2000}, now) == "idle"
+
+
+def test_insights_counts_lanes_airlines_and_price_pressure(client):
+    now = time.time()
+    with store.connect() as db:
+        rows = [("A", "BOOKED", "Lumen Air Cargo"), ("B", "QUOTED", "Lumen Air Cargo"), ("C", "QUOTED", "Lumen Air Cargo")]
+        for rid, status, carrier in rows:
+            db.execute(
+                "INSERT INTO rfqs (id, customer, received_at, quoted_at, status, origin, destination, carrier, total) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (rid, "Test GmbH", now - 100, now - 40, status, "FRA", "PEK", carrier, 4000.0),
+            )
+        db.execute(
+            "INSERT INTO bookings (rfq_id, thread_id, team_reference, carrier, origin, destination, transit_days, status, note, booked_at) "
+            "VALUES ('A','A','WOC-A','Lumen Air Cargo','FRA','PEK',3,'booked','Flight delayed by one day',?)",
+            (now,),
+        )
+    d = client.get("/api/insights?period=day").json()
+    lane = d["lanes"][0]
+    assert (lane["origin"], lane["destination"], lane["requests"], lane["won"], lane["booked"]) == ("FRA", "PEK", 3, 1, 1)
+    assert lane["avg_response_s"] == 60.0 and lane["top_carrier"] == "Lumen Air Cargo"
+    airline = d["airlines"][0]
+    assert airline["booked"] == 1 and airline["delays"] == 1 and airline["avg_transit_days"] == 3
+    assert d["pressure"][0]["destination"] == "PEK"
+
+
+def test_insights_without_bookings_table(client):
+    assert client.get("/api/insights?period=year").json()["totals"]["booked"] == 0
