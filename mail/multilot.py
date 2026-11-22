@@ -122,3 +122,32 @@ def split_shipments(text: str) -> tuple[str, list[str]]:
     for a, b in reversed(chosen):
         shared = shared[:a] + shared[b:]
     return shared.strip(), [MARK.sub("", body[a:b], count=1).strip() for a, b in chosen]
+
+
+ORDINALS = {
+    0: r"first|1st|one|lot\s*(?:a|1)|shipment\s*(?:a|1)|parcel\s*(?:a|1)|batch\s*(?:a|1)",
+    1: r"second|2nd|two|lot\s*(?:b|2)|shipment\s*(?:b|2)|parcel\s*(?:b|2)|batch\s*(?:b|2)",
+    2: r"third|3rd|three|lot\s*(?:c|3)|shipment\s*(?:c|3)|parcel\s*(?:c|3)|batch\s*(?:c|3)",
+}
+GO = re.compile(r"\b(?:book|go ahead|proceed|confirm|accept|take)\b", re.I)
+LATER = re.compile(r"\b(?:later|hold|wait|not yet|don'?t|do not|cancel|skip|drop|not the|but not)\b", re.I)
+
+
+def chosen_lots(text: str, destinations: list[str]) -> list[int]:
+    """Round 127: "Please book only the first shipment for now. We'll confirm the second later."
+    Which shipments (by position) the customer wants booked now; empty when unclear."""
+    picked: set[int] = set()
+    for sentence in re.split(r"(?<=[.!?;,\n])\s*|\s+(?:and|but)\s+", fresh_text(text or "")):
+        if not GO.search(sentence) or LATER.search(sentence):
+            continue
+        if not re.search(r"\bonly\b|\bjust\b", sentence, re.I):
+            continue
+        for index, pattern in ORDINALS.items():
+            if index < len(destinations) and re.search(rf"\b(?:{pattern})\b", sentence, re.I):
+                picked.add(index)
+        for index, code in enumerate(destinations):
+            if code and re.search(rf"\b{re.escape(code)}\b", sentence):
+                picked.add(index)
+    if len(picked) >= len(destinations):
+        return []
+    return sorted(picked)

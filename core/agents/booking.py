@@ -559,6 +559,12 @@ class BookingAgent:
             if accepted:
                 await self.book_lots(orch, mail, lots)
             elif partial_acceptance(fresh_text(mail.body)):
+                from mail.multilot import chosen_lots
+
+                picks = chosen_lots(mail.body, [str(r.get("destination") or "") for r in lots])
+                if picks:
+                    await self.book_lots(orch, mail, [lots[i] for i in picks])
+                    return
                 orch.emit(
                     Agent.BOOKING, "book", EventStatus.HOLD,
                     f"Customer accepted only some of the {len(lots)} shipments in request {mail.thread_root_id}. "
