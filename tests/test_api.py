@@ -255,3 +255,22 @@ def test_shipments_split_booked_and_delivered(client):
     d = client.get("/api/shipments").json()
     assert [r["rfq_id"] for r in d["delivered"]] == ["A"] and [r["rfq_id"] for r in d["booked"]] == ["B"]
     assert client.get("/api/claims").json() == []
+
+
+def test_live_rounds_get_route_from_the_booking_made_after_them():
+    from api import main
+    board = [
+        {"round_no": 2, "sent_at": "2026-11-22T11:00:00+00:00"},
+        {"round_no": 1, "sent_at": "2026-11-22T10:50:00+00:00"},
+    ]
+    rows = [
+        {"round_no": 2, "quoted_at": main._stamp("2026-11-22T11:00:30+00:00")},
+        {"round_no": 1, "quoted_at": main._stamp("2026-11-22T10:50:20+00:00")},
+    ]
+    bookings = [
+        {"booked_at": "2026-11-22T10:51:00+00:00", "origin": "MUC", "destination": "BKK", "airline": "Polaris", "weight_kg": 100, "booking_reference": "BK-A"},
+        {"booked_at": "2026-11-22T10:51:01+00:00", "origin": "MUC", "destination": "SIN", "airline": "Aurelia", "weight_kg": 50, "booking_reference": "BK-B"},
+    ]
+    main._attach_bookings(rows, board, bookings)
+    assert "booking_references" not in rows[0]
+    assert rows[1]["destination"] == "BKK, SIN" and rows[1]["weight_kg"] == 150 and rows[1]["booking_references"] == ["BK-A", "BK-B"]

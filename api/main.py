@@ -116,7 +116,33 @@ async def _live_rounds() -> list[dict]:
     board = await _our_verdicts()
     latest = query(lambda db: store.rows(db, "SELECT MAX(received_at) AS t FROM rfqs")[0]["t"])
     rows = [_live_row(r) for r in board if r.get("round_no") is not None and r.get("sent_at")]
-    return [r for r in rows if r["received_at"] and (latest is None or r["received_at"] > latest + 90)]
+    rows = [r for r in rows if r["received_at"] and (latest is None or r["received_at"] > latest + 90)]
+    _attach_bookings(rows, board, await _our_bookings())
+    return rows
+
+
+def _attach_bookings(rows: list[dict], board: list[dict], bookings: list) -> None:
+    """Give live rounds their route, airline and weight from the board's bookings.
+
+    The board does not link a booking to its round, so a booking belongs to the round
+    answered last before it was made (and before the next round arrived).
+    """
+    starts = sorted((_stamp(r.get("sent_at")), r["round_no"]) for r in board if r.get("sent_at") and r.get("round_no") is not None)
+    nxt = {no: (starts[i + 1][0] if i + 1 < len(starts) else float("inf")) for i, (_, no) in enumerate(starts)}
+    for row in rows:
+        if row.get("quoted_at") is None:
+            continue
+        mine = sorted(
+            (b for b in bookings if row["quoted_at"] - 5 <= (_stamp(b.get("booked_at")) or 0) < nxt.get(row["round_no"], float("inf"))),
+            key=lambda b: b.get("booked_at") or "",
+        )
+        if not mine:
+            continue
+        row["origin"] = mine[0].get("origin") or "—"
+        row["destination"] = ", ".join(dict.fromkeys(b.get("destination") or "—" for b in mine))
+        row["carrier"] = ", ".join(dict.fromkeys(b.get("airline") or "—" for b in mine))
+        row["weight_kg"] = sum(b.get("weight_kg") or 0 for b in mine) or None
+        row["booking_references"] = [b.get("booking_reference") for b in mine]
 
 
 @app.get("/api/summary")
