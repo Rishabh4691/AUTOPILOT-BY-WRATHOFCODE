@@ -118,7 +118,7 @@ export default function Overview({ sum, onOpen }) {
           {c.stats.map((label, i) => (
             <div key={label} className="flex min-w-0 flex-col-reverse border-l border-line pl-5">
               <dt className="mt-2 text-[13px] text-muted">{label}</dt>
-              <dd className="font-display truncate text-[clamp(1.4rem,2.4vw,2.25rem)] text-white">{stats[i]}</dd>
+              <dd className="font-display text-[clamp(1.25rem,2vw,2rem)] leading-tight break-words text-white">{stats[i]}</dd>
             </div>
           ))}
         </dl>
