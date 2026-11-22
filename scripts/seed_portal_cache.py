@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sourcing import portal_cache  # noqa: E402
+from sourcing import portal_cache
 
 HEAD = re.compile(
     r"portal rates for ([A-Z]{3})-([A-Z]{3}),\s*([\d.]+)\s*kg(?:,\s*([\d.]+)\s*cbm)?", re.I

@@ -132,7 +132,7 @@ def test_excluded_airline_is_never_quoted_or_named_round_42(tmp_path, monkeypatc
     import mail.exclusions as ex
     from core.agents.human_writer import strip_excluded
     from core.agents.rules_extractor import with_exclusions
-    from core.contracts import RFQ, PriceOption, Preference
+    from core.contracts import RFQ, Preference, PriceOption
     from core.orchestrator import drop_excluded
 
     monkeypatch.setattr(ex, "MEMORY_PATH", tmp_path / "ex.json")

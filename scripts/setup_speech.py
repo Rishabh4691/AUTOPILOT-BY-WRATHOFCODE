@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mail import files  # noqa: E402
+from mail import files
 
 
 def line(ok: bool, name: str, detail: str) -> bool:

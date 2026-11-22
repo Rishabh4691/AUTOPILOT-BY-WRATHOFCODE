@@ -45,7 +45,7 @@ async def test_warm_up_is_off_when_disabled(monkeypatch) -> None:
 async def test_warm_up_fills_every_break_then_an_outage_is_priced() -> None:
     client, stop = FakeClient(), asyncio.Event()
     portal_warm._last_live = 0.0
-    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))  # noqa: E501
+    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))
     for _ in range(50):
         await asyncio.sleep(0.01)
         if len(client.calls) == 4:
@@ -70,7 +70,7 @@ async def test_warm_up_steps_aside_for_live_quotes_and_low_budget() -> None:
 async def test_outage_stops_the_pass() -> None:
     client, stop = FakeClient(fail_after=1), asyncio.Event()
     portal_warm._last_live = 0.0
-    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))  # noqa: E501
+    task = asyncio.create_task(portal_warm.warm_forever(client, stop, gap_s=0, idle_s=60))
     await asyncio.sleep(0.1)
     stop.set()
     await task

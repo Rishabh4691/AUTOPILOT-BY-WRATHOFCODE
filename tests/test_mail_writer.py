@@ -4,8 +4,15 @@ import httpx
 import pytest
 
 from mail import writer
-from mail.config import settings
-from mail.writer import MONEY, TEMPLATES, alternatives, check_final, facts, preference, template, write_quote_email
+from mail.writer import (
+    MONEY,
+    alternatives,
+    check_final,
+    facts,
+    preference,
+    template,
+    write_quote_email,
+)
 
 RFQ = {
     "id": "RFQ-1",

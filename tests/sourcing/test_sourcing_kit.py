@@ -2,7 +2,13 @@ from decimal import Decimal as D
 
 import pytest
 
-from sourcing.kit import airport_for_zone, build, load_carriers, load_pickup_zones, zone_for_postcode
+from sourcing.kit import (
+    airport_for_zone,
+    build,
+    load_carriers,
+    load_pickup_zones,
+    zone_for_postcode,
+)
 from sourcing.kit_parsers import parse_tariff_lines
 
 TARIFFS, PROBLEMS = build(out=None)

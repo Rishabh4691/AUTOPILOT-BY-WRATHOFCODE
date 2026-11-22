@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from core.agents.directory import load_directory
 import core.agents.trucker as trucker_module
+from core.agents.directory import load_directory
 from core.agents.trucker import EmailTruckerPickupSource, parse_price
 from core.contracts import RFQ, Mail, Piece, Preference
 

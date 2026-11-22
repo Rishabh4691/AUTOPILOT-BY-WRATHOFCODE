@@ -12,9 +12,9 @@ Parsers live in kit_parsers.py and register themselves with @register.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Callable
 
 from .bids import Carrier
 from .models import Tariff

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import time
 import json
 import logging
 import os
 import signal
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any

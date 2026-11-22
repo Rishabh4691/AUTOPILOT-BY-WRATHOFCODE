@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
-from types import SimpleNamespace
 import respx
 
 from core.agents.booking import BookingAgent, is_acceptance, quote_from_mail, record_sent_quote

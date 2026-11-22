@@ -65,10 +65,10 @@ def test_scanned_packing_list_is_read(tmp_path):
     assert check("see attached", [("scan.png", text)]).dangerous
 
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
+import httpx
+import pytest
 
-from mail.dg import write_docs_request  # noqa: E402
+from mail.dg import write_docs_request
 
 GOOD_DOCS = """Hi [FIRST],
 
@@ -113,7 +113,7 @@ async def test_gateway_down_sends_template():
     assert not used and cost == 0 and "Shipper's Declaration" in body
 
 
-import pytest as _pytest  # noqa: E402
+import pytest as _pytest
 
 
 @_pytest.mark.parametrize("value", ["Not restricted", "Not applicable", "Non-DG", "non hazardous", "General cargo", "NR", "Kein Gefahrgut", "No"])

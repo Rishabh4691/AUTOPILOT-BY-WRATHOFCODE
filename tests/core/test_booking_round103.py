@@ -17,7 +17,7 @@ import respx
 
 from core.agents.booking import BookingAgent
 from core.agents.directory import load_directory
-from core.contracts import RFQ, PriceOption, Preference
+from core.contracts import RFQ, Preference, PriceOption
 from core.store import Store
 from tests.core.test_booking import BASE, KIT, Orch
 from tests.core.test_llm import SETTINGS

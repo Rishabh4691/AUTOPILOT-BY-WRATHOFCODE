@@ -131,6 +131,7 @@ def test_exclusion_phrasings_are_caught_without_false_alarms(monkeypatch) -> Non
     from pathlib import Path
 
     import pytest  # noqa: F401
+
     from mail import kit
     from mail.config import settings as mail_settings
     from mail.exclusions import excluded_carriers

@@ -1,10 +1,10 @@
 import json
 import os
 import re
-from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from sourcing.models import Piece, Shipment
 from sourcing.weights import chargeable_weight_kg, gross_weight_kg, sanity_problems

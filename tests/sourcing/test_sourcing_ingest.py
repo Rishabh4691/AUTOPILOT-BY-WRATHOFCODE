@@ -4,8 +4,8 @@ from decimal import Decimal as D
 import sourcing.kit_parsers  # noqa: F401  (registers the rate-sheet parser)
 from sourcing.ingest import ingest_tariff_mail, is_tariff_mail
 from sourcing.kit import load_carriers
-from sourcing.sheets import get_sheet_prices
 from sourcing.models import Shipment
+from sourcing.sheets import get_sheet_prices
 from sourcing.tariffs import TariffStore
 
 DEC_SHEET = b"""Yellowtail Air Freight | Air export tariff

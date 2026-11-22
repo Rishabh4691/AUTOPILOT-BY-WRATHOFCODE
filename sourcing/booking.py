@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
@@ -119,7 +119,7 @@ async def book_option(
     carriers: list[Carrier] | None = None,
     now: datetime | None = None,
 ) -> BookingResult:
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     result = BookingResult(status="failed", airline_code=option.airline_code)
 
     def by_email(reason: str) -> BookingResult:

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from core.agents import limits
-from core.contracts import RFQ, Piece, PriceOption, Preference
+from core.contracts import RFQ, Piece, Preference, PriceOption
 from mail.extract import tallest_cm
 
 

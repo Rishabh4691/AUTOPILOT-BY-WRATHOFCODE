@@ -3,10 +3,10 @@ import json
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-import httpx
 from pydantic import BaseModel, Field
 
 from . import db as store
@@ -306,7 +306,7 @@ async def _sync_mailbox(wait_s: float = 20) -> list[dict]:
     if task is not None and not task.done():
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=wait_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
     return _mail_index["mails"]
 

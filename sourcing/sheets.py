@@ -12,7 +12,7 @@ Per lane:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from . import fx
@@ -130,12 +130,12 @@ def price_lane(tariff: Tariff, lane: TariffLane, s: Shipment) -> PriceOption | N
             transit_days=lane.transit_days if lane.transit_days is not None else tariff.transit_days,
             lines=lines,
             valid_until=(
-                datetime.combine(tariff.valid_to, datetime.max.time(), tzinfo=timezone.utc)
+                datetime.combine(tariff.valid_to, datetime.max.time(), tzinfo=UTC)
                 if tariff.valid_to
                 else None
             ),
             tariff_id=tariff.tariff_id,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
             notes=notes,
         )
         if best is None or option.total < best.total:

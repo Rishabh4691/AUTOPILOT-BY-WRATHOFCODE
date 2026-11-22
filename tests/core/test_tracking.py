@@ -60,7 +60,7 @@ def store_with(tmp_path: Path, *rows: dict) -> Store:
             conn.execute(
                 f"INSERT INTO bookings ({cols}) VALUES ({', '.join('?' for _ in r)})",
                 tuple(r.values()),
-            )  # noqa: S608
+            )
     return store
 
 

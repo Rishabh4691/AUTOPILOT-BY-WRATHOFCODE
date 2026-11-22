@@ -346,7 +346,7 @@ class BookingAgent:
         updates = ", ".join(f"{k}=excluded.{k}" for k in fields if k != "rfq_id")
         with orch.store._write() as conn:
             conn.execute(
-                f"INSERT INTO bookings ({cols}) VALUES ({marks}) ON CONFLICT(rfq_id) DO UPDATE SET {updates}",  # noqa: S608
+                f"INSERT INTO bookings ({cols}) VALUES ({marks}) ON CONFLICT(rfq_id) DO UPDATE SET {updates}",
                 tuple(fields.values()),
             )
 
@@ -481,7 +481,7 @@ class BookingAgent:
     def _lots(self, orch: Any, root: int) -> list[dict]:
         ids = [str(int(root) * 10 + i) for i in range(1, 10)]
         marks = ",".join("?" for _ in ids)
-        rows = orch.store._conn.execute(f"SELECT * FROM rfqs WHERE id IN ({marks}) ORDER BY id", ids).fetchall()  # noqa: S608
+        rows = orch.store._conn.execute(f"SELECT * FROM rfqs WHERE id IN ({marks}) ORDER BY id", ids).fetchall()
         cols = [d[0] for d in orch.store._conn.execute("SELECT * FROM rfqs LIMIT 0").description]
         found = [dict(zip(cols, r, strict=False)) for r in rows]
         return [r for r in found if json.loads(r.get("breakdown_json") or "{}").get("lot_of") == int(root)]

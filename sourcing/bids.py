@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 
@@ -278,7 +278,7 @@ class BidTracker:
         self._by_ref: dict[str, SentBid] = {}
 
     def record_sent(self, sent_message: dict, rfq_id: str, carrier: Carrier, ref: str) -> SentBid:
-        sb = SentBid(int(sent_message["id"]), rfq_id, carrier, ref, datetime.now(timezone.utc))
+        sb = SentBid(int(sent_message["id"]), rfq_id, carrier, ref, datetime.now(UTC))
         self._by_id[sb.message_id] = sb
         self._by_ref[ref.upper()] = sb
         return sb
@@ -334,6 +334,6 @@ def bid_option(s: Shipment, sent: SentBid, q: BidQuote) -> PriceOption | None:
         currency=q.currency,
         total_eur=fx.to_eur(total, q.currency),
         transit_days=q.transit_days,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
         notes=notes,
     )

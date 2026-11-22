@@ -103,8 +103,8 @@ def pdf_lines(content: bytes) -> list[str]:
 
 
 def docx_lines(content: bytes) -> list[str]:
-    from xml.etree import ElementTree as ET
     import zipfile
+    from xml.etree import ElementTree as ET
 
     w = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
     root = ET.fromstring(zipfile.ZipFile(io.BytesIO(content)).read("word/document.xml"))

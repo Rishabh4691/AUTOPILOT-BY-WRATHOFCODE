@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -278,7 +278,7 @@ class PortalClient:
         rate = self._parse(PortalRate, resp)
         if self.dataset_version and rate.dataset_version != self.dataset_version:
             self.events.append(
-                f"{datetime.now(timezone.utc):%H:%M:%S} portal dataset changed "
+                f"{datetime.now(UTC):%H:%M:%S} portal dataset changed "
                 f"{self.dataset_version} -> {rate.dataset_version}"
             )
         self.dataset_version = rate.dataset_version
@@ -354,7 +354,7 @@ def _option_from_rate(rate: PortalRate, gross: Decimal, cbm: Decimal, note: str 
         },
         valid_until=rate.valid_until,
         dataset_version=rate.dataset_version,
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
         notes=[note] if note else [],
     )
 

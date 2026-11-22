@@ -543,7 +543,7 @@ def empty_inline(draft: str, values: dict) -> list[str]:
 def fill(text: str, values: dict) -> str:
     empty = {k for k, v in values.items() if not str(v).strip()}
     text = "\n".join(
-        line for line in text.splitlines() if not (line.strip().strip(".") in {f"[{k}]" for k in empty})
+        line for line in text.splitlines() if line.strip().strip(".") not in {f"[{k}]" for k in empty}
     )
     for k, v in values.items():
         text = text.replace(f"[{k}]", v)

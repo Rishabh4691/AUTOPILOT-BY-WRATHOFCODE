@@ -83,12 +83,12 @@ def _lines(body: str) -> list[str]:
 
 
 def txt_file(title: str, body: str) -> bytes:
-    return f"{title}\n\n{body}\n".encode("utf-8")
+    return f"{title}\n\n{body}\n".encode()
 
 
 def docx_file(title: str, body: str) -> bytes:
     def para(text: str, bold: bool = False) -> str:
-        run = f'<w:rPr><w:b/><w:sz w:val="28"/></w:rPr>' if bold else ""
+        run = '<w:rPr><w:b/><w:sz w:val="28"/></w:rPr>' if bold else ""
         return f'<w:p><w:r>{run}<w:t xml:space="preserve">{escape(text)}</w:t></w:r></w:p>'
 
     doc = (

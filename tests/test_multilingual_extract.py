@@ -6,13 +6,13 @@ formats were read wrongly: 0 % DE/NL/PT, 55 % FR ("1 225 kg" with a narrow no-br
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from mail import kit
 from mail.config import settings as mail_settings
 from mail.extract import extract
-from pathlib import Path
 
 KIT = Path(__file__).parent / "core" / "fixtures" / "kit"
 

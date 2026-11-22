@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from core.contracts import RFQ, PriceOption, Preference
+from core.contracts import RFQ, Preference, PriceOption
 from core.orchestrator import convert_money, in_currency, quote_currency
 from sourcing import fx
 

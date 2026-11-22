@@ -9,7 +9,7 @@ import httpx
 from core.config import Settings, auth_headers
 from core.contracts import Agent, EventStatus, Mail, OutgoingMail, Stage
 from mail import lang
-from mail.dg import DgCheck, attachment_text, check, special_cargo, write_docs_request
+from mail.dg import DgCheck, check, special_cargo, write_docs_request
 from mail.extract import find_first_name
 from mail.text import fresh_text, reply_subject, request_text
 

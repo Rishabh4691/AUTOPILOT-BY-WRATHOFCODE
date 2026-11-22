@@ -11,7 +11,7 @@ import json
 import os
 import tempfile
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .models import Tariff, TariffFile
@@ -39,7 +39,7 @@ class TariffStore:
             self.load()
 
     def save(self) -> None:
-        self._file.generated_at = datetime.now(timezone.utc)
+        self._file.generated_at = datetime.now(UTC)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = self._file.model_dump(mode="json")
         fd, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")

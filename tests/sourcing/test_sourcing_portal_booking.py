@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal as D
 
 import httpx
@@ -12,7 +12,7 @@ from sourcing.booking import book_option, parse_booking_confirmation
 from sourcing.models import Shipment
 from sourcing.portal import PortalClient, get_portal_options
 
-NOW = datetime(2026, 11, 21, 16, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 21, 16, 0, tzinfo=UTC)
 
 
 class FakePortal:

@@ -64,8 +64,9 @@ async def test_delay_notice_only_when_switched_on(tmp_path: Path, monkeypatch):
             "INSERT INTO bookings (rfq_id, thread_id, team_reference, booking_reference, status) "
             "VALUES ('276', '276', 'WOC-276', 'BK-AB12CD34', 'booked')"
         )
-    from core.agents.mailbox import parse_mail
     from datetime import UTC, datetime
+
+    from core.agents.mailbox import parse_mail
 
     status = parse_mail({
         "id": 501, "from": "meridian-freightways@hackloop.mail", "to": "wrathofcode@hackloop.mail",
