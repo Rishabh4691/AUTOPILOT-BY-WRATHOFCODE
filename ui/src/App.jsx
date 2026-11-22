@@ -41,12 +41,11 @@ function Summary({ s }) {
     ['Quoted', s ? `${s.quoted}${s.quoted ? ` (${s.under_2min} < 2 min)` : ''}` : '—'],
     ['Failed', s?.failed ?? '—', s?.failed > 0],
     ['Median time', mmss(s?.median_s)],
-    ['Model / quote', s?.llm_per_quote_eur != null ? `€${s.llm_per_quote_eur.toFixed(4)}` : s?.llm_per_quote != null ? `$${s.llm_per_quote.toFixed(4)}` : '—'],
     ['Model spend total', s?.llm_total_eur != null ? `€${s.llm_total_eur.toFixed(2)}` : '—'],
     ['Booked value', booked],
   ]
   return (
-    <dl className="glass lb-rise grid grid-cols-2 gap-y-5 rounded-[28px] px-6 py-6 sm:grid-cols-4 xl:grid-cols-7">
+    <dl className="glass lb-rise grid grid-cols-2 gap-y-5 rounded-[28px] px-6 py-6 sm:grid-cols-3 xl:grid-cols-6">
       {items.map(([k, v, bad]) => (
         <div key={k} className="min-w-0 text-center">
           <dt className="text-[11px] tracking-[0.12em] text-muted uppercase">{k}</dt>
