@@ -724,7 +724,22 @@ def problems(draft: str, values: dict, customer_text: str = "") -> list[str]:
     missing = [k for k in ANSWER_SLOTS if values.get(k) and f"[{k}]" not in draft]
     if missing:
         out.append(f"unanswered question {missing}")
+    # Round 147 (gpt-4.1-mini): "covering everything you need including handling and customs" and
+    # "We can hold the goods for you until you're ready". Never claim costs we did not price.
+    if str(values.get("INCLUDED", "")).strip() and "[INCLUDED]" not in draft:
+        out.append("no [INCLUDED]")
+    if UNPRICED.search(bare):
+        out.append("claims an unpriced cost")
+    if STORAGE.search(bare):
+        out.append("promises storage")
     return out
+
+
+UNPRICED = re.compile(
+    r"\b(?:includ\w*|cover\w*|incl\.?)\b[^.\n]{0,80}\b(?:customs|dut(?:y|ies)|tax(?:es)?|insurance|handling|clearance)\b",
+    re.I,
+)
+STORAGE = re.compile(r"\bhold (?:the |your )?(?:goods|shipment|cargo)\b", re.I)
 
 
 CURLY = re.compile("[“”„‘’‚«»]")

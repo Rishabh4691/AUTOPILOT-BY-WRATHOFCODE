@@ -480,3 +480,19 @@ def test_hold_for_today_is_one_clean_sentence(said):
     out = writer.fill(f"Hi [FIRST],\n\n{said} Our reference is [REF].", {"FIRST": "Sara", "REF": "WOC-1"})
     assert "I can hold this rate for you today. Our reference is WOC-1." in out
     assert "no problem" not in out and "today for you" not in out
+
+
+def test_draft_that_claims_unpriced_costs_is_rejected():
+    # Round 147 (gpt-4.1-mini): "covering everything you need including handling and customs".
+    from mail.writer import problems
+
+    values = {"FIRST": "Tobias", "REF": "WOC-1", "TOTAL": "EUR 1,014.69", "INCLUDED": "air freight, fuel and security"}
+    bad = ("Hi [FIRST],\n\nFor your goods I would go with Aurelia.\nThe all-in price is [TOTAL], covering everything "
+           "you need including handling and customs.\nWe can hold the goods for you until you're ready.\n"
+           "A yes is all I need.\nOur reference is [REF].\nCheers,\nLena")
+    found = problems(bad, values)
+    assert "no [INCLUDED]" in found and "claims an unpriced cost" in found and "promises storage" in found
+    good = bad.replace("covering everything you need including handling and customs", "covering [INCLUDED]").replace(
+        "We can hold the goods for you until you're ready.", "I can hold this rate for you today.")
+    found = problems(good, values)
+    assert not {"no [INCLUDED]", "claims an unpriced cost", "promises storage"} & set(found)
