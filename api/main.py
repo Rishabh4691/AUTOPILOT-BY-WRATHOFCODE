@@ -63,19 +63,100 @@ def agents():
     return query(agent_cards)
 
 
+def _stamp(iso: str | None) -> float | None:
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(iso).timestamp() if iso else None
+    except ValueError:
+        return None
+
+
+def _live_status(round_: dict) -> str:
+    verdict = (round_.get("verdict") or "").lower()
+    if round_.get("booked"):
+        return "BOOKED"
+    if verdict == "accepted":
+        return "ACCEPTED"
+    if verdict in ("rejected", "no answer", "no_answer", "missed"):
+        return "FAILED"
+    return "QUOTED" if round_.get("answered_at") else "NEW"
+
+
+def _live_row(round_: dict) -> dict:
+    sent = _stamp(round_.get("sent_at"))
+    return {
+        "id": f"R{round_['round_no']}",
+        "round_no": round_["round_no"],
+        "live": True,
+        "customer": f"Round {round_['round_no']}",
+        "origin": "—",
+        "destination": "—",
+        "preference": None,
+        "status": _live_status(round_),
+        "verdict": round_.get("verdict"),
+        "reason": round_.get("reason"),
+        "received_at": sent,
+        "quoted_at": _stamp(round_.get("answered_at")),
+        "deadline": sent + WINDOW_S if sent else None,
+        "total": None,
+        "currency": None,
+        "human_takeover": False,
+        "breakdown": None,
+    }
+
+
+async def _live_rounds() -> list[dict]:
+    """Rounds on the 5U board that this machine's database has not seen.
+
+    The bot that answers them may run on another laptop; the board is the shared truth.
+    """
+    if store.FAKE:
+        return []
+    board = await _our_verdicts()
+    latest = query(lambda db: store.rows(db, "SELECT MAX(received_at) AS t FROM rfqs")[0]["t"])
+    rows = [_live_row(r) for r in board if r.get("round_no") is not None and r.get("sent_at")]
+    return [r for r in rows if r["received_at"] and (latest is None or r["received_at"] > latest + 90)]
+
+
 @app.get("/api/summary")
-def stats():
-    return query(summary)
+async def stats():
+    out = query(summary)
+    raw = [] if store.FAKE else await _our_verdicts()
+    # Model spend per quote as 5U scored it: cost points are 40 at $0 and 0 at $0.10 per quote.
+    cost = [r["points"]["cost"] for r in raw if isinstance(r.get("points"), dict) and r["points"].get("cost") is not None]
+    if cost:
+        out["llm_per_quote"] = round(0.10 * (1 - sum(cost) / len(cost) / 40), 5)
+        out["cost_points"] = round(sum(cost) / len(cost), 2)
+    live = await _live_rounds()
+    if not live:
+        return out
+    # Answer times come from the board for every round: it is what 5U scored.
+    board = [_live_row(r) for r in await _our_verdicts() if r.get("round_no") is not None and r.get("sent_at")]
+    times = sorted(r["quoted_at"] - r["received_at"] for r in board if r["quoted_at"] and r["received_at"])
+    out["rfqs"] += len(live)
+    out["quoted"] = len(times)
+    out["under_2min"] = sum(1 for t in times if t <= 120)
+    out["failed"] += sum(1 for r in live if r["status"] == "FAILED")
+    out["median_s"] = round(times[len(times) // 2]) if times else None
+    out["live_rounds"] = len(live)
+    return out
 
 
 @app.get("/api/rfqs")
-def rfqs(limit: int = 100):
-    limit = max(1, min(limit, 500))
-    return query(lambda db: [shape(r) for r in store.rows(db, "SELECT * FROM rfqs ORDER BY received_at DESC LIMIT ?", limit)])
+async def rfqs(limit: int = 100):
+    limit = max(1, min(limit, 1000))
+    local = query(lambda db: [shape(r) for r in store.rows(db, "SELECT * FROM rfqs ORDER BY received_at DESC LIMIT ?", limit)])
+    merged = sorted(await _live_rounds() + local, key=lambda r: r.get("received_at") or 0, reverse=True)
+    return merged[:limit]
 
 
 @app.get("/api/rfqs/{rfq_id}")
-def rfq(rfq_id: str):
+async def rfq(rfq_id: str):
+    if rfq_id.startswith("R") and rfq_id[1:].isdigit():
+        for row in await _live_rounds():
+            if row["id"] == rfq_id:
+                return {**row, "events": []}
     with store.connect() as db:
         found = store.rows(db, "SELECT * FROM rfqs WHERE id=?", rfq_id)
         if not found:
@@ -427,7 +508,7 @@ _verdict_cache: dict = {"at": 0.0, "data": []}
 
 
 async def _our_verdicts() -> list:
-    if time.time() - _verdict_cache["at"] < 60:
+    if time.time() - _verdict_cache["at"] < 20:
         return _verdict_cache["data"]
     try:
         async with _fiveu() as client:

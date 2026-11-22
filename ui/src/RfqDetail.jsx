@@ -119,7 +119,7 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
               <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-[11px] text-sky-300">Autonomous</span>
             </div>
             <div className="mt-1 text-sm text-zinc-300">{r.customer}</div>
-            <div className="font-mono text-xs text-muted">{r.origin} → {r.destination} · wants {r.preference}</div>
+            {!r.live && <div className="font-mono text-xs text-muted">{r.origin} → {r.destination} · wants {r.preference}</div>}
           </div>
           <div className="flex flex-col items-end gap-2">
             <button onClick={onClose} className="text-muted hover:text-white" aria-label="Close">
@@ -129,6 +129,24 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
           </div>
         </header>
 
+        {r.live ? (
+          <Section title="From the live 5U board">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              <dt className="text-muted">Sent by 5U</dt>
+              <dd className="font-mono text-zinc-200">{clock(r.received_at)}</dd>
+              <dt className="text-muted">Answered</dt>
+              <dd className="font-mono text-zinc-200">{r.quoted_at ? `${clock(r.quoted_at)} · ${Math.round(r.quoted_at - r.received_at)} s` : 'not yet'}</dd>
+              <dt className="text-muted">Verdict</dt>
+              <dd className="text-zinc-200">{r.verdict ?? 'pending'}{r.reason ? ` · ${r.reason}` : ''}</dd>
+              <dt className="text-muted">Booked</dt>
+              <dd className="text-zinc-200">{r.status === 'BOOKED' ? 'yes' : 'no'}</dd>
+            </dl>
+            <p className="mt-4 text-xs text-muted">
+              The live bot answered this round on its own laptop. The customer mail, price and timeline are in that laptop's database; this screen gets the round from the 5U board.
+            </p>
+          </Section>
+        ) : (
+        <>
         <Section title="Pipeline">
           <Pipeline r={r} />
         </Section>
@@ -201,6 +219,8 @@ export default function RfqDetail({ id, tick, now, operator, onClose }) {
             ))}
           </ol>
         </Section>
+        </>
+        )}
       </aside>
     </div>
   )

@@ -14,6 +14,13 @@ from api.stats import light, score
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DB_PATH", tmp_path / "app.db")
     monkeypatch.setattr(store, "FAKE", False)
+    board = []
+
+    async def fake_board():
+        return board
+
+    monkeypatch.setattr(main, "_our_verdicts", fake_board)
+    main._test_board = board
     with TestClient(main.app) as c:
         yield c
 
@@ -107,6 +114,28 @@ def test_summary(client):
     assert (s["rfqs"], s["quoted"], s["failed"], s["under_2min"]) == (2, 1, 1, 1)
     assert s["median_s"] == 90
     assert s["llm_per_quote"] == pytest.approx(0.0004)
+
+
+def test_summary_and_list_add_live_board_rounds(client):
+    add_rfq("A", "QUOTED", age=600)
+    from datetime import UTC, datetime
+
+    sent = datetime.now(UTC).timestamp() - 60
+    iso = lambda t: datetime.fromtimestamp(t, UTC).isoformat()
+    main._test_board.extend(
+        [
+            {"round_no": 7, "sent_at": iso(sent), "answered_at": iso(sent + 30), "verdict": "accepted", "booked": True, "points": {"cost": 38.0}},
+            {"round_no": 8, "sent_at": iso(sent + 5), "answered_at": None, "verdict": None, "booked": None, "points": {}},
+        ]
+    )
+    s = client.get("/api/summary").json()
+    assert s["rfqs"] == 3 and s["live_rounds"] == 2
+    assert s["quoted"] == 1 and s["median_s"] == 30
+    assert s["llm_per_quote"] == pytest.approx(0.005)
+    rows = client.get("/api/rfqs?limit=1000").json()
+    assert [r["id"] for r in rows] == ["R8", "R7", "A"]
+    assert rows[1]["status"] == "BOOKED" and rows[1]["live"] is True
+    assert client.get("/api/rfqs/R7").json()["verdict"] == "accepted"
 
 
 def test_init_adds_missing_columns(tmp_path, monkeypatch):

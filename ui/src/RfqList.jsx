@@ -69,6 +69,7 @@ export default function RfqList({ rfqs, now, selected, onOpen }) {
               <td className="px-4 py-3 font-mono text-xs">
                 {r.id}
                 {r.human_takeover ? <span className="ml-2 rounded bg-amber-500/20 px-1.5 text-[10px] text-amber-300">HUMAN</span> : null}
+                {r.live ? <span className="ml-2 rounded-full bg-accent/20 px-1.5 text-[10px] font-semibold text-accent" title="From the live 5U board; the full mail is in the bot laptop's database">5U LIVE</span> : null}
                 <div className="text-[11px] text-muted">{clock(r.received_at)}</div>
               </td>
               <td className="px-4 py-3">{r.customer}</td>
