@@ -54,3 +54,39 @@ def test_fields_are_read_in_the_customers_language(lang, body, want) -> None:
     assert s.volume_cbm == Decimal(want["cbm"])
     assert x.preference == want["pref"]
     assert s.ready_date == want["ready"]
+
+
+ROUND_149 = """안녕하세요,
+
+2026-11-27에 독일 Fulda 36030에 있는 저희 사업장에서 픽업 가능합니다. 공항까지 트럭 운송도 함께 주선해 주세요.
+
+화물은 기계 부품 12개이며, 총중량은 2802.08 lb, 부피는 150.45 cubic feet입니다.
+
+KUL(Kuala Lumpur, MY)까지 가장 빠른 옵션으로, 픽업을 포함한 모든 비용을 EUR로 견적 부탁드립니다.
+
+Mira Petersen
+Nordlicht Audio"""
+
+
+def test_round_149_korean_fastest_and_ready_date():
+    from datetime import date
+
+    from mail.extract import extract, find_ready
+
+    r = extract("KUL행 항공 운송 견적 요청", ROUND_149, "nordlicht-audio@hackloop.mail", "44326")
+    assert r.preference == "fastest" and r.preference_stated
+    assert find_ready(ROUND_149) == date(2026, 11, 27)
+
+
+@pytest.mark.parametrize("text, pref, ready", [
+    ("픽업은 2026-11-24부터 가능하며 가장 저렴한 옵션으로 견적 부탁드립니다.", "cheapest", "2026-11-24"),
+    ("请报价最便宜的方案，2026-11-28可提货。", "cheapest", "2026-11-28"),
+    ("最快的选项，2026-11-26提货", "fastest", "2026-11-26"),
+    ("一番安い方法でお願いします。2026-11-29に集荷可能です。", "cheapest", "2026-11-29"),
+])
+def test_cjk_preference_and_ready(text, pref, ready):
+    from mail.extract import extract, find_ready
+
+    r = extract("Quote", text, "x@hackloop.mail", "1")
+    assert r.preference == pref and r.preference_stated
+    assert str(find_ready(text)) == ready

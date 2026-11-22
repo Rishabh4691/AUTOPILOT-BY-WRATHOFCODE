@@ -617,6 +617,13 @@ def _month(word: str) -> int | None:
     return MONTHS.get(w) or MONTHS.get(w[:3])
 
 
+# Round 149: "2026-11-27에 ... 사업장에서 픽업 가능합니다" (ready for pickup, Korean) was not read, so the
+# arrival came before pickup. Also Chinese and Japanese; no word boundaries, CJK has no spaces.
+READY_CJK_WORD = r"(?:픽업|수거|준비|출고|提货|取货|备好|准备好|就绪|可提|集荷|準備|出荷|引き取り|ピックアップ)"
+READY_CJK_AFTER = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:(?!\d{4}-\d{2}-\d{2})[^\n]){0,60}?" + READY_CJK_WORD)
+READY_CJK_BEFORE = re.compile(READY_CJK_WORD + r"(?:(?!\d{4}-\d{2}-\d{2})[^\n]){0,30}?(\d{4})-(\d{2})-(\d{2})")
+
+
 def find_ready(text: str) -> date | None:
     m = READY.search(text) or READY_AFTER.search(text) or SELF_DROP_DATE.search(text)
     if not m:
@@ -642,6 +649,9 @@ def find_ready(text: str) -> date | None:
             words = READY_SAME_SENTENCE_WORDS.search(text or "")
             if words and _month(words.group(2)):
                 return date(int(words.group(3)), _month(words.group(2)) or 0, int(words.group(1)))
+            cjk = READY_CJK_AFTER.search(text or "") or READY_CJK_BEFORE.search(text or "")
+            if cjk:
+                return date(int(cjk.group(1)), int(cjk.group(2)), int(cjk.group(3)))
         except ValueError:
             return None
         return None
