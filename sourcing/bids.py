@@ -129,7 +129,6 @@ def bid_request_email(s: Shipment, carrier: Carrier, ref: str) -> dict:
     return {"to": carrier.email, "subject": subject, "body": "\n".join(lines)}
 
 
-# ------------------------------------------------------------------ parsing
 _CUR = r"(EUR|USD|CHF|GBP|€|\$|£)"
 _NUM = r"(\d{1,3}(?:[ '’.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
 _SYMBOL = {"€": "EUR", "$": "USD", "£": "GBP"}
@@ -259,7 +258,6 @@ def parse_bid_reply(body: str) -> BidQuote:
     return q
 
 
-# ----------------------------------------------------------------- tracking
 @dataclass
 class SentBid:
     message_id: int

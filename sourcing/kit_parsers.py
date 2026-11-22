@@ -46,7 +46,6 @@ class TariffParseError(Exception):
         self.problems = problems or []
 
 
-# ------------------------------------------------------------ text extraction
 def _cell(v) -> str:
     if v is None:
         return ""
@@ -145,7 +144,6 @@ def text_lines(filename: str, content: bytes) -> list[str]:
     return content.decode("utf-8", "replace").splitlines()
 
 
-# ---------------------------------------------------------------- the parser
 def num(text: str) -> Decimal:
     t = text.strip().replace("EUR", "").replace("€", "").strip()
     if "," in t and "." in t:
@@ -266,7 +264,6 @@ def parse_tariff_lines(lines: list[str], source: str = "") -> tuple[Tariff, list
             continue
         low = line.lower()
 
-        # ------------------------------------------------ header and rules
         if airline is None and "|" in line:
             airline = line.split("|")[0].strip()
             continue
@@ -289,7 +286,6 @@ def parse_tariff_lines(lines: list[str], source: str = "") -> tuple[Tariff, list
         if low.startswith(("all rates", "chargeable weight", "fuel and security", "the minimum")):
             continue
 
-        # ------------------------------------------------ surcharges
         if m := _SURCHARGE_LINE.match(line):
             hit = _match_lane(m.group("lane").strip(), None)
             if hit:
@@ -302,12 +298,10 @@ def parse_tariff_lines(lines: list[str], source: str = "") -> tuple[Tariff, list
             block = None
             continue
 
-        # ------------------------------------------------ sections and headers
         if m := _ORIGIN.match(line):
             origin = m.group(1)
             block = None
             continue
-        # ------------------------------------------------ block key/values
         # (before the header check: "from 45 kg 4.17" is a value, not a header)
         if block is not None and (m := _BLOCK_KV.match(line)):
             key, value = m.group(1).lower(), m.group(3)
@@ -331,7 +325,6 @@ def parse_tariff_lines(lines: list[str], source: str = "") -> tuple[Tariff, list
             inline_sc = "fuel" in low and "security" in low
             continue
 
-        # ------------------------------------------------ lane rows
         hit = _match_lane(line, origin)
         if not hit:
             continue
@@ -376,7 +369,6 @@ def parse_tariff_lines(lines: list[str], source: str = "") -> tuple[Tariff, list
                 f"got {len(values)} in '{line}'"
             )
 
-    # ------------------------------------------------ assemble
     if airline is None:
         raise TariffParseError(f"{source}: no 'Airline | Air export tariff' title line")
     if currency is None:

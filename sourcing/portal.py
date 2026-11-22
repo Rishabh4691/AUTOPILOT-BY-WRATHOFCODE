@@ -34,7 +34,6 @@ from .weights import PORTAL_KG_PER_CBM, D, gross_weight_kg, money, total_volume_
 BASE_URL = os.getenv("FIVEU_BASE_URL", "https://api.start-hack.5u.ai")
 
 
-# ----------------------------------------------------------------- schemas
 class PortalAirline(BaseModel):
     code: str
     name: str
@@ -83,7 +82,6 @@ class PortalBooking(BaseModel):
     status: str
 
 
-# ------------------------------------------------------------------ errors
 class PortalError(Exception):
     def __init__(self, message: str, status: int | None = None, body=None):
         super().__init__(message)
@@ -134,7 +132,6 @@ def _num(value: Decimal) -> str:
     return format(D(value).normalize(), "f")
 
 
-# ------------------------------------------------------------------ client
 class PortalClient:
     def __init__(
         self,
@@ -174,7 +171,6 @@ class PortalClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    # -------------------------------------------------------------- core
     async def _request(self, method: str, path: str, **kw) -> httpx.Response:
         attempt = 0
         while True:
@@ -215,7 +211,6 @@ class PortalClient:
                 resp.text[:500],
             ) from e
 
-    # ----------------------------------------------------------- lookups
     async def ports(self, fresh: bool = False) -> list[PortalLane]:
         now = time.monotonic()
         if not fresh and self._ports and now - self._ports[0] < self.ports_ttl_s:
@@ -293,7 +288,6 @@ class PortalClient:
                             breaks=[Decimal(b) for b in hit[1]] if hit else (), dataset=rate.dataset_version)
         return rate
 
-    # ------------------------------------------------------------ booking
     async def book(self, rate_id: str, team_reference: str) -> tuple[PortalBooking, bool]:
         """Returns (booking, created). created=False means a safe retry of an old booking."""
         resp = await self._request(
@@ -316,7 +310,6 @@ class PortalClient:
         raise PortalError(f"booking: HTTP {code}: {msg}", code)
 
 
-# ------------------------------------------------------------- price source
 def _option_from_rate(rate: PortalRate, gross: Decimal, cbm: Decimal, note: str | None) -> PriceOption:
     total_eur = (
         money(rate.total)

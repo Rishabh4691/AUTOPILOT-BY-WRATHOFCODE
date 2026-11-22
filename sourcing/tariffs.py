@@ -29,7 +29,6 @@ class TariffStore:
         if self.path.exists():
             self.load()
 
-    # ---------------------------------------------------------------- io
     def load(self) -> None:
         self._file = TariffFile.model_validate_json(self.path.read_text(encoding="utf-8"))
         self._mtime = self.path.stat().st_mtime
@@ -49,7 +48,6 @@ class TariffStore:
         os.replace(tmp, self.path)  # atomic: readers never see half a file
         self._mtime = self.path.stat().st_mtime
 
-    # ------------------------------------------------------------ queries
     def all(self) -> list[Tariff]:
         return list(self._file.tariffs)
 
@@ -70,7 +68,6 @@ class TariffStore:
             result.extend(t for t in versions if (t.valid_from or date.min) == newest)
         return result
 
-    # ------------------------------------------------------------ updates
     def upsert(self, tariff: Tariff, save: bool = True) -> list[str]:
         """Add or replace a tariff version. Returns notes for the decision log."""
         notes: list[str] = []

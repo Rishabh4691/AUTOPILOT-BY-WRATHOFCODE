@@ -15,9 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# --------------------------------------------------------------------------
 # Input: what an RFQ asks for
-# --------------------------------------------------------------------------
 
 
 class Piece(BaseModel):
@@ -51,9 +49,7 @@ class Shipment(BaseModel):
     quote_currency: str | None = None  # currency the customer wants, if any
 
 
-# --------------------------------------------------------------------------
 # Tariffs: what data/tariffs.json holds (one entry per airline rate sheet)
-# --------------------------------------------------------------------------
 
 SurchargeBasis = Literal[
     "per_kg",  # per chargeable kg (fuel, security usually)
@@ -119,9 +115,7 @@ class TariffFile(BaseModel):
     tariffs: list[Tariff] = Field(default_factory=list)
 
 
-# --------------------------------------------------------------------------
 # Output: one priced option from any source
-# --------------------------------------------------------------------------
 
 
 class ChargeLine(BaseModel):
