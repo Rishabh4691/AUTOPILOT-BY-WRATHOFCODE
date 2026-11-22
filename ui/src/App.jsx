@@ -222,7 +222,7 @@ export default function App() {
     </main>
     )}
     <SiteFooter onOpen={enter} />
-    <SettingsDock />
+    <SettingsDock botSwitches={!home && tab !== 'board'} />
     </>
   )
 }

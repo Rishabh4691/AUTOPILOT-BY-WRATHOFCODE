@@ -10,7 +10,7 @@ const MODELS = { 'gpt-4.1-mini': '4.1 mini', 'gpt-4.1': '4.1' }
  * The floating settings button, bottom right on every screen: theme, language, and the bot's
  * writer model and daily updates (those two change the live bot, as the old switches did).
  */
-export default function SettingsDock() {
+export default function SettingsDock({ botSwitches = true }) {
   const t = useT()
   const [theme, setTheme] = useTheme()
   const [lang, setLang] = useLang()
@@ -74,7 +74,7 @@ export default function SettingsDock() {
       onClick: () => setLang(lang === 'de' ? 'en' : 'de'),
     },
   ]
-  if (bot) {
+  if (bot && botSwitches) {
     items.push(
       {
         title: lang === 'de' ? 'Modell' : 'Model',
@@ -101,7 +101,7 @@ export default function SettingsDock() {
 
   return (
     <div ref={box} className="fixed right-4 bottom-4 z-50 flex flex-col items-end gap-2 sm:right-6 sm:bottom-6">
-      {away && open && <span className="glass max-w-xs rounded-2xl px-3 py-2 text-[11px] leading-snug text-zinc-300">{awayNote}</span>}
+      {away && botSwitches && open && <span className="glass max-w-xs rounded-2xl px-3 py-2 text-[11px] leading-snug text-zinc-300">{awayNote}</span>}
       {err && open && <span className="glass rounded-full px-3 py-1 text-[11px] text-rose-300">{lang === 'de' ? 'Bot-Einstellungen nicht erreichbar' : 'Bot settings unavailable'}</span>}
       <div className="flex items-center gap-3 sm:gap-6">
       {open && (
