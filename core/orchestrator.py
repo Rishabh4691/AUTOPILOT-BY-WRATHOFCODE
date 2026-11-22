@@ -975,6 +975,15 @@ class Orchestrator:
                 )
                 return None
             total = to_money(total + pickup.total)
+        from mail.insurance import note_value
+
+        cover = note_value(rfq.notes)
+        if cover is not None:
+            # Round 91: insurance the customer asked to include (goods value x share x rate, in EUR).
+            if option.currency != "EUR":
+                converted = convert_money(cover, "EUR", option.currency)
+                cover = converted if converted is not None else cover
+            total = to_money(total + cover)
         if rfq.currency is not None and rfq.currency != option.currency:
             self.emit(
                 Agent.RFQ,

@@ -169,3 +169,20 @@ def test_chinese_door_pickup_round_72() -> None:
     x = extract("空运询价：Cologne → LIM", body, "hofmann-textilwerk@hackloop.mail", "20161")
     assert x.shipment is not None
     assert x.shipment.door_pickup is True
+
+
+def test_insurance_premium_is_added_round_91() -> None:
+    from mail.insurance import note_value, premium
+
+    body = (
+        "Could you quote the fastest air freight option from DUS to MEX (Mexico City, MX)? "
+        "We'll deliver to DUS ourselves. The shipment is ready on 2026-11-29: 1 piece of printed "
+        "marketing material, 176 kg gross, 1.26 cbm.\n\nPlease include cargo insurance in the all-in "
+        "price, on the terms of our frame agreement: goods value 22000 EUR, insured at 110 % of that "
+        "value, premium rate 0.40 %."
+    )
+    assert premium(body) == Decimal("96.80")
+    assert note_value(("x", "insurance_premium: 96.80")) == Decimal("96.80")
+    assert premium("Warenwert 15.000 EUR, bitte Versicherung inklusive, versichert zu 110 %, Prämiensatz 0,35 %.") == Decimal("57.75")
+    assert premium("Please quote the cheapest option, 1497 kg and 13.89 cbm.") is None
+    assert premium("We do not need insurance. Goods value 5000 EUR.") is None

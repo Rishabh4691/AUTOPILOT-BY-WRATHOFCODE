@@ -221,6 +221,12 @@ class RulesFirstExtractor:
                     rfq = rfq.model_copy(update={"notes": (*rfq.notes, SITE_UNKNOWN)})
                 rfq = with_exclusions(rfq, full, mail.sender)
                 rfq = with_deadline(rfq, full)
+                from mail.insurance import premium as insurance_premium
+
+                cover = insurance_premium(full)
+                if cover is not None:
+                    rfq = rfq.model_copy(update={"notes": (*rfq.notes, f"insurance_premium: {cover}")})
+                    log.info("insurance_requested", extra={"rfq": mail.id, "premium": str(cover)})
                 log.info("rules_extract_ok", extra={"rfq": mail.id, "problems": x.problems})
                 return rfq, None
             log.info("rules_extract_missing", extra={"rfq": mail.id, "missing": x.missing})

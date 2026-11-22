@@ -188,7 +188,7 @@ class HumanEmailWriter:
             "carrier": carrier_name(option.carrier, option.carrier_code),
             "transit_days": option.transit_days,
             "valid_until": option.valid_until.isoformat() if option.valid_until else None,
-            "includes": self._includes(option, rfq.door_pickup),
+            "includes": self._includes(option, rfq.door_pickup) + (["insurance"] if any(n.startswith("insurance_premium: ") for n in rfq.notes) else []),
             "ready_date": rfq.ready_date.isoformat() if rfq.ready_date else None,
             "arrival": arrival_date(rfq.ready_date, option.transit_days).isoformat(),
         }

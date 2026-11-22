@@ -117,7 +117,7 @@ def valid_text(price: dict, lang: str) -> str:
 
 
 INCLUDED = {
-    "en": {"freight": "air freight", "fuel": "fuel", "security": "security", "pickup": "door pickup", "awb": "AWB", "handling": "handling", "customs": "export customs"},
+    "en": {"freight": "air freight", "fuel": "fuel", "security": "security", "pickup": "door pickup", "awb": "AWB", "handling": "handling", "customs": "export customs", "insurance": "cargo insurance"},
     "de": {"freight": "Luftfracht", "fuel": "Treibstoff", "security": "Sicherheit", "pickup": "Abholung", "awb": "AWB", "handling": "Handling", "customs": "Exportzoll"},
     "fr": {"freight": "fret aérien", "fuel": "carburant", "security": "sûreté", "pickup": "enlèvement", "awb": "LTA", "handling": "manutention", "customs": "douane export"},
     "es": {"freight": "flete aéreo", "fuel": "combustible", "security": "seguridad", "pickup": "recogida", "awb": "AWB", "handling": "handling", "customs": "aduana de exportación"},
@@ -690,7 +690,7 @@ def check_final(body: str, values: dict, lang: str = "en") -> list[str]:
     totals = MONEY.findall(body)
     if len(totals) != 1 or values["TOTAL"] not in body:
         out.append(f"expected exactly one total, found {totals}")
-    alt = alternatives(body.replace(values.get("CARRIER", ""), ""), lang)
+    alt = alternatives(body.replace(values.get("CARRIER", ""), "").replace("cargo insurance", ""), lang)
     if alt:
         out.append(f"offers an alternative: {sorted(set(a.lower() for a in alt))}")
     if lang == "en":
