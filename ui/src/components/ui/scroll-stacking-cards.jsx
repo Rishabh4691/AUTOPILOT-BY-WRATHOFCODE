@@ -69,7 +69,7 @@ function Card({ p, i, count, progress, still, ground, ink, muted }) {
       className="col-start-1 row-start-1 w-[min(100%,calc(62svh*16/9),1180px)] origin-[50%_25%] will-change-[transform,filter] max-sm:w-full"
       style={{ zIndex: i + 1, ...(still ? { y: stillY } : { y, rotateX, scale, filter }) }}
     >
-      <div className="relative overflow-hidden rounded-[24px] border border-line shadow-[0_50px_90px_-35px_rgba(10,12,20,0.5)]" style={{ background: ground }}>
+      <div className="relative overflow-hidden rounded-[24px] border border-line shadow-[0_40px_80px_-40px_rgba(30,38,64,0.45)]" style={{ background: ground }}>
         <img
           src={p.image}
           alt={`${p.name} screen`}

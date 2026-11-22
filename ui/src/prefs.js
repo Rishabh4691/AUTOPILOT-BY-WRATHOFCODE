@@ -62,7 +62,7 @@ function usePref(key, fallback, apply) {
 
 const applyTheme = (v) => document.documentElement.setAttribute('data-theme', v)
 
-export const useTheme = () => usePref('theme', 'dark', applyTheme)
+export const useTheme = () => usePref('theme', 'light', applyTheme)
 export const useLang = () => usePref('lang', 'en')
 
 export function useT() {

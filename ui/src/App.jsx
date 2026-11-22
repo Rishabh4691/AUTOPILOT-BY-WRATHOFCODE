@@ -23,11 +23,11 @@ function Summary({ s }) {
     ['Booked value', booked],
   ]
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
       {items.map(([k, v, bad]) => (
-        <div key={k} className="min-w-0 bg-panel px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wider text-muted">{k}</div>
-          <div className={`mt-1 truncate font-mono text-lg ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
+        <div key={k} className="min-w-0 border-l border-line pl-4">
+          <div className={`truncate text-2xl font-light tracking-tight ${bad ? 'text-rose-400' : 'text-white'}`}>{v}</div>
+          <div className="mt-1 text-[12px] text-muted">{k}</div>
         </div>
       ))}
     </div>
@@ -98,17 +98,33 @@ export default function App() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-16 sm:px-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 py-6">
-        <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-500/15 text-sky-300">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg>
+      <header className="sticky top-3 z-40 mt-4 flex items-center gap-4 rounded-full border border-line bg-panel/90 py-2 pr-2 pl-5 backdrop-blur pill-shadow">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-accent text-white">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" /></svg>
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-white">AUTOPILOT</h1>
-            <p className="text-xs text-muted">{t('tagline')}</p>
-          </div>
+          <span className="text-[15px] font-semibold tracking-tight text-white">AUTOPILOT</span>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
+        <nav className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto [scrollbar-width:none]">
+          {tabs.map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-medium uppercase tracking-[0.02em] transition-colors ${tab === k ? 'bg-sky-500/15 text-sky-300' : 'text-zinc-300 hover:text-white'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <span className={`flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[12px] font-medium uppercase tracking-[0.04em] ${down ? 'bg-rose-500/15 text-rose-300' : 'bg-ink text-white'}`}>
+          <span className={`h-2 w-2 rounded-full ${down ? 'bg-rose-500' : live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
+          {down ? t('apiDown') : live ? t('live') : t('reconnecting')}
+        </span>
+      </header>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <p className="text-muted">{t('tagline')}</p>
+        <div className="flex flex-wrap items-center gap-3">
           <Controls />
           {fake && <span className="rounded-md bg-violet-500/15 px-2 py-1 text-violet-300">{t('demo')}</span>}
           <input
@@ -118,12 +134,8 @@ export default function App() {
             maxLength={40}
             className="w-28 rounded-md border border-line bg-panel px-2 py-1 text-zinc-200 placeholder:text-muted focus:border-sky-500 focus:outline-none"
           />
-          <span className="flex items-center gap-1.5 text-muted">
-            <span className={`h-2 w-2 rounded-full ${down ? 'bg-rose-500' : live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
-            {down ? t('apiDown') : live ? t('live') : t('reconnecting')}
-          </span>
         </div>
-      </header>
+      </div>
 
       {down && (
         <div className="mb-5 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -149,19 +161,9 @@ export default function App() {
         </div>
       )}
 
-      <Summary s={sum} />
+      <div className="mt-8"><Summary s={sum} /></div>
 
-      <nav className="mt-8 mb-5 flex gap-1 border-b border-line">
-        {tabs.map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm ${tab === k ? 'border-sky-400 text-white' : 'border-transparent text-muted hover:text-zinc-200'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
+      <div className="mb-8" />
 
       {tab === 'overview' ? (
         <Overview onOpen={(k) => { setTab(k); window.scrollTo({ top: 0 }) }} />
