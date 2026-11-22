@@ -247,6 +247,8 @@ class Orchestrator:
     review_deadline_s: float = 60.0
     review_context: dict[int, dict[str, Any]] = field(default_factory=dict)
     bids: Any = None
+    claims: Any = None
+    updates: Any = None
 
     @property
     def policy(self) -> TimingPolicy:
@@ -314,6 +316,10 @@ class Orchestrator:
             task = asyncio.create_task(self.dg.on_reply(self, mail), name=f"dg-{mail.id}")
             self.tasks.add(task)
             task.add_done_callback(self.tasks.discard)
+        if self.claims is not None and kind in (MailKind.FOLLOW_UP, MailKind.OTHER) and self.is_customer(mail):
+            task = asyncio.create_task(self.claims.handle(self, mail), name=f"claim-{mail.id}")
+            self.tasks.add(task)
+            task.add_done_callback(self.tasks.discard)
         if self.booker is not None and kind in (MailKind.FOLLOW_UP, MailKind.BOOKING_CONFIRMATION):
             task = asyncio.create_task(self.booker.handle(self, mail, kind), name=f"book-{mail.id}")
             self.tasks.add(task)
@@ -348,6 +354,12 @@ class Orchestrator:
             f"Mail {mail.id} sorted as {kind.value.replace('_', ' ')}: {classification.reason}",
             rfq_id=mail.thread_root_id if kind is MailKind.FOLLOW_UP else None,
         )
+
+    def is_customer(self, mail: Mail) -> bool:
+        sender = mail.sender.strip().lower()
+        own = {self.settings.our_address, self.settings.rate_desk_address, self.settings.tracking_address}
+        directory = getattr(self.claims, "directory", None)
+        return sender not in own and (directory is None or directory.by_email(sender) is None)
 
     def flag_special_wishes(self, mail: Mail) -> list[str]:
         """Wishes the engine does not price (foreign pickup, delivery at destination, insurance): warn, quote as usual."""

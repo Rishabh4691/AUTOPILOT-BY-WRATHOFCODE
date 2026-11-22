@@ -444,3 +444,64 @@ async def network(period: str = "all"):
 
     verdicts = [] if store.FAKE else await _our_verdicts()
     return query(lambda db: insights(db, period, board_requests=verdicts))
+
+
+class SettingsIn(BaseModel):
+    writer_model: str | None = None
+    daily_updates: bool | None = None
+
+
+@app.get("/api/settings")
+def get_settings():
+    from core import runtime_settings
+
+    data = runtime_settings.load()
+    return {**data, "models": list(runtime_settings.MODELS)}
+
+
+@app.post("/api/settings")
+def set_settings(body: SettingsIn):
+    from core import runtime_settings
+
+    changes = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        data = runtime_settings.save(changes)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    return {**data, "models": list(runtime_settings.MODELS)}
+
+
+@app.get("/api/shipments")
+def shipments():
+    def load(db):
+        have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if "bookings" not in have:
+            return {"booked": [], "delivered": []}
+        updates = "shipment_updates" in have
+        if updates:
+            sql = (
+                "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
+                "u.updates, u.last_update_at, u.delivered_at FROM bookings b "
+                "LEFT JOIN shipment_updates u ON u.rfq_id = b.rfq_id ORDER BY b.booked_at DESC LIMIT 500"
+            )
+        else:
+            sql = (
+                "SELECT b.rfq_id, b.booking_reference, b.team_reference, b.customer, b.carrier, b.origin, b.destination, b.eta, b.status, b.note, b.price, b.currency, b.booked_at, "
+                "0 AS updates, NULL AS last_update_at, NULL AS delivered_at FROM bookings b ORDER BY b.booked_at DESC LIMIT 500"
+            )
+        rows = store.rows(db, sql)
+        today = time.strftime("%Y-%m-%d")
+        for r in rows:
+            r["delivered"] = bool(r.get("delivered_at")) or bool(r.get("eta") and str(r["eta"])[:10] <= today and r.get("booking_reference"))
+        return {"booked": [r for r in rows if not r["delivered"]], "delivered": [r for r in rows if r["delivered"]]}
+
+    return query(load)
+
+
+@app.get("/api/claims")
+def claims():
+    def load(db):
+        have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        return store.rows(db, "SELECT * FROM claims ORDER BY filed_at DESC LIMIT 200") if "claims" in have else []
+
+    return query(load)

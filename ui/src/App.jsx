@@ -3,8 +3,12 @@ import { get, mmss, money, useNow, useOperator, useStream } from './api'
 import AgentCard from './AgentCard'
 import RfqList from './RfqList'
 import RfqDetail from './RfqDetail'
+import Claims from './Claims'
+import Controls from './Controls'
 import Lessons from './Lessons'
 import Network from './Network'
+import { useT, useTheme } from './prefs'
+import Shipments from './Shipments'
 import Scoreboard from './Scoreboard'
 
 function Summary({ s }) {
@@ -30,6 +34,8 @@ function Summary({ s }) {
 }
 
 export default function App() {
+  const t = useT()
+  useTheme()
   const [tab, setTab] = useState('board')
   const [agents, setAgents] = useState([])
   const [rfqs, setRfqs] = useState([])
@@ -78,11 +84,13 @@ export default function App() {
   }
 
   const tabs = [
-    ['board', 'Live scoreboard'],
-    ['agents', 'Agent Control Room'],
-    ['rfqs', `RFQs (${rfqs.length})`],
-    ['network', 'Network'],
-    ['lessons', 'Lessons'],
+    ['board', t('board')],
+    ['network', t('network')],
+    ['shipments', t('shipments')],
+    ['claims', t('claims')],
+    ['agents', t('agents')],
+    ['rfqs', `${t('rfqs')} (${rfqs.length})`],
+    ['lessons', t('lessons')],
   ]
 
   return (
@@ -94,11 +102,12 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-white">AUTOPILOT</h1>
-            <p className="text-xs text-muted">WRATHOFCODE · digital air forwarder</p>
+            <p className="text-xs text-muted">{t('tagline')}</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          {fake && <span className="rounded-md bg-violet-500/15 px-2 py-1 text-violet-300">Demo data</span>}
+          <Controls />
+          {fake && <span className="rounded-md bg-violet-500/15 px-2 py-1 text-violet-300">{t('demo')}</span>}
           <input
             value={operator}
             onChange={(e) => setOperator(e.target.value)}
@@ -108,7 +117,7 @@ export default function App() {
           />
           <span className="flex items-center gap-1.5 text-muted">
             <span className={`h-2 w-2 rounded-full ${down ? 'bg-rose-500' : live ? 'bg-emerald-400 blip' : 'bg-zinc-600'}`} />
-            {down ? 'API down' : live ? 'Live' : 'Reconnecting'}
+            {down ? t('apiDown') : live ? t('live') : t('reconnecting')}
           </span>
         </div>
       </header>
@@ -155,6 +164,10 @@ export default function App() {
         <Scoreboard />
       ) : tab === 'network' ? (
         <Network />
+      ) : tab === 'shipments' ? (
+        <Shipments />
+      ) : tab === 'claims' ? (
+        <Claims />
       ) : tab === 'lessons' ? (
         <Lessons />
       ) : tab === 'agents' ? (

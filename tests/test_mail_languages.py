@@ -14,7 +14,7 @@ class Reply:
 def model(monkeypatch):
     seen: dict = {}
 
-    async def chat(messages, http=None):
+    async def chat(messages, http=None, **_):
         seen["prompt"] = messages[0]["content"]
         return Reply(seen["reply"])
 

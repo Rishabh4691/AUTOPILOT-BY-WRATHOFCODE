@@ -1,3 +1,5 @@
+import { useT } from './prefs'
+
 const LESSONS = [
   { rounds: '126', verdict: 'no_pdf_offer', cause: 'A Turkish request asked for the offer as a PDF. Its characters made the PDF an image, so the price could not be read.', fix: 'Offer PDFs always carry real text, with the key facts first.', commit: '466c5eb' },
   { rounds: '127', verdict: 'not booked', cause: 'The customer accepted only the first of two shipments. The bot waited for a person.', fix: 'The bot books the shipments a partial yes names.', commit: '3cde149' },
@@ -16,11 +18,12 @@ const LESSONS = [
 ]
 
 export default function Lessons() {
+  const t = useT()
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Every lost round became a fix</h2>
+          <h2 className="text-sm font-semibold text-white">{t('lessonsTitle')}</h2>
           <p className="mt-1 text-xs text-muted">Verdict from the 5U board, root cause from the real mails, fix and regression test in git.</p>
         </div>
         <div className="font-mono text-xs text-muted">{LESSONS.length} lessons</div>

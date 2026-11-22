@@ -19,3 +19,28 @@ body {
 }
 
 .blip { animation: blip 1.4s ease-in-out infinite }
+
+[data-theme="light"] {
+  --color-ink: #f3f5f8;
+  --color-panel: #ffffff;
+  --color-line: #e2e7ee;
+  --color-muted: #64707f;
+  --color-white: #0b1220;
+  --color-zinc-100: #111827;
+  --color-zinc-200: #1f2937;
+  --color-zinc-300: #374151;
+  --color-zinc-400: #4b5563;
+  --color-zinc-500: #6b7280;
+  --color-zinc-600: #9ca3af;
+  --color-sky-200: #075985;
+  --color-sky-300: #0369a1;
+  --color-emerald-300: #047857;
+  --color-rose-200: #9f1239;
+  --color-rose-300: #be123c;
+  --color-amber-300: #b45309;
+  --color-violet-300: #6d28d9;
+  color-scheme: light;
+}
+
+[data-theme="light"] .map-sea { fill: #e8edf3 }
+[data-theme="light"] .map-land { fill: #d5dde7; stroke: #c3ccd8 }

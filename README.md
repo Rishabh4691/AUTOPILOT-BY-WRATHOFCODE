@@ -76,7 +76,11 @@ uvicorn api.main:app --port 8000
 cd ui && npm install && npm run dev   # http://localhost:5173
 ```
 
-The Control Room has five tabs: the live 5U scoreboard; a network map of every lane with volume, customer acceptance, airline transit and delays, and the lanes where a better airline rate would win more business; the agents; each request with its pipeline and the sent email, where every number set by code is highlighted; and the lessons from every lost round.
+The Control Room shows the live 5U scoreboard; a network map of every lane with volume, customer acceptance, airline transit and delays, and the lanes where a better airline rate would win more business; shipments, booked and delivered; cargo claims; the agents; each request with its pipeline and the sent email, where every number set by code is highlighted; and the lessons from every lost round. It switches between English and German and between dark and light.
+
+Two switches in the header change the running bot: the quote writer's model (gpt-4.1-mini or gpt-4.1) and daily shipment updates (off by default; when on, one status mail per booking a day and an arrival note, at most 10 mails a minute). They take effect only when the Control Room runs on the machine that runs the bot.
+
+When a customer reports a lost or damaged shipment, the bot files claim `CLM-<ref>` with the airline that flew it and confirms to the customer. No person is involved.
 
 Only one bot may run for the whole team. `data/bot.lock` stops a second one on the same machine; `touch data/STOP` stops it cleanly. `FAKE_DATA=1` runs the Control Room on demo traffic.
 

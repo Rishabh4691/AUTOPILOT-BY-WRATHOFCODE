@@ -54,3 +54,5 @@ data/mail_index.json
 data/samples/
 data/portal_cache.jsonl
 data/outage_learn.json
+data/settings.json
+data/settings.tmp

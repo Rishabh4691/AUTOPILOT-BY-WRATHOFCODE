@@ -824,6 +824,15 @@ def template(lang: str, values: dict) -> str:
     return fill(TEMPLATES.get(lang, TEMPLATES["en"]).format(agent=AGENT_NAME, company=COMPANY), values)
 
 
+def chosen_model() -> str | None:
+    """The Control Room's model switch; None keeps WRITER_MODEL."""
+    try:
+        from core.runtime_settings import writer_model
+    except ImportError:
+        return None
+    return writer_model()
+
+
 async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     lang, values = facts(rfq, price)
     spoken = str(rfq.get("language") or lang)
@@ -863,7 +872,7 @@ async def write_quote_email(rfq: dict, price: dict, http=None) -> Email:
     reply = None
     for attempt in range(2):
         try:
-            reply = await gateway.chat([{"role": "user", "content": prompt}], http=http)
+            reply = await gateway.chat([{"role": "user", "content": prompt}], http=http, model=chosen_model())
             break
         except gateway.GatewayError as e:
             error = e

@@ -3,6 +3,7 @@ import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { feature } from 'topojson-client'
 import countries from 'world-atlas/countries-110m.json'
 import { get, money } from './api'
+import { useT } from './prefs'
 
 const AIRPORTS = {
   FRA: [8.57, 50.03], MUC: [11.79, 48.35], HAM: [9.99, 53.63], DUS: [6.77, 51.29], CGN: [7.14, 50.87],
@@ -53,8 +54,8 @@ function WorldMap({ lanes, focus, setFocus }) {
   const ports = new Set(drawn.flatMap((l) => [l.origin, l.destination]))
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Lanes on a world map">
-      <path d={path({ type: 'Sphere' })} fill="#0d1218" />
-      <path d={path(land)} fill="#1a222c" stroke="#26303c" strokeWidth="0.5" />
+      <path d={path({ type: 'Sphere' })} className="map-sea" fill="#0d1218" />
+      <path d={path(land)} className="map-land" fill="#1a222c" stroke="#26303c" strokeWidth="0.5" />
       {drawn.map((l) => {
         const key = `${l.origin}-${l.destination}`
         const line = { type: 'LineString', coordinates: [AIRPORTS[l.origin], AIRPORTS[l.destination]] }
@@ -89,6 +90,7 @@ function WorldMap({ lanes, focus, setFocus }) {
 }
 
 export default function Network() {
+  const t = useT()
   const [period, setPeriod] = useState('all')
   const [data, setData] = useState(null)
   const [err, setErr] = useState(null)
@@ -109,14 +111,14 @@ export default function Network() {
     () => data?.lanes.find((l) => `${l.origin}-${l.destination}` === focus),
     [data, focus],
   )
-  const t = data?.totals
+  const sum = data?.totals
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Network</h2>
-          <p className="mt-1 text-xs text-muted">Where customers ship, which airlines deliver, and where our price loses.</p>
+          <h2 className="text-sm font-semibold text-white">{t('networkTitle')}</h2>
+          <p className="mt-1 text-xs text-muted">{t('networkNote')}</p>
         </div>
         <div className="flex overflow-hidden rounded-lg border border-line text-xs">
           {PERIODS.map(([k, label]) => (
@@ -135,12 +137,12 @@ export default function Network() {
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
         {[
-          ['Lanes', t?.lanes],
-          ['Requests', t?.requests],
-          ['Quoted', t?.quoted],
-          ['Customer yes', t?.won],
-          ['Booked', t?.booked],
-          ['Delays reported', t?.delays],
+          ['Lanes', sum?.lanes],
+          ['Requests', sum?.requests],
+          ['Quoted', sum?.quoted],
+          ['Customer yes', sum?.won],
+          ['Booked', sum?.booked],
+          ['Delays reported', sum?.delays],
         ].map(([k, v]) => (
           <div key={k} className="min-w-0 bg-panel px-4 py-3">
             <div className="text-[11px] uppercase tracking-wider text-muted">{k}</div>

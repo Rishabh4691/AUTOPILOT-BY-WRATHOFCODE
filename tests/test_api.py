@@ -162,3 +162,27 @@ def test_insights_counts_lanes_airlines_and_price_pressure(client):
 
 def test_insights_without_bookings_table(client):
     assert client.get("/api/insights?period=year").json()["totals"]["booked"] == 0
+
+
+def test_settings_switches_round_trip(client, tmp_path, monkeypatch):
+    from core import runtime_settings
+
+    monkeypatch.setenv("RUNTIME_SETTINGS_PATH", str(tmp_path / "settings.json"))
+    runtime_settings._cache.update(mtime=None, data=dict(runtime_settings.DEFAULTS))
+    assert client.get("/api/settings").json()["daily_updates"] is False
+    out = client.post("/api/settings", json={"writer_model": "gpt-4.1", "daily_updates": True}).json()
+    assert out["writer_model"] == "gpt-4.1" and out["daily_updates"] is True
+    assert client.post("/api/settings", json={"writer_model": "gpt-9"}).status_code == 422
+
+
+def test_shipments_split_booked_and_delivered(client):
+    with store.connect() as db:
+        for rid, eta in (("A", "2000-01-01"), ("B", "2999-01-01")):
+            db.execute(
+                "INSERT INTO bookings (rfq_id, thread_id, team_reference, booking_reference, carrier, eta, booked_at, status) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (rid, rid, f"WOC-{rid}", f"BK-{rid}0000000", "Lumen Air Cargo", eta, time.time(), "booked"),
+            )
+    d = client.get("/api/shipments").json()
+    assert [r["rfq_id"] for r in d["delivered"]] == ["A"] and [r["rfq_id"] for r in d["booked"]] == ["B"]
+    assert client.get("/api/claims").json() == []

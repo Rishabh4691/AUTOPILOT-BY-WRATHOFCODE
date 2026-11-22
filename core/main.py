@@ -17,6 +17,7 @@ import httpx
 from core.agents.airline_bids import AirlineBidSource
 from core.agents.attachments import AttachmentReader
 from core.agents.booking import BookingAgent
+from core.agents.claims import ClaimsAgent
 from core.agents.classifier import RuleClassifier
 from core.agents.dg_guard import DgGuard
 from core.agents.directory import load_directory
@@ -31,6 +32,7 @@ from core.agents.sourcing_adapter import SourcingPortalPriceSource
 from core.agents.tariff_intake import TariffIntake, live_store, seed_live_store
 from core.agents.tracking import TrackingAgent
 from core.agents.trucker import EmailTruckerPickupSource
+from core.agents.updates import ShipmentUpdates
 from core.config import Settings, auth_headers, load_settings
 from core.contracts import MailboxClient, Stage
 from core.llm import GatewayLlmClient
@@ -101,6 +103,8 @@ def build(settings: Settings, client: httpx.AsyncClient, store: Store) -> Orches
         events=SqliteEventSink(store),
         booker=BookingAgent(client, settings, portal, directory, outbound=sender),
         tracker=TrackingAgent(),
+        claims=ClaimsAgent(directory, outbound=sender),
+        updates=ShipmentUpdates(),
         dg=dg,
         tariffs=TariffIntake(client, settings),
         attachments=AttachmentReader(client),
@@ -219,6 +223,21 @@ async def recheck_bookings(orchestrator, stop: asyncio.Event, every_s: float = 3
             log.exception("booking_recheck_failed")
 
 
+async def shipment_updates(orchestrator, stop: asyncio.Event, every_s: float = 60.0) -> None:
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=every_s)
+            return
+        except TimeoutError:
+            pass
+        if orchestrator.updates is None:
+            continue
+        try:
+            await orchestrator.updates.tick(orchestrator)
+        except Exception:
+            log.exception("shipment_updates_failed")
+
+
 async def portal_warm_up(settings: Settings, stop: asyncio.Event) -> None:
     """Rounds 93-97: keep portal prices on disk so a portal outage can still be priced."""
     # On by default in its safe form (rounds 120-123: the outage winner books the same airline
@@ -282,6 +301,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
             sender = asyncio.create_task(orchestrator.sender_worker(), name="sender")
             rechecker = asyncio.create_task(recheck_bookings(orchestrator, stop), name="booking-recheck")
             warmer = asyncio.create_task(portal_warm_up(settings, stop), name="portal-warm")
+            updater = asyncio.create_task(shipment_updates(orchestrator, stop), name="shipment-updates")
             await reprocess(orchestrator)
             try:
                 await poll_loop(orchestrator, settings.poll_interval_s, stop)
@@ -290,6 +310,7 @@ async def run_once(settings: Settings, stop: asyncio.Event) -> None:
                 sender.cancel()
                 rechecker.cancel()
                 warmer.cancel()
+                updater.cancel()
                 for task in list(orchestrator.tasks):
                     task.cancel()
     finally:
