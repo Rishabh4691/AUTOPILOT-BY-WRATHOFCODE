@@ -540,13 +540,23 @@ def empty_inline(draft: str, values: dict) -> list[str]:
     return out
 
 
+WRAPPED_SLOT = re.compile(r"\[[^\[\]\n]*\[([A-Z_]+)\][^\[\]\n]*\]")
+LEFTOVER_NOTE = re.compile(r"[ \t]*\[[^\[\]\n\d]{12,}\]")
+
+
 def fill(text: str, values: dict) -> str:
+    # Round 131: a Turkish draft translated the prompt's own instruction around a slot and kept
+    # it in brackets ("[Eğer [PICKUP_LINE] Boş değilse, buraya yerleştir.]"). Keep the slot only.
+    text = WRAPPED_SLOT.sub(r"[\1]", text)
     empty = {k for k, v in values.items() if not str(v).strip()}
     text = "\n".join(
         line for line in text.splitlines() if line.strip().strip(".") not in {f"[{k}]" for k in empty}
     )
     for k, v in values.items():
         text = text.replace(f"[{k}]", v)
+    # Any other bracketed note left by the model ("[If it is empty, leave it out.]") is not
+    # for the customer; filled values never come in brackets.
+    text = LEFTOVER_NOTE.sub("", text)
     text = re.sub(r"(?<=\S) {2,}(?=\S)", " ", text)
     text = re.sub(r"\s+([.,;:!?])", r"\1", text)
     unit = values.get("PIECES", "").split(" ", 1)[-1]
