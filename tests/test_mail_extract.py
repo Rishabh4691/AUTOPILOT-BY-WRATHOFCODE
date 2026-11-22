@@ -243,3 +243,16 @@ def test_forwarded_request_is_extracted_from_the_quoted_part():
 def test_form_with_one_piece_uses_weight_per_piece():
     x = run("Quote CGN to LIM.\nNo. of pieces: 1\nWeight per piece: 94 kg\nDims per piece: 120 x 100 x 150 cm")
     assert x.shipment is not None and x.gross_kg == 94 and x.pieces == 1
+
+
+def test_korean_lots_one_consignment_round_167():
+    # Round 167 was priced on lot 3 only (407 kg, no volume): Korean lot lines were not parsed.
+    from mail.extract import parse_lots
+
+    text = (
+        "로트 1: 카톤 4개, 총중량 each 162 kg (순중량 each 147 kg), 크기 each 60 x 40 x 134 cm\n"
+        "로트 2: 케이스 6개, 총중량 each 28 kg (순중량 each 25 kg), 크기 each 80 x 60 x 150 cm\n"
+        "로트 3: 드럼 3개, 합산 총중량 407 kg (합산 순중량 382 kg), 합산 부피 3.62 cbm\n"
+    )
+    pieces, gross, cbm = parse_lots(text)
+    assert (pieces, str(gross), str(cbm)) == (13, "1223", "9.226")

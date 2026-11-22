@@ -157,9 +157,10 @@ WEIGHT = re.compile(
     rf"(?P<v>\d{{1,3}}(?:[  ,.']\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|kilograms?|kilogramm\w*|kilogrammes?|kilogramos?|chilogramm\w*|lbs?|pounds?|(?:metric |short |long )?(?:tons?|tonnes?)|mt|t|tonnen|grams?|grammes?|gramm|g)\b",
     re.I,
 )
-NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b", re.I)
+NET_NEAR = re.compile(r"\b(net|netto|neto|nett|poids net|peso neto|peso netto)\b|순중량|净重|正味", re.I)
 GROSS_NEAR = re.compile(
-    r"\b(gross|brutto|bruto|lordo|brut|gesamtgewicht|total weight|poids brut|peso bruto)\b", re.I
+    r"\b(gross|brutto|bruto|lordo|brut|gesamtgewicht|total weight|poids brut|peso bruto)\b|총중량|毛重|総重量",
+    re.I,
 )
 
 
@@ -219,7 +220,7 @@ SELF_DELIVERY = re.compile(
     r"selbst (?:an)?liefern|liefern (?:wir )?(?:es |die ware )?selbst|anlieferung durch uns)",
     re.I,
 )
-LOT = re.compile(r"\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)\s*\d+\s*[:)\-]", re.I)
+LOT = re.compile(r"(?:\b(?:lot|position|pos\.|item|partie|teil(?:sendung)?)|로트|ロット|批次)\s*\d+\s*[:)\-]", re.I)
 VOLUME = re.compile(
     rf"(?P<v>{NUM})\s*(?P<u>cbm|m3|m³|cubic met(?:re|er)s?|kubikmeter|mètres? cubes?|metros? cúbicos?|metri cubi|mc|cu\.?\s?ft|cubic f(?:ee|oo)t|ft3|ft³|cft|litres?|liters?|ltrs?|liter)(?![a-z])",
     re.I,
@@ -406,13 +407,14 @@ def find_pieces(text: str) -> list[Piece]:
 
 
 LOT_LINE = re.compile(
-    r"^\s*(?:lot|position|pos\.?|item|partie|teil(?:sendung)?|line)\s*\d+\s*[:)\-.]\s*(?P<rest>.+)$",
+    r"^\s*(?:lot|position|pos\.?|item|partie|teil(?:sendung)?|line|로트|ロット|批次)\s*\d+\s*[:)\-.]\s*(?P<rest>.+)$",
     re.I | re.M,
 )
 BULLET_LINE = re.compile(r"^\s*[-*•]\s*(?P<rest>\d.+)$", re.M)
 EACH = r"(?:each|per (?:piece|unit|carton|case|drum|pallet|box)|je|chacun\w*|cada|ciascun\w*|cadaun[oa]|każd\w*|pro stück)"
 TOGETHER = r"(?:together|total|in total|combined|insgesamt|zusammen|gesamt|au total|en total|in totale|łącznie)"
-LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?[a-zäöüéèàçñ]+", re.I)
+# Round 167 (Korean): "카톤 4개" puts the count before a counter suffix, not a Latin noun.
+LOT_COUNT = re.compile(r"^\D{0,12}?(\d{1,4})\s*(?:x\s*)?(?:[a-zäöüéèàçñ]+|[개個件箱个台点枚本])", re.I)
 LOT_WEIGHT = re.compile(
     rf"(?:(?P<pre>{EACH}|{TOGETHER})\s*)?(?P<v>\d{{1,3}}(?:[.,' ]\d{{3}})+(?:[.,]\d+)?|{NUM})\s*(?P<u>kgs?|kilos?|lbs?|pounds?|t|tons?|tonnes?|tonnen)\b(?P<post>[^,;()\n]{{0,25}})",
     re.I,
