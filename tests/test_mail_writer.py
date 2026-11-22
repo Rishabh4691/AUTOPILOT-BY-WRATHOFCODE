@@ -435,3 +435,21 @@ def test_harmless_words_no_longer_force_the_template() -> None:
         body = body.replace(f"[{key}]", value)
     assert check_final(body, values) == []
     assert "says booked" in problems(draft.replace("get it booked", "it is already booked"), values, customer)
+
+
+def test_translated_slot_instruction_never_reaches_the_customer():
+    # Round 131 (Turkish): the model wrapped [PICKUP_LINE] and [VOLUME_NOTE] in its own
+    # translation of the prompt's instruction; the customer got "[Eger ... buraya yerlestir.]".
+    draft = (
+        "Hi [FIRST],\n\nFiyat [TOTAL].\n"
+        "[Eğer [PICKUP_LINE] Boş değilse, buraya yerleştir.] "
+        "[Eğer [VOLUME_NOTE] Boş değilse, buraya yerleştir.] Tek bir evet yeterli."
+    )
+    values = {
+        "FIRST": "Tobias", "TOTAL": "EUR 5,870.27",
+        "PICKUP_LINE": "We'll collect it from your site and truck it to the airport first.",
+        "VOLUME_NOTE": "The airline bills it on 1,998 kg rather than 1,885 kg because of the volume.",
+    }
+    out = writer.fill(draft, values)
+    assert "[" not in out and "yerleştir" not in out and "Boş" not in out
+    assert "We'll collect it from your site" in out and "EUR 5,870.27" in out and "1,998 kg" in out
