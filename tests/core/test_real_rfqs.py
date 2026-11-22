@@ -228,3 +228,34 @@ def test_same_shipment_as_earlier_request_round_103(tmp_path, monkeypatch) -> No
     assert x.shipment.gross_weight == Decimal("1841")
     assert str(x.shipment.ready_date) == "2026-11-29"
     assert x.shipment.door_pickup is False
+
+
+def test_same_shipment_new_destination_fastest_round_104(tmp_path, monkeypatch) -> None:
+    from mail import repeat_request
+    from mail.extract import extract
+
+    monkeypatch.setattr(repeat_request, "PATH", tmp_path / "requests.json")
+    earlier = (
+        "Dear Sir or Madam,\n\nCould you please quote an all-in price in EUR for an air freight shipment of machine "
+        "parts to ATL (Atlanta, US)? The shipment consists of 11 pieces, with a gross weight of 585 kg and a volume "
+        "of 5.01 cbm.\n\nThe goods will be ready for pickup on 2026-11-23 at our site in 40043 Duesseldorf, Germany. "
+        "Please arrange the truck pickup and transport to the departure airport and include both in your quote.\n\n"
+        "The goods must arrive at ATL no later than 2026-11-27. Among the options that meet this deadline, we will "
+        "make our decision based on price.\n\nKind regards\nJonas Kessler"
+    )
+    who = "kessler-feinmechanik@hackloop.mail"
+    repeat_request.remember(who, "Air freight quote request to ATL", earlier)
+    repeat_request.remember(who, "Air freight quote request to SGN", "Please quote 1549 kg, 8.26 cbm to SGN (Ho Chi Minh City).")
+    new = (
+        "Hello,\n\nCould you please quote the same shipment as in my request \"Air freight quote request to ATL\", "
+        "sent on 2026-11-21 at 23:24 UTC for ATL? The cargo and pickup details are unchanged, and you already have "
+        "them from that request.\n\nThe new destination is BOM, and the shipment will be ready for pickup on "
+        "2026-11-26. Please send me your all-in price in EUR for the fastest option."
+    )
+    text = repeat_request.rebuild(who, "Air freight quote to BOM", new)
+    assert text is not None and "no later than" not in text
+    x = extract("Air freight quote to BOM", text, who, "30548")
+    s = x.shipment
+    assert (s.origin, s.destination, s.gross_weight, s.door_pickup, s.pickup_postcode) == ("DUS", "BOM", Decimal("585"), True, "40043")
+    assert str(s.ready_date) == "2026-11-26" and x.preference == "fastest"
+    assert repeat_request.rebuild(who, "x", "same shipment as in my request \"Air freight quote request to LIM\"") is None

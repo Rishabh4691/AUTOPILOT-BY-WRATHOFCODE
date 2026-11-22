@@ -62,6 +62,9 @@ def rebuild(sender: str, subject: str, body: str) -> str | None:
         want = quoted.group(1).strip().lower()
         earlier = next((i for i in reversed(items) if i["subject"].strip().lower() == want), None)
         earlier = earlier or next((i for i in reversed(items) if want in i["subject"].lower()), None)
+    if quoted and earlier is None:
+        # The customer named a request we do not have: never guess with another one (round 104 check).
+        return None
     earlier = earlier or items[-1]
     text = earlier["body"]
     dest = NEW_DEST.search(body) or SUBJECT_DEST.search(subject or "")
@@ -78,8 +81,11 @@ def rebuild(sender: str, subject: str, body: str) -> str | None:
     new_date = ready.group(1) if ready else (dates[-1] if dates else None)
     if new_date:
         text = DATE.sub(new_date, text, count=1)
+    # The earlier request's deadline belonged to its own destination and date (round 104: ATL).
+    text = " ".join(s for s in re.split(r"(?<=[.!?])\s+", text)
+                    if not re.search(r"no later than|deadline|must arrive|spätestens|among the options", s, re.I))
     if re.search(r"\bcheapest\b|\bgünstigst", body, re.I):
-        text = re.sub(r"\bfastest\b", "cheapest", text, flags=re.I)
+        text = re.sub(r"\bfastest\b", "cheapest", text, flags=re.I) + "\nPlease quote the cheapest option."
     elif re.search(r"\bfastest\b|\bschnellst", body, re.I):
-        text = re.sub(r"\bcheapest\b", "fastest", text, flags=re.I)
+        text = re.sub(r"\bcheapest\b", "fastest", text, flags=re.I) + "\nPlease quote the fastest option."
     return text
