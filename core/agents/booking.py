@@ -289,13 +289,20 @@ def confirmation_body(
         ref=booking.get("booking_reference") or "follows shortly",
         team=booking["team_reference"],
         carrier=carrier_name(booking["carrier"]),
-        route=f"{place(booking['origin'])}{ROUTE_JOIN.get(language, ' to ')}{place(booking['destination'])}",
+        route=(
+            f"{place(booking['origin'])}{ROUTE_JOIN.get(language, ' to ')}{place(booking['destination'])}"
+            if booking.get("origin") and booking.get("destination")
+            else "\x00"  # unknown airports: the route words are removed below (round 103: "None to None")
+        ),
         transit=transit,
         eta=short_day(booking["eta"], language) if language in WEEKDAYS else str(booking["eta"])[:10],
         price=money(total, currency, language) if total else "as quoted",
         agent=agent,
         company=company,
     )
+    if "\x00" in body:
+        body = re.sub(r"[,，、،]\s*\x00", "", body)
+        body = re.sub(r"\s*\b(?:from|de|von|da|desde|z|van)?\s*\x00", "", body)
     body = re.sub(r"\byour reference (WOC-)", r"our reference \1", body, flags=re.I)
     return capitalize_sentences(re.sub(r" +,", ",", body))
 
@@ -629,6 +636,9 @@ class BookingAgent:
                 return self._record(orch, rfq, info, done, "portal")
             if fresh_enough:
                 log.warning("portal_booking_failed_with_fresh_rate", extra={"rfq": rfq_id})
+        # Rounds 103/104: a quote stored without its airports, airline code or rate id was sent to
+        # the airline as an empty "Route:  to ." mail and refused. Read the facts back first.
+        info = {**info, **(await self._route_facts(orch, rfq, info))}
         option = await self._fresh(orch, rfq, info)
         if option is not None and option.rate_id:
             done = await self._portal_book(option.rate_id, team)
@@ -684,11 +694,50 @@ class BookingAgent:
         log.warning("portal_booking_refused", extra={"status": r.status_code, "body": r.text[:200]})
         return None
 
+    async def _route_facts(self, orch: Any, rfq: dict, info: dict) -> dict:
+        """Airports and airline code of an accepted quote whose record lacks them."""
+        facts: dict = {}
+        if not (info.get("origin") or rfq.get("origin")) or not (info.get("destination") or rfq.get("destination")):
+            try:
+                original = await orch.mailbox.read_one(int(rfq["id"]))
+                parsed, _ = await orch.extractor.extract(original)
+                facts.update(origin=parsed.origin, destination=parsed.destination)
+            except Exception as error:
+                log.warning("route_facts_failed", extra={"rfq": rfq["id"], "error": type(error).__name__})
+        if not info.get("carrier_code"):
+            code = await self._code_for(
+                str(rfq.get("carrier") or ""),
+                facts.get("origin") or info.get("origin") or rfq.get("origin"),
+                facts.get("destination") or info.get("destination") or rfq.get("destination"),
+            )
+            if code:
+                facts["carrier_code"] = code
+        return facts
+
+    async def _code_for(self, carrier: str, origin: str | None, destination: str | None) -> str | None:
+        """The portal airline code for an airline name ("Polaris Air Logistics" -> "PL")."""
+        if not carrier:
+            return None
+        try:
+            ports = await self.portal._ports_data(time.monotonic() + 10)
+        except Exception:
+            return None
+        lanes = ports.lanes
+        same_lane = [l for l in lanes if (l.origin, l.destination) == (origin, destination)]
+        for lane in [*same_lane, *lanes]:
+            for airline in lane.airlines:
+                if airline.name.strip().lower() == carrier.strip().lower():
+                    return airline.code
+        return None
+
     async def _fresh(self, orch: Any, rfq: dict, info: dict) -> Any:
         try:
             original = await orch.mailbox.read_one(int(rfq["id"]))
             parsed, _ = await orch.extractor.extract(original)
-            airline = info.get("carrier_code") or rfq.get("carrier")
+            # The portal wants the airline CODE; the name alone found nothing (rounds 103/104).
+            airline = info.get("carrier_code") or await self._code_for(
+                str(rfq.get("carrier") or ""), parsed.origin, parsed.destination
+            )
             if not airline:
                 return None
             return await self.portal.rate_for(parsed, str(airline))
@@ -706,6 +755,12 @@ class BookingAgent:
         if contact is None:
             return None
         team = team_reference(str(rfq["id"]))
+        origin = info.get("origin") or rfq.get("origin")
+        destination = info.get("destination") or rfq.get("destination")
+        if not origin or not destination:
+            # Never send "Route:  to ." again: the airline cannot book it. A person takes over.
+            log.warning("booking_email_without_route", extra={"rfq": rfq["id"]})
+            return None
         body = (
             f"Hello,\n\nplease book the following air freight shipment under our reference {team}.\n"
             + (f"Rate reference: {rfq.get('rate_id')}.\n" if rfq.get("rate_id") else "")

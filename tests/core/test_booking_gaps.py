@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+from types import SimpleNamespace
 import respx
 
 from core.agents.booking import BookingAgent, is_acceptance, quote_from_mail, record_sent_quote
@@ -107,13 +108,22 @@ async def test_yes_on_a_quote_sent_outside_the_bot_gets_booked(tmp_path):
     store = Store(tmp_path / "app.db")
     orch = Orch(store)
     orch.mailbox.stored[400] = our_mail()
+    # The live bot can read the customer's original request (rounds 103/104: without the airports
+    # the airline refused the booking mail, so an empty route is no longer sent).
+    orch.mailbox.stored[276] = our_mail()
+
+    class Reader:
+        async def extract(self, mail):
+            return SimpleNamespace(origin="CGN", destination="ORD"), None
+
+    orch.extractor = Reader()
     outbound = Outbound()
     async with httpx.AsyncClient() as client:
         await booker(client, outbound).handle(orch, yes(), MailKind.FOLLOW_UP)
     row = store._conn.execute("SELECT carrier, total, status FROM rfqs WHERE id='276'").fetchone()
     assert row[0] == "Meridian Freightways" and str(row[1]) == "3228.87" and row[2] == "BOOKED"
     assert outbound.sent and outbound.sent[0][0] == "meridian-freightways@hackloop.mail"
-    assert "WOC-276" in outbound.sent[0][2]
+    assert "WOC-276" in outbound.sent[0][2] and "Route: CGN to ORD." in outbound.sent[0][2]
     assert len(orch.mailbox.sent) == 1 and orch.mailbox.sent[0].in_reply_to == 404
     store.close()
 
