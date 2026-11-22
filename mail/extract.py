@@ -949,8 +949,29 @@ def without_signature(text: str) -> str:
     return "\n".join(lines[: closing[-1] + 1]) if closing else text
 
 
+# Round 149: Korean "가장 빠른 옵션" (fastest) was read as cheapest, because FAST and CHEAP only know
+# Latin-script words and an unstated preference defaults to cheapest. No \b: CJK has no word gaps.
+FAST_INTL = re.compile(
+    r"가장 빠른|제일 빠른|최단|최대한 빨리|최대한 빠르게|最快|尽快|最短|最速|一番早い|最も早い|できるだけ早く|"
+    r"en hızlı|en hizli|en kısa sürede|самый быстрый|самым быстрым|как можно скорее|срочн|"
+    r"ταχύτερ|nhanh nhất|الأسرع|أسرع|הכי מהיר|सबसे तेज|เร็วที่สุด",
+    re.I,
+)
+CHEAP_INTL = re.compile(
+    r"가장 저렴|제일 저렴|최저가|가장 싼|最便宜|最低价|最经济|最安|一番安い|最も安い|en ucuz|en uygun fiyat|"
+    r"самый дешев|самым дешев|дешевле всего|φθηνότερ|rẻ nhất|الأرخص|أرخص|הכי זול|सबसे सस्ता|ถูกที่สุด",
+    re.I,
+)
+
+
+def wants_cheap(text: str) -> bool:
+    return bool(CHEAP.search(text) or CHEAP_INTL.search(text))
+
+
 def wants_fast(text: str) -> bool:
     """A fast wish that is not negated ("not urgent", "no es urgente")."""
+    if FAST_INTL.search(text):
+        return True
     return any(not NOT_FAST.search(text[max(0, m.start() - 20) : m.start()]) for m in FAST.finditer(text))
 
 
@@ -1053,8 +1074,8 @@ def extract(subject: str, body: str, sender: str, rfq_id: str) -> Extracted:
     pickup_guessed = False
     language = lang.detect(fresh_text(body) or subject)
     fast = wants_fast(without_signature(text))
-    stated = bool(fast or CHEAP.search(text))
-    pref = "fastest" if fast and not CHEAP.search(text) else preference(None)
+    stated = bool(fast or wants_cheap(text))
+    pref = "fastest" if fast and not wants_cheap(text) else preference(None)
     route_text = fresh_text(body) if FORWARDED.match(subject or "") else text
     origin, dest = find_route(route_text)
     pieces = labelled_per_piece(text, find_pieces(text))
